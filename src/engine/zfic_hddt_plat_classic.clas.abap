@@ -67,6 +67,19 @@ CLASS zfic_hddt_plat_classic IMPLEMENTATION.
   ENDMETHOD.
 
 
+  METHOD zfiif_hddt_platform~string_to_xstring.
+
+    TRY.
+        cl_abap_conv_out_ce=>create( encoding = CONV abap_encoding( iv_encoding )
+          )->convert( EXPORTING data   = iv_text
+                      IMPORTING buffer = rv_data ).
+      CATCH cx_root.
+        CLEAR rv_data.
+    ENDTRY.
+
+  ENDMETHOD.
+
+
   METHOD zfiif_hddt_platform~decode_base64.
 
     TRY.

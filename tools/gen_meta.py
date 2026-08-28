@@ -118,6 +118,21 @@ PROGS = [
     ("ui", "ZFIR_HDDT_CONFIG", "1", [
         ("R", "", "Cau hinh tich hop hoa don dien tu"),
     ]),
+    ("ui", "ZFIR_HDDT_LOG", "1", [
+        ("R", "", "Log tich hop hoa don dien tu"),
+        ("I", "B01", "Chung tu / thoi diem"),
+        ("I", "B02", "Loc theo ket qua"),
+        ("S", "P_BUKRS", "Ma cong ty"),
+        ("S", "P_GJAHR", "Nam tai chinh"),
+        ("S", "S_DOCNO", "So chung tu nguon"),
+        ("S", "S_DATE", "Ngay ghi log"),
+        ("S", "S_PROV", "Nha cung cap"),
+        ("S", "S_ACTION", "Ma nghiep vu"),
+        ("S", "S_CODE", "Ma HTTP"),
+        ("S", "P_ONLYER", "Chi hien dong loi"),
+        ("S", "P_TEST", "Kem ca dong Test run"),
+        ("S", "P_MAX", "So dong toi da"),
+    ]),
     ("ui", "ZFIR_HDDT_SETUP", "1", [
         ("R", "", "Nap cau hinh khoi tao HDDT"),
         ("I", "B01", "Pham vi nap cau hinh"),
@@ -198,6 +213,7 @@ write("engine", MSAG, "msag", "LCL_OBJECT_MSAG", b)
 TRANS = [
     ("ZFI_HDDT", "ZFIR_HDDT_INTEGRATION", "Tich hop hoa don dien tu"),
     ("ZFI_HDDT_CFG", "ZFIR_HDDT_CONFIG", "Cau hinh hoa don dien tu"),
+    ("ZFI_HDDT_LOG", "ZFIR_HDDT_LOG", "Log tich hop hoa don dien tu"),
 ]
 
 for tcode, prog, text in TRANS:

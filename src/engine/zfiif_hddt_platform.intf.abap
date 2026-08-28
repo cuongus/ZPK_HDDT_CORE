@@ -61,6 +61,13 @@ INTERFACE zfiif_hddt_platform
               iv_encoding    TYPE string DEFAULT `UTF-16BE`
     RETURNING VALUE(rv_text) TYPE string .
 
+  "! Chiều ngược lại — dùng để lưu payload vào bảng log dạng byte.
+  "! Cổ điển: CL_ABAP_CONV_OUT_CE · Cloud: CL_ABAP_CONV_CODEPAGE
+  METHODS string_to_xstring
+    IMPORTING iv_text        TYPE string
+              iv_encoding    TYPE string DEFAULT `UTF-8`
+    RETURNING VALUE(rv_data) TYPE xstring .
+
 *---------------------------------------------------------------------*
 * 4. Giải mã base64 (file hoá đơn PDF/ZIP nhà cung cấp trả về)
 *---------------------------------------------------------------------*

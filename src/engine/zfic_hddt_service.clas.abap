@@ -29,6 +29,9 @@ CLASS zfic_hddt_service DEFINITION
 
   PUBLIC SECTION.
 
+    CONSTANTS gc_parm_log_test_run TYPE zfide_hddt_parmkey
+                                    VALUE 'LOG_TEST_RUN' ##NO_TEXT.
+
     CLASS-METHODS get_instance
       RETURNING VALUE(ro_service) TYPE REF TO zfic_hddt_service .
 
@@ -198,10 +201,36 @@ CLASS zfic_hddt_service IMPLEMENTATION.
         rs_result-request_body = lv_payload.
         rs_result-idkey        = ls_request-invoice-header-idkey.
 
+        DATA(lv_attempt) = zfic_hddt_log=>count_attempts(
+                             is_request = ls_request
+                             iv_action  = lv_action ).
+
         IF iv_test_run = abap_true.
           rs_result-success = abap_true.
           rs_result-msgty   = 'S'.
           rs_result-message = 'Test run: chỉ dựng payload, chưa gọi API.'.
+
+          " Test run mặc định KHÔNG ghi log để bảng log không bị rác khi
+          " người dùng xem trước hàng loạt. Bật tham số LOG_TEST_RUN nếu
+          " cần vết ai đã xem payload nào.
+          IF mo_config->get_param_bool( iv_key      = gc_parm_log_test_run
+                                        iv_provider = lv_provider
+                                        iv_bukrs    = ls_request-bukrs ) = abap_true.
+            rs_result-log_id = mo_log->log_call(
+              is_request  = ls_request
+              iv_action   = lv_action
+              iv_provider = lv_provider
+              is_call     = VALUE #( connid    = ls_conn-connid
+                                     method    = ls_act-http_method
+                                     cont_type = ls_act-cont_type
+                                     test_run  = abap_true
+                                     attempt   = lv_attempt
+                                     req_body  = lv_payload )
+              is_result   = rs_result ).
+            IF iv_commit = abap_true.
+              COMMIT WORK AND WAIT.
+            ENDIF.
+          ENDIF.
           RETURN.
         ENDIF.
 
@@ -264,17 +293,22 @@ CLASS zfic_hddt_service IMPLEMENTATION.
 
 *---- 9. Ghi log + sổ hoá đơn ----------------------------------------*
         rs_result-log_id = mo_log->log_call(
-                             is_request     = ls_request
-                             iv_action      = lv_action
-                             is_conn        = ls_conn
-                             iv_method      = ls_act-http_method
-                             iv_full_url    = ls_resp-full_url
-                             iv_request     = lv_payload
-                             iv_response    = ls_resp-body
-                             iv_http_code   = ls_resp-http_code
-                             iv_reason      = ls_resp-reason
-                             iv_duration_ms = ls_resp-duration_ms
-                             is_result      = rs_result ).
+          is_request  = ls_request
+          iv_action   = lv_action
+          iv_provider = lv_provider
+          is_call     = VALUE #( connid      = ls_conn-connid
+                                 method      = ls_act-http_method
+                                 full_url    = ls_resp-full_url
+                                 cont_type   = ls_act-cont_type
+                                 http_code   = ls_resp-http_code
+                                 reason      = ls_resp-reason
+                                 duration_ms = ls_resp-duration_ms
+                                 attempt     = lv_attempt
+                                 req_body    = lv_payload
+                                 res_body    = ls_resp-body
+                                 req_header  = ls_resp-req_header
+                                 res_header  = ls_resp-res_header )
+          is_result   = rs_result ).
 
         IF ls_request-src_docno IS NOT INITIAL.
           mo_log->save_invoice( is_request  = ls_request
@@ -302,15 +336,14 @@ CLASS zfic_hddt_service IMPLEMENTATION.
         " Vẫn ghi log để truy vết được cả trường hợp lỗi cấu hình
         IF ls_conn-provider IS NOT INITIAL.
           rs_result-log_id = mo_log->log_call(
-                               is_request   = ls_request
-                               iv_action    = lv_action
-                               is_conn      = ls_conn
-                               iv_method    = 'POST'
-                               iv_full_url  = ''
-                               iv_request   = rs_result-request_body
-                               iv_response  = rs_result-response_body
-                               iv_http_code = rs_result-http_code
-                               is_result    = rs_result ).
+            is_request  = ls_request
+            iv_action   = lv_action
+            iv_provider = lv_provider
+            is_call     = VALUE #( connid    = ls_conn-connid
+                                   method    = 'POST'
+                                   http_code = rs_result-http_code
+                                   req_body  = rs_result-request_body
+                                   res_body  = rs_result-response_body ) ).
           IF ls_request-src_docno IS NOT INITIAL.
             mo_log->save_invoice( is_request  = ls_request
                                   is_result   = rs_result

@@ -166,6 +166,22 @@ CLASS lcl_setup IMPLEMENTATION.
                        parm_val = gc_uat
                        descr    = 'Ma ket noi mac dinh' ) ).
 
+    " --- Log tich hop ---
+    " Danh sach the can che truoc khi ghi log. Payload FPT co
+    " "password" ngay trong body, VNPT co "acpass" -> khong che thi mat
+    " khau API nam plaintext trong bang log.
+    put_parm( VALUE #( parm_key = 'LOG_MASK_TAGS'
+                       parm_val = 'password,acpass,pass,secret,client_secret,token,access_token,authorization,apikey,api_key'
+                       descr    = 'The can che trong log (cach nhau dau phay)' ) ).
+    put_parm( VALUE #( parm_key = 'LOG_TEST_RUN'
+                       parm_val = ''
+                       descr    = 'X = ghi log ca lan Test run' ) ).
+    " Nen tang: de trong = ABAP co dien. Tren Public Cloud dat
+    " ZFIC_HDDT_PLAT_CLOUD.
+    put_parm( VALUE #( parm_key = 'PLATFORM_CLASS'
+                       parm_val = ''
+                       descr    = 'Lop nen tang; trong = ABAP co dien' ) ).
+
     " Nhãn thuế suất đặc biệt — dùng khi tax_rate < 0
     put_map( VALUE #( map_type  = zfiif_hddt_types=>gc_map_type-tax_rate
                       sap_value = '-1'

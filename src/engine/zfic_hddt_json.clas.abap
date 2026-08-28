@@ -119,6 +119,14 @@ CLASS zfic_hddt_json DEFINITION
                 iv_name         TYPE string
       RETURNING VALUE(rv_value) TYPE string .
 
+    "! Xuống dòng + thụt lề cho JSON để đọc được trên màn hình log.
+    "! Không dùng CL_SXML (khác API giữa 2 nền tảng) — chỉ duyệt ký tự,
+    "! nên chạy được ở cả ABAP cổ điển và ABAP Cloud.
+    CLASS-METHODS pretty
+      IMPORTING iv_json        TYPE string
+                iv_indent      TYPE i DEFAULT 2
+      RETURNING VALUE(rt_lines) TYPE string_table .
+
     "! Escape một chuỗi để nhúng vào JSON (không kèm dấu ngoặc kép).
     CLASS-METHODS escape
       IMPORTING iv_value          TYPE any
@@ -388,6 +396,74 @@ CLASS zfic_hddt_json IMPLEMENTATION.
   METHOD get_json.
 
     rv_json = mv_buffer.
+
+  ENDMETHOD.
+
+
+  METHOD pretty.
+
+    DATA lv_level  TYPE i.
+    DATA lv_line   TYPE string.
+    DATA lv_in_str TYPE abap_bool.
+    DATA lv_esc    TYPE abap_bool.
+
+    DATA(lv_len) = strlen( iv_json ).
+    DATA lv_i TYPE i.
+
+    WHILE lv_i < lv_len.
+      DATA(lv_c) = substring( val = iv_json off = lv_i len = 1 ).
+      lv_i = lv_i + 1.
+
+      " Trong chuỗi thì mọi ký tự cấu trúc đều là dữ liệu, không xét
+      IF lv_in_str = abap_true.
+        lv_line = lv_line && lv_c.
+        IF lv_esc = abap_true.
+          lv_esc = abap_false.
+        ELSEIF lv_c = `\`.
+          lv_esc = abap_true.
+        ELSEIF lv_c = `"`.
+          lv_in_str = abap_false.
+        ENDIF.
+        CONTINUE.
+      ENDIF.
+
+      CASE lv_c.
+        WHEN `"`.
+          lv_in_str = abap_true.
+          lv_line = lv_line && lv_c.
+
+        WHEN `{` OR `[`.
+          lv_line = lv_line && lv_c.
+          APPEND lv_line TO rt_lines.
+          lv_level = lv_level + 1.
+          lv_line = repeat( val = ` ` occ = lv_level * iv_indent ).
+
+        WHEN `}` OR `]`.
+          IF lv_line CN ` `.
+            APPEND lv_line TO rt_lines.
+          ENDIF.
+          lv_level = nmax( val1 = 0 val2 = lv_level - 1 ).
+          lv_line = repeat( val = ` ` occ = lv_level * iv_indent ) && lv_c.
+
+        WHEN `,`.
+          lv_line = lv_line && lv_c.
+          APPEND lv_line TO rt_lines.
+          lv_line = repeat( val = ` ` occ = lv_level * iv_indent ).
+
+        WHEN `:`.
+          lv_line = lv_line && `: `.
+
+        WHEN OTHERS.
+          " Bỏ khoảng trắng có sẵn giữa các token để thụt lề nhất quán
+          IF lv_c <> ` `.
+            lv_line = lv_line && lv_c.
+          ENDIF.
+      ENDCASE.
+    ENDWHILE.
+
+    IF lv_line CN ` `.
+      APPEND lv_line TO rt_lines.
+    ENDIF.
 
   ENDMETHOD.
 

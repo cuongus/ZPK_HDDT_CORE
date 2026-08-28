@@ -114,7 +114,7 @@ Chi tiết + phân quyền + STRUST: [docs/06-cai-dat.md](docs/06-cai-dat.md)
 | `ZPK_HDDT_CORE_DDIC` | 10 domain, 42 data element, 14 bảng (cấu hình + log + sổ hoá đơn) |
 | `ZPK_HDDT_CORE_ENGINE` | 4 interface, 10 class, message class `ZFIE_HDDT` |
 | `ZPK_HDDT_CORE_PROV` | 5 class adapter (base, Viettel, FPT, Template, VNPT) |
-| `ZPK_HDDT_CORE_UI` | 3 report (tích hợp / cấu hình / setup), 5 include, 2 transaction |
+| `ZPK_HDDT_CORE_UI` | 4 report (tích hợp / cấu hình / setup / log), 5 include, 3 transaction |
 
 ### Bảng cấu hình
 
@@ -133,9 +133,9 @@ Chi tiết + phân quyền + STRUST: [docs/06-cai-dat.md](docs/06-cai-dat.md)
 | `ZFIT_HDDT_TOK` | Bộ đệm access token |
 | `ZFIT_HDDT_INV` | Sổ đăng ký hoá đơn đã tích hợp |
 | `ZFIT_HDDT_ITEM` | Chi tiết hàng hoá đã phát hành |
-| `ZFIT_HDDT_LOG` | Log request/response từng lần gọi API |
+| `ZFIT_HDDT_LOG` | Log request/response từng lần gọi API — payload lưu dạng **xstring** (byte-exact), secret được che lúc ghi |
 
-Mô tả trường: [docs/02-cau-hinh.md](docs/02-cau-hinh.md)
+Mô tả trường: [docs/02-cau-hinh.md](docs/02-cau-hinh.md) · Log tích hợp: [docs/08-log-tich-hop.md](docs/08-log-tich-hop.md)
 
 ---
 
@@ -184,6 +184,7 @@ danh sách. Xem thêm `execute_many( )`.
 | Adapter **VNPT/Vinaphone** | **Chưa có tài liệu API** trong bộ tài liệu được cung cấp. Adapter kế thừa `ZFIC_HDDT_PROV_TEMPLATE`: dán mẫu payload vào `ZFIT_HDDT_TPL` là chạy, không phải viết ABAP |
 | Lớp đọc dữ liệu nguồn FI | Cài đặt mặc định hợp lý (BKPF/BSEG/BSET). Nghiệp vụ từng khách hàng khác nhau → copy `ZFIC_HDDT_SRC_FI`, sửa, trỏ lại `ZFIT_HDDT_SRC` |
 | Nguồn SD / MM / hoá đơn gom | Chưa cài đặt — điểm mở rộng đã có (`ZFIIF_HDDT_SOURCE` + `ZFIT_HDDT_SRC`) |
+| Chương trình reorg bảng log | **Chưa có.** `ZFIT_HDDT_LOG` lớn nhanh (~1 GB / 100.000 hoá đơn / năm) — 3 hướng xử lý ở [docs/08 §8](docs/08-log-tich-hop.md) |
 | Job lấy lại số hoá đơn (Viettel bất đồng bộ) | **Chưa cài.** Viettel có thể trả `invoiceNo` rỗng; sau 30–90 giây phải gọi `SEARCH_INVOICE` để lấy số. Core đã đặt trạng thái `20 – Chờ cấp số`; cần job nền quét `ZFIT_HDDT_INV` theo trạng thái này |
 
 **Chưa được kích hoạt trên hệ SAP nào.** Package được viết ngoài hệ thống và

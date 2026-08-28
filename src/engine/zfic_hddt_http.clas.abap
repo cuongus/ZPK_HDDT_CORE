@@ -44,6 +44,10 @@ CLASS zfic_hddt_http DEFINITION
              body_x      TYPE xstring,
              full_url    TYPE string,
              duration_ms TYPE i,
+             "! Header thực tế đã gửi / nhận — để ghi log truy vết.
+             "! CHƯA che secret; việc che do ZFIC_HDDT_LOG làm.
+             req_header  TYPE string,
+             res_header  TYPE string,
            END OF ty_response.
 
     METHODS send
@@ -71,6 +75,11 @@ CLASS zfic_hddt_http DEFINITION
     METHODS apply_auth
       IMPORTING is_call   TYPE ty_call
                 io_client TYPE REF TO if_http_client .
+
+    "! Gộp bảng header thành text 1 dòng/1 header để lưu log.
+    METHODS header_text
+      IMPORTING it_fields      TYPE tihttpnvp
+      RETURNING VALUE(rv_text) TYPE string .
 
 ENDCLASS.
 
@@ -214,6 +223,18 @@ CLASS zfic_hddt_http IMPLEMENTATION.
   ENDMETHOD.
 
 
+  METHOD header_text.
+
+    LOOP AT it_fields ASSIGNING FIELD-SYMBOL(<ls_f>).
+      IF rv_text IS NOT INITIAL.
+        rv_text = rv_text && cl_abap_char_utilities=>newline.
+      ENDIF.
+      rv_text = rv_text && |{ <ls_f>-name }: { <ls_f>-value }|.
+    ENDLOOP.
+
+  ENDMETHOD.
+
+
   METHOD send.
 
     DATA lo_client TYPE REF TO if_http_client.
@@ -287,6 +308,15 @@ CLASS zfic_hddt_http IMPLEMENTATION.
 
     GET RUN TIME FIELD lv_t2.
     rs_response-duration_ms = ( lv_t2 - lv_t1 ) / 1000.
+
+    " Ghi lại header hai chiều TRƯỚC khi đóng client, phục vụ log.
+    " GET_HEADER_FIELDS là method CHANGING, không phải functional method.
+    DATA lt_req_hdr TYPE tihttpnvp.
+    DATA lt_res_hdr TYPE tihttpnvp.
+    lo_client->request->get_header_fields( CHANGING fields = lt_req_hdr ).
+    lo_client->response->get_header_fields( CHANGING fields = lt_res_hdr ).
+    rs_response-req_header = header_text( lt_req_hdr ).
+    rs_response-res_header = header_text( lt_res_hdr ).
 
     lo_client->response->get_status( IMPORTING code   = rs_response-http_code
                                                reason = rs_response-reason ).

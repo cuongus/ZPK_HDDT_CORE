@@ -123,7 +123,10 @@ Nhờ vậy đặt được giá trị chung rồi ghi đè cho một công ty.
 | `DEFAULT_CONNID` | Kết nối mặc định |
 | `TIME_ZONE` | Múi giờ quy đổi epoch millis, ví dụ `UTC+7` |
 | `LOCAL_CURRENCY` | Tiền tệ ghi sổ, mặc định `VND` |
-| `LOG_PAYLOAD` | `X` = lưu request/response trong log (khuyến nghị BẬT) |
+| `LOG_PAYLOAD` | `X` = lưu request/response trong log (khuyến nghị BẬT) — xem [08-log-tich-hop.md](08-log-tich-hop.md) |
+| `LOG_MASK_TAGS` | Danh sách thẻ cần che trong log, cách nhau dấu phẩy. **Phải đúng** vì payload FPT/VNPT chứa mật khẩu ngay trong body |
+| `LOG_TEST_RUN` | `X` = ghi log cả lần Test run (mặc định không, tránh rác) |
+| `PLATFORM_CLASS` | Lớp nền tảng; để trống = ABAP cổ điển, Public Cloud đặt `ZFIC_HDDT_PLAT_CLOUD` |
 | `SELLER_NAME` / `SELLER_ADDR` / `SELLER_MAIL` / `SELLER_TEL` / `SELLER_BANK` / `SELLER_ACCT` | Thông tin bên bán — nhờ vậy **không hardcode** trong code |
 | `SECRET_CLASS` | Lớp implement `ZFIIF_HDDT_SECRET` để lấy mật khẩu từ vault |
 | `FPT_LANG` | `vi` / `en` — ngôn ngữ thông báo lỗi của FPT |

@@ -167,6 +167,11 @@ DTELS = [
     ("ZFIDE_HDDT_DOCNO", ("CHAR", 20, 0), "So CT", "So chung tu", "So chung tu nguon", "So CT", "So chung tu nguon tren SAP"),
     ("ZFIDE_HDDT_NAME", ("CHAR", 255, 0), "Ten", "Ten / dien giai", "Ten / dien giai", "Ten", "Ten hoac dien giai dai"),
     ("ZFIDE_HDDT_LINENO", ("NUMC", 6, 0), "Dong", "So dong", "So dong hang hoa", "Dong", "So dong hang hoa"),
+    ("ZFIDE_HDDT_RAW", ("RSTR", 0, 0), "Byte", "Noi dung byte", "Noi dung nguyen ban (byte)", "Byte", "Noi dung nguyen ban tren duong truyen"),
+    ("ZFIDE_HDDT_SIZE", ("INT4", 10, 0), "Byte", "So byte", "Kich thuoc (byte)", "Byte", "Kich thuoc noi dung tinh bang byte"),
+    ("ZFIDE_HDDT_CODEPAGE", ("CHAR", 20, 0), "Codepage", "Bang ma", "Bang ma cua noi dung", "Codepage", "Bang ma dung khi ghi byte (vd UTF-8)"),
+    ("ZFIDE_HDDT_ATTEMPT", ("NUMC", 3, 0), "Lan", "Lan goi thu", "Lan goi thu may", "Lan", "So lan da goi cho cung nghiep vu"),
+    ("ZFIDE_HDDT_CALLER", ("CHAR", 40, 0), "Nguon goi", "Chuong trinh goi", "Chuong trinh / job goi", "Nguon goi", "Chuong trinh, transaction hoac job da goi"),
 ]
 
 for name, typ, s, m, lg, h, ddtext in DTELS:
@@ -309,17 +314,33 @@ TABLES = [
     ]),
     ("ZFIT_HDDT_LOG", "A", "HDDT: Log goi API", [
         K("MANDT", "MANDT"), K("LOG_ID", "ZFIDE_HDDT_LOGID"),
+        # --- dinh danh nghiep vu
         F("PROVIDER", "ZFIDE_HDDT_PROV"), F("CONNID", "ZFIDE_HDDT_CONNID"),
         F("ACTION", "ZFIDE_HDDT_ACTION"),
         F("BUKRS", "BUKRS"), F("GJAHR", "GJAHR"),
         F("SRC_TYPE", "ZFIDE_HDDT_SRCTYPE"), F("SRC_DOCNO", "ZFIDE_HDDT_DOCNO"),
         F("IDKEY", "ZFIDE_HDDT_IDKEY"),
-        F("HTTP_METHOD", "ZFIDE_HDDT_METHOD"), F("FULL_URL", "ZFIDE_HDDT_URL"),
-        F("HTTP_CODE", "ZFIDE_HDDT_TIMEOUT"), F("HTTP_REASON", "ZFIDE_HDDT_MSG"),
-        F("DURATION_MS", "ZFIDE_HDDT_TIMEOUT"),
+        F("ATTEMPT", "ZFIDE_HDDT_ATTEMPT"),
+        F("TEST_RUN", "XFELD"),
+        # --- ket qua
+        F("SERIAL", "ZFIDE_HDDT_SERIAL"), F("SEQ", "ZFIDE_HDDT_SEQ"),
+        F("SAP_STATUS", "ZFIDE_HDDT_STATUS"),
+        F("PROV_STATUS", "ZFIDE_HDDT_RCCODE"),
         F("MSGTY", "SYMSGTY"), F("MESSAGE", "ZFIDE_HDDT_MSG"),
+        # --- ky thuat HTTP
+        F("HTTP_METHOD", "ZFIDE_HDDT_METHOD"), F("FULL_URL", "ZFIDE_HDDT_URL"),
+        F("CONT_TYPE", "ZFIDE_HDDT_PARMVAL"),
+        F("HTTP_CODE", "ZFIDE_HDDT_SIZE"), F("HTTP_REASON", "ZFIDE_HDDT_MSG"),
+        F("DURATION_MS", "ZFIDE_HDDT_SIZE"),
+        F("REQ_SIZE", "ZFIDE_HDDT_SIZE"), F("RES_SIZE", "ZFIDE_HDDT_SIZE"),
+        F("CODEPAGE", "ZFIDE_HDDT_CODEPAGE"),
+        F("MASKED", "XFELD"),
+        # --- truy vet nguon goi
+        F("CALLER", "ZFIDE_HDDT_CALLER"), F("TCODE", "TCODE"),
         F("CREATED_BY", "SYUNAME"), F("CREATED_AT", "TIMESTAMPL"),
-        F("REQ_BODY", "ZFIDE_HDDT_JSON"), F("RES_BODY", "ZFIDE_HDDT_JSON"),
+        # --- noi dung nguyen ban tren duong truyen (byte-exact)
+        F("REQ_HEADER", "ZFIDE_HDDT_RAW"), F("RES_HEADER", "ZFIDE_HDDT_RAW"),
+        F("REQ_BODY", "ZFIDE_HDDT_RAW"), F("RES_BODY", "ZFIDE_HDDT_RAW"),
     ]),
 ]
 
