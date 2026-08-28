@@ -69,6 +69,14 @@ CLASS zfic_hddt_prov_viettel DEFINITION
       IMPORTING is_adjust      TYPE zfiif_hddt_types=>ty_adjust
       RETURNING VALUE(rv_type) TYPE string .
 
+    "! Quy đổi hình thức dòng hàng hoá sang thẻ SELECTION của Viettel
+    "! (mục 6.6). Đây là thẻ quyết định dòng có sinh số thứ tự và có
+    "! cộng vào tổng tiền thanh toán hay không — thiếu nó thì dòng ghi
+    "! chú và dòng chiết khấu bị tính như hàng hoá bình thường.
+    METHODS get_selection
+      IMPORTING iv_item_type        TYPE zfide_hddt_itemtype
+      RETURNING VALUE(rv_selection) TYPE string .
+
 ENDCLASS.
 
 
@@ -188,6 +196,14 @@ CLASS zfic_hddt_prov_viettel IMPLEMENTATION.
                                               THEN `2` ELSE `1` ) ).
     ENDIF.
 
+    " Lý do sai sót — thẻ RIÊNG, tối đa 255 ký tự (mục 6.2 adjustedNote).
+    " Khác invoiceNote: adjustedNote là lý do điều chỉnh/thay thế,
+    " invoiceNote là ghi chú in trên hoá đơn.
+    IF lv_adj_type <> '1' AND ls_adj-reason IS NOT INITIAL.
+      lo->add_string( iv_name  = `adjustedNote`
+                      iv_value = ls_adj-reason ).
+    ENDIF.
+
     lo->end_object( ).
 
 *---- buyerInfo -------------------------------------------------------*
@@ -202,7 +218,8 @@ CLASS zfic_hddt_prov_viettel IMPLEMENTATION.
       )->add_string( iv_name = `buyerBankName`     iv_value = ls_buy-bank_name
       )->add_string( iv_name = `buyerBankAccount`  iv_value = ls_buy-bank_acct
       )->add_string( iv_name = `buyerCode`         iv_value = ls_buy-code
-      )->add_string( iv_name = `buyerIdNo`         iv_value = ls_buy-id_number ).
+      )->add_string( iv_name = `buyerIdNo`         iv_value = ls_buy-id_number
+      )->add_string( iv_name = `buyerBudgetCode`   iv_value = ls_buy-budget_code ).
     IF ls_buy-not_get_invoice = abap_true.
       lo->add_string( iv_name = `buyerNotGetInvoice` iv_value = `1`
                       iv_force = abap_true ).
@@ -225,8 +242,12 @@ CLASS zfic_hddt_prov_viettel IMPLEMENTATION.
 *---- itemInfo --------------------------------------------------------*
     lo->begin_array( `itemInfo` ).
     LOOP AT ls_inv-items ASSIGNING FIELD-SYMBOL(<ls_item>).
+      DATA(lv_selection) = get_selection( <ls_item>-item_type ).
+
       lo->begin_object( ).
       lo->add_number( iv_name = `lineNumber` iv_value = <ls_item>-line_no
+                      iv_decimals = 0 ).
+      lo->add_number( iv_name = `selection` iv_value = lv_selection
                       iv_decimals = 0 ).
       lo->add_string( iv_name = `itemCode`  iv_value = <ls_item>-item_code
         )->add_string( iv_name = `itemName` iv_value = <ls_item>-item_name
@@ -251,8 +272,12 @@ CLASS zfic_hddt_prov_viettel IMPLEMENTATION.
       IF <ls_item>-note IS NOT INITIAL.
         lo->add_string( iv_name = `itemNote` iv_value = <ls_item>-note ).
       ENDIF.
-      " Chỉ hoá đơn điều chỉnh mới có thẻ này
-      IF lv_is_adjust = abap_true.
+      " Dòng chiết khấu (selection = 3) BẮT BUỘC isIncreaseItem = false
+      " để hệ thống hiểu là giảm tiền — kể cả trên hoá đơn gốc (mục 6.6).
+      " Ngoài ra chỉ hoá đơn điều chỉnh mới gửi thẻ này.
+      IF lv_selection = `3`.
+        lo->add_bool_text( iv_name = `isIncreaseItem` iv_value = abap_false ).
+      ELSEIF lv_is_adjust = abap_true.
         lo->add_bool_text( iv_name = `isIncreaseItem` iv_value = lv_increase ).
       ENDIF.
       lo->add_ext( <ls_item>-ext ).
@@ -300,6 +325,8 @@ CLASS zfic_hddt_prov_viettel IMPLEMENTATION.
     lo->begin_array( `payments` ).
     LOOP AT ls_inv-payments ASSIGNING FIELD-SYMBOL(<ls_pay>).
       lo->begin_object(
+        )->add_string( iv_name  = `paymentMethod`
+                       iv_value = <ls_pay>-method_code
         )->add_string( iv_name  = `paymentMethodName`
                        iv_value = <ls_pay>-method_name iv_force = abap_true
         )->end_object( ).
@@ -317,14 +344,17 @@ CLASS zfic_hddt_prov_viettel IMPLEMENTATION.
 
   METHOD build_cancel.
 
+    " Mục 7.9: Content-Type = application/x-www-form-urlencoded (KHÔNG
+    " phải JSON), và strIssueDate / additionalReferenceDate là
+    " milliseconds since epoch — không phải chuỗi ngày.
     DATA(ls_hdr) = is_request-invoice-header.
     DATA(ls_adj) = is_request-invoice-adjust.
 
-    " Số hoá đơn cần huỷ: ưu tiên tham số truyền vào, sau đó lấy từ sổ
-    " đăng ký (ZFIT_HDDT_INV) đã lưu khi phát hành.
     DATA(lv_seq)    = |{ ls_hdr-seq }|.
     DATA(lv_serial) = |{ ls_hdr-serial }|.
+    DATA(lv_tmpl)   = |{ ls_hdr-template }|.
     DATA(lv_date)   = ls_hdr-inv_date.
+    DATA(lv_time)   = ls_hdr-inv_time.
 
     IF lv_seq IS INITIAL.
       DATA(ls_reg) = zfic_hddt_log=>read_invoice(
@@ -334,8 +364,10 @@ CLASS zfic_hddt_prov_viettel IMPLEMENTATION.
                        iv_src_docno = is_request-src_docno ).
       lv_seq    = |{ ls_reg-seq }|.
       lv_serial = |{ ls_reg-serial }|.
+      lv_tmpl   = |{ ls_reg-template }|.
       IF ls_reg-issue_date IS NOT INITIAL.
         lv_date = ls_reg-issue_date.
+        lv_time = ls_reg-inv_time.
       ENDIF.
     ENDIF.
 
@@ -345,37 +377,42 @@ CLASS zfic_hddt_prov_viettel IMPLEMENTATION.
         |{ is_request-src_docno }/{ is_request-gjahr }.| ).
     ENDIF.
 
-    rv_payload = NEW zfic_hddt_json( )->begin_object(
-      )->add_string( iv_name = `supplierTaxCode` iv_value = is_cred-taxcode
-                     iv_force = abap_true
-      )->add_string( iv_name = `templateCode`  iv_value = ls_hdr-template
-      )->add_string( iv_name = `invoiceNo`     iv_value = |{ lv_serial }{ lv_seq }|
-                     iv_force = abap_true
-      )->add_string( iv_name = `strIssueDate`
-                     iv_value = fmt_datetime( iv_date = lv_date
-                                              iv_time = ls_hdr-inv_time )
-      )->add_string( iv_name = `additionalReferenceDesc`
-                     iv_value = ls_adj-reason
-      )->add_string( iv_name = `additionalReferenceDate`
-                     iv_value = fmt_datetime( iv_date = COND #(
-                                  WHEN ls_adj-doc_ref_date IS NOT INITIAL
-                                  THEN ls_adj-doc_ref_date ELSE sy-datum ) )
-      )->end_object(
-      )->get_json( ).
+    " additionalReferenceDesc là BẮT BUỘC (mục 7.9, tối đa 400) — tên
+    " văn bản thoả thuận huỷ. Không có thì dùng lý do huỷ để tránh 400.
+    DATA(lv_ref_desc) = COND string( WHEN ls_adj-doc_ref_no IS NOT INITIAL
+                                     THEN ls_adj-doc_ref_no
+                                     ELSE ls_adj-reason ).
+    DATA(lv_ref_date) = COND #( WHEN ls_adj-doc_ref_date IS NOT INITIAL
+                                THEN ls_adj-doc_ref_date
+                                ELSE sy-datum ).
+
+    rv_payload = build_form( VALUE #(
+      ( name  = `supplierTaxCode`
+        value = |{ is_cred-taxcode }| )
+      ( name  = `templateCode`
+        value = lv_tmpl )
+      ( name  = `invoiceNo`
+        value = |{ lv_serial }{ lv_seq }| )
+      ( name  = `strIssueDate`
+        value = to_epoch_millis( iv_date = lv_date iv_time = lv_time ) )
+      ( name  = `additionalReferenceDesc`
+        value = lv_ref_desc )
+      ( name  = `additionalReferenceDate`
+        value = to_epoch_millis( lv_ref_date ) )
+      ( name  = `reasonDelete`
+        value = ls_adj-reason ) ) ).
 
   ENDMETHOD.
 
 
   METHOD build_search.
 
-    rv_payload = NEW zfic_hddt_json( )->begin_object(
-      )->add_string( iv_name = `supplierTaxCode` iv_value = is_cred-taxcode
-                     iv_force = abap_true
-      )->add_string( iv_name = `transactionUuid`
-                     iv_value = is_request-invoice-header-idkey
-                     iv_force = abap_true
-      )->end_object(
-      )->get_json( ).
+    " Mục 7.21: form-urlencoded, đúng 2 tham số
+    rv_payload = build_form( VALUE #(
+      ( name  = `supplierTaxCode`
+        value = |{ is_cred-taxcode }| )
+      ( name  = `transactionUuid`
+        value = |{ is_request-invoice-header-idkey }| ) ) ).
 
   ENDMETHOD.
 
@@ -401,6 +438,30 @@ CLASS zfic_hddt_prov_viettel IMPLEMENTATION.
       )->add_string( iv_name = `fileType` iv_value = lv_type iv_force = abap_true
       )->end_object(
       )->get_json( ).
+
+  ENDMETHOD.
+
+
+  METHOD get_selection.
+
+    " Cho phép ghi đè bằng ánh xạ ITEMTYPE trong ZFIT_HDDT_MAP, để
+    " khách hàng dùng giá trị khác mà không phải sửa code.
+    DATA(lv_mapped) = map_val( iv_map_type = zfiif_hddt_types=>gc_map_type-item_type
+                               iv_value    = iv_item_type ).
+    IF lv_mapped IS NOT INITIAL AND lv_mapped <> |{ iv_item_type }|.
+      rv_selection = lv_mapped.
+      RETURN.
+    ENDIF.
+
+    " Mặc định theo mục 6.6, cột "Đối với Thông tư 78":
+    "   1 Hàng hoá · 2 Ghi chú · 3 Chiết khấu · 4 Phí khác
+    "   5 Khuyến mại · 6 Hàng hoá đặc trưng (NĐ70)
+    CASE iv_item_type.
+      WHEN '1'.    rv_selection = `5`.   " khuyến mại
+      WHEN '2'.    rv_selection = `3`.   " chiết khấu thương mại
+      WHEN '3'.    rv_selection = `2`.   " ghi chú / diễn giải
+      WHEN OTHERS. rv_selection = `1`.   " hàng hoá, dịch vụ
+    ENDCASE.
 
   ENDMETHOD.
 
@@ -456,27 +517,42 @@ CLASS zfic_hddt_prov_viettel IMPLEMENTATION.
     cs_result-success = xsdbool( iv_http_code >= 200 AND iv_http_code < 300
                                  AND lv_error IS INITIAL ).
 
-    DATA(lv_seq) = zfic_hddt_json=>get_value_by_name( it_values = lt_val
-                                                      iv_name   = `invoiceNo` ).
-    IF lv_seq IS NOT INITIAL.
-      " invoiceNo của SInvoice là ký hiệu + số; tách phần số ở cuối.
-      DATA lv_digits TYPE string.
-      DATA lv_i      TYPE i.
-      lv_i = strlen( lv_seq ).
-      WHILE lv_i > 0.
-        DATA(lv_c) = substring( val = lv_seq off = lv_i - 1 len = 1 ).
-        IF lv_c CO '0123456789'.
-          lv_digits = lv_c && lv_digits.
-          lv_i = lv_i - 1.
-        ELSE.
-          EXIT.
-        ENDIF.
-      ENDWHILE.
-      IF lv_digits IS NOT INITIAL AND lv_i > 0.
-        cs_result-serial = substring( val = lv_seq len = lv_i ).
-        cs_result-seq    = lv_digits.
+    DATA(lv_inv_no) = zfic_hddt_json=>get_value_by_name( it_values = lt_val
+                                                         iv_name   = `invoiceNo` ).
+    IF lv_inv_no IS NOT INITIAL.
+      " Mục 7.9 / 7.21: invoiceNo = ký hiệu hoá đơn + số hoá đơn
+      " (ví dụ AB/19E0000522). Ký hiệu đã biết từ cấu hình nên tách
+      " bằng cách bỏ TIỀN TỐ — không đoán theo chữ số ở cuối, vì ký
+      " hiệu theo TT78 có thể kết thúc bằng số (ví dụ K23T01).
+      DATA(lv_known) = |{ is_request-invoice-header-serial }|.
+      CONDENSE lv_known NO-GAPS.
+
+      IF lv_known IS NOT INITIAL
+         AND strlen( lv_inv_no ) > strlen( lv_known )
+         AND substring( val = lv_inv_no len = strlen( lv_known ) ) = lv_known.
+        cs_result-serial = lv_known.
+        cs_result-seq    = substring( val = lv_inv_no off = strlen( lv_known ) ).
       ELSE.
-        cs_result-seq = lv_seq.
+        " Không khớp tiền tố (đổi ký hiệu giữa kỳ…) -> tách chữ số cuối
+        DATA lv_digits TYPE string.
+        DATA lv_i      TYPE i.
+        CLEAR lv_digits.
+        lv_i = strlen( lv_inv_no ).
+        WHILE lv_i > 0.
+          DATA(lv_c) = substring( val = lv_inv_no off = lv_i - 1 len = 1 ).
+          IF lv_c CO '0123456789'.
+            lv_digits = lv_c && lv_digits.
+            lv_i = lv_i - 1.
+          ELSE.
+            EXIT.
+          ENDIF.
+        ENDWHILE.
+        IF lv_digits IS NOT INITIAL AND lv_i > 0.
+          cs_result-serial = substring( val = lv_inv_no len = lv_i ).
+          cs_result-seq    = lv_digits.
+        ELSE.
+          cs_result-seq = lv_inv_no.
+        ENDIF.
       ENDIF.
     ENDIF.
 

@@ -180,10 +180,11 @@ danh sách. Xem thêm `execute_many( )`.
 |---|---|
 | Kiến trúc, engine, cấu hình, log, SAP GUI | Hoàn chỉnh |
 | Adapter **FPT** | Endpoint và cấu trúc payload **đã đối chiếu** tài liệu FPT.eInvoice v2.4.7 (mục 3.1, 3.3, 3.5, 3.7, 3.8, 3.9, 3.10, 3.11) |
-| Adapter **Viettel** | Endpoint đã đối chiếu Postman collection (mục 7.2–7.37). **Tên thẻ JSON** dựng theo mã ABAP đang chạy thật ở hệ EEMC — cần đối chiếu lại tài liệu Viettel v2.44 mục 7.2 trước khi go-live |
+| Adapter **Viettel** | Endpoint, Content-Type và **toàn bộ tên thẻ đã đối chiếu** tài liệu SInvoice v2.44 (11/2024, 162 trang): mục 6.1–6.8 (tên thẻ), 7.2 / 7.3 / 7.8 / 7.9 / 7.20 / 7.21. Đối chiếu này tìm ra **4 lỗi thật** — đã sửa, xem [docs/03 §7](docs/03-provider-viettel.md) |
 | Adapter **VNPT/Vinaphone** | **Chưa có tài liệu API** trong bộ tài liệu được cung cấp. Adapter kế thừa `ZFIC_HDDT_PROV_TEMPLATE`: dán mẫu payload vào `ZFIT_HDDT_TPL` là chạy, không phải viết ABAP |
 | Lớp đọc dữ liệu nguồn FI | Cài đặt mặc định hợp lý (BKPF/BSEG/BSET). Nghiệp vụ từng khách hàng khác nhau → copy `ZFIC_HDDT_SRC_FI`, sửa, trỏ lại `ZFIT_HDDT_SRC` |
 | Nguồn SD / MM / hoá đơn gom | Chưa cài đặt — điểm mở rộng đã có (`ZFIIF_HDDT_SOURCE` + `ZFIT_HDDT_SRC`) |
+| Job lấy lại số hoá đơn (Viettel bất đồng bộ) | **Chưa cài.** Viettel có thể trả `invoiceNo` rỗng; sau 30–90 giây phải gọi `SEARCH_INVOICE` để lấy số. Core đã đặt trạng thái `20 – Chờ cấp số`; cần job nền quét `ZFIT_HDDT_INV` theo trạng thái này |
 
 **Chưa được kích hoạt trên hệ SAP nào.** Package được viết ngoài hệ thống và
 đưa lên Git; lần import đầu tiên cần một lượt activate + sửa lỗi cú pháp còn sót.

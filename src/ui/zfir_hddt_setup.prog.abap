@@ -87,6 +87,7 @@ CLASS lcl_setup DEFINITION FINAL CREATE PUBLIC.
                 iv_method     TYPE zfide_hddt_method DEFAULT 'POST'
                 iv_path       TYPE string
                 iv_descr      TYPE zfide_hddt_descr
+                iv_cont_type  TYPE string OPTIONAL
       RETURNING VALUE(rs_row) TYPE zfit_hddt_act.
 
     METHODS log
@@ -256,14 +257,17 @@ CLASS lcl_setup IMPLEMENTATION.
                   iv_action   = zfiif_hddt_types=>gc_action-preview_draft
                   iv_path     = |{ gc_vt_api }/InvoiceUtilsWS/createInvoiceDraftPreview/\{taxcode\}|
                   iv_descr    = 'Xem truoc hoa don nhap' ) ).
-    put_act( act( iv_provider = gc_vt
-                  iv_action   = zfiif_hddt_types=>gc_action-cancel_invoice
-                  iv_path     = |{ gc_vt_api }/InvoiceWS/cancelTransactionInvoice|
-                  iv_descr    = 'Huy hoa don' ) ).
-    put_act( act( iv_provider = gc_vt
-                  iv_action   = zfiif_hddt_types=>gc_action-search_invoice
-                  iv_path     = |{ gc_vt_api }/InvoiceWS/searchInvoiceByTransactionUuid|
-                  iv_descr    = 'Tra cuu theo transactionUuid' ) ).
+    " Muc 7.9 va 7.21: HAI endpoint nay nhan form-urlencoded, KHONG JSON
+    put_act( act( iv_provider  = gc_vt
+                  iv_action    = zfiif_hddt_types=>gc_action-cancel_invoice
+                  iv_path      = |{ gc_vt_api }/InvoiceWS/cancelTransactionInvoice|
+                  iv_cont_type = 'application/x-www-form-urlencoded'
+                  iv_descr     = 'Huy hoa don (muc 7.9 - form urlencoded)' ) ).
+    put_act( act( iv_provider  = gc_vt
+                  iv_action    = zfiif_hddt_types=>gc_action-search_invoice
+                  iv_path      = |{ gc_vt_api }/InvoiceWS/searchInvoiceByTransactionUuid|
+                  iv_cont_type = 'application/x-www-form-urlencoded'
+                  iv_descr     = 'Tra cuu transactionUuid (7.21 - form)' ) ).
     put_act( act( iv_provider = gc_vt
                   iv_action   = zfiif_hddt_types=>gc_action-get_file
                   iv_path     = |{ gc_vt_api }/InvoiceUtilsWS/getInvoiceRepresentationFile|
@@ -272,6 +276,26 @@ CLASS lcl_setup IMPLEMENTATION.
                   iv_action   = zfiif_hddt_types=>gc_action-get_templates
                   iv_path     = |{ gc_vt_api }/InvoiceUtilsWS/getAllInvoiceTemplates|
                   iv_descr    = 'Lay danh sach mau va ky hieu' ) ).
+
+    " Anh xa hinh thuc dong hang hoa -> the SELECTION cua Viettel
+    " (muc 6.6, cot Thong tu 78). Nap tuong minh de key user thay duoc
+    " va sua duoc, thay vi an trong code.
+    put_map( VALUE #( provider  = gc_vt
+                      map_type  = zfiif_hddt_types=>gc_map_type-item_type
+                      sap_value = '0' ext_value = '1'
+                      ext_text  = 'Hang hoa / dich vu' ) ).
+    put_map( VALUE #( provider  = gc_vt
+                      map_type  = zfiif_hddt_types=>gc_map_type-item_type
+                      sap_value = '1' ext_value = '5'
+                      ext_text  = 'Khuyen mai' ) ).
+    put_map( VALUE #( provider  = gc_vt
+                      map_type  = zfiif_hddt_types=>gc_map_type-item_type
+                      sap_value = '2' ext_value = '3'
+                      ext_text  = 'Chiet khau thuong mai' ) ).
+    put_map( VALUE #( provider  = gc_vt
+                      map_type  = zfiif_hddt_types=>gc_map_type-item_type
+                      sap_value = '3' ext_value = '2'
+                      ext_text  = 'Ghi chu / dien giai' ) ).
 
   ENDMETHOD.
 
@@ -351,6 +375,7 @@ CLASS lcl_setup IMPLEMENTATION.
                        parm_val = 'X'
                        descr    = 'Gui user/password trong payload' ) ).
 
+    " Placeholder giu cho FPT; anh xa trang thai o duoi
     " Trạng thái hoá đơn của FPT (Phụ lục I) -> trạng thái SAP
     put_stat( VALUE #( provider = gc_fpt action = '*' rc_code = '1'
                        sap_status = zfiif_hddt_types=>gc_status-wait_seq
@@ -398,7 +423,9 @@ CLASS lcl_setup IMPLEMENTATION.
     rs_row-action      = iv_action.
     rs_row-http_method = iv_method.
     rs_row-api_path    = iv_path.
-    rs_row-cont_type   = 'application/json'.
+    rs_row-cont_type   = COND #( WHEN iv_cont_type IS NOT INITIAL
+                                 THEN iv_cont_type
+                                 ELSE 'application/json' ).
     rs_row-accept_type = '*/*'.
     rs_row-descr       = iv_descr.
     rs_row-xactive     = abap_true.

@@ -69,6 +69,15 @@ CLASS zfic_hddt_prov_base DEFINITION
                 iv_decimals    TYPE i DEFAULT 6
       RETURNING VALUE(rv_text) TYPE string .
 
+    "! Dựng body dạng application/x-www-form-urlencoded.
+    "! Cần thiết vì không phải endpoint nào cũng nhận JSON — Viettel
+    "! dùng form-urlencoded cho huỷ hoá đơn (mục 7.9), tra cứu theo
+    "! transactionUuid (7.21), cập nhật trạng thái thanh toán (7.18)...
+    "! Trường rỗng bị bỏ, giống nguyên tắc của JSON writer.
+    METHODS build_form
+      IMPORTING it_fields      TYPE zfiif_hddt_types=>ty_t_kv
+      RETURNING VALUE(rv_body) TYPE string .
+
     METHODS get_config
       RETURNING VALUE(ro_config) TYPE REF TO zfic_hddt_config .
 
@@ -287,6 +296,24 @@ CLASS zfic_hddt_prov_base IMPLEMENTATION.
 
     rv_text = zfic_hddt_json=>format_number( iv_value    = iv_value
                                              iv_decimals = iv_decimals ).
+
+  ENDMETHOD.
+
+
+  METHOD build_form.
+
+    LOOP AT it_fields ASSIGNING FIELD-SYMBOL(<ls_f>).
+      IF <ls_f>-value IS INITIAL.
+        CONTINUE.
+      ENDIF.
+      IF rv_body IS NOT INITIAL.
+        rv_body = rv_body && `&`.
+      ENDIF.
+      rv_body = rv_body
+             && cl_http_utility=>escape_url( <ls_f>-name )
+             && `=`
+             && cl_http_utility=>escape_url( <ls_f>-value ).
+    ENDLOOP.
 
   ENDMETHOD.
 
