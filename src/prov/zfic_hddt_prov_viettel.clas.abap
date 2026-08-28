@@ -573,12 +573,10 @@ CLASS zfic_hddt_prov_viettel IMPLEMENTATION.
     DATA(lv_file) = zfic_hddt_json=>get_value_by_name(
                       it_values = lt_val iv_name = `fileToBytes` ).
     IF lv_file IS NOT INITIAL.
-      TRY.
-          cs_result-file_content = cl_http_utility=>decode_x_base64( lv_file ).
-          cs_result-file_name    = |{ cs_result-serial }{ cs_result-seq }.pdf|.
-        CATCH cx_root.
-          CLEAR cs_result-file_content.
-      ENDTRY.
+      cs_result-file_content = platform( )->decode_base64( lv_file ).
+      IF cs_result-file_content IS NOT INITIAL.
+        cs_result-file_name = |{ cs_result-serial }{ cs_result-seq }.pdf|.
+      ENDIF.
     ENDIF.
 
     IF lv_desc IS NOT INITIAL.

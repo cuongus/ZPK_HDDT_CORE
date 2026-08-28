@@ -136,8 +136,9 @@ CLASS zfic_hddt_json DEFINITION
 
     CONSTANTS gc_quote TYPE c LENGTH 1 VALUE '"' .
 
-    CLASS-DATA gv_cr TYPE c LENGTH 1 .
-    CLASS-DATA gv_lf TYPE c LENGTH 1 .
+    CLASS-DATA gv_cr  TYPE c LENGTH 1 .
+    CLASS-DATA gv_lf  TYPE c LENGTH 1 .
+    CLASS-DATA gv_tab TYPE c LENGTH 1 .
 
     CLASS-METHODS class_constructor .
 
@@ -192,8 +193,12 @@ CLASS zfic_hddt_json IMPLEMENTATION.
 
   METHOD class_constructor.
 
-    gv_cr = cl_abap_char_utilities=>cr_lf(1).
-    gv_lf = cl_abap_char_utilities=>newline.
+    " Lấy qua lớp nền tảng: CL_ABAP_CHAR_UTILITIES không được phép trong
+    " ABAP Cloud, mà lớp này phải dùng chung cho cả hai nền tảng.
+    DATA(lo_plat) = zfic_hddt_platform=>get( ).
+    gv_cr  = lo_plat->carriage_return( ).
+    gv_lf  = lo_plat->newline( ).
+    gv_tab = lo_plat->tab( ).
 
   ENDMETHOD.
 
@@ -394,9 +399,10 @@ CLASS zfic_hddt_json IMPLEMENTATION.
     " Thứ tự quan trọng: backslash phải xử lý trước tiên.
     REPLACE ALL OCCURRENCES OF `\` IN rv_escaped WITH `\\`.
     REPLACE ALL OCCURRENCES OF `"` IN rv_escaped WITH `\"`.
-    REPLACE ALL OCCURRENCES OF cl_abap_char_utilities=>cr_lf IN rv_escaped WITH `\r\n`.
-    REPLACE ALL OCCURRENCES OF cl_abap_char_utilities=>newline IN rv_escaped WITH `\n`.
-    REPLACE ALL OCCURRENCES OF cl_abap_char_utilities=>horizontal_tab IN rv_escaped WITH `\t`.
+    REPLACE ALL OCCURRENCES OF gv_cr && gv_lf IN rv_escaped WITH `\r\n`.
+    REPLACE ALL OCCURRENCES OF gv_cr  IN rv_escaped WITH `\r`.
+    REPLACE ALL OCCURRENCES OF gv_lf  IN rv_escaped WITH `\n`.
+    REPLACE ALL OCCURRENCES OF gv_tab IN rv_escaped WITH `\t`.
 
   ENDMETHOD.
 
@@ -404,8 +410,6 @@ CLASS zfic_hddt_json IMPLEMENTATION.
   METHOD format_number.
 
     DATA lv_packed TYPE p LENGTH 16 DECIMALS 6.
-    DATA lv_char   TYPE c LENGTH 40.
-    DATA lv_neg    TYPE abap_bool.
     DATA lv_dec    TYPE i.
 
     TRY.
@@ -415,11 +419,6 @@ CLASS zfic_hddt_json IMPLEMENTATION.
         RETURN.
     ENDTRY.
 
-    IF lv_packed < 0.
-      lv_neg    = abap_true.
-      lv_packed = lv_packed * -1.
-    ENDIF.
-
     lv_dec = iv_decimals.
     IF lv_dec < 0.
       lv_dec = 0.
@@ -427,13 +426,15 @@ CLASS zfic_hddt_json IMPLEMENTATION.
       lv_dec = 6.
     ENDIF.
 
-    " NO-GROUPING để chắc chắn không xuất hiện dấu phân cách nghìn;
-    " sau đó chỉ còn duy nhất dấu thập phân cần chuẩn hoá về '.'.
-    WRITE lv_packed TO lv_char DECIMALS lv_dec NO-GROUPING LEFT-JUSTIFIED.
+    lv_packed = round( val = lv_packed dec = lv_dec ).
 
-    rv_text = lv_char.
+    " NUMBER = RAW luôn cho dấu '.' làm phân cách thập phân và dấu trừ ở
+    " PHÍA TRƯỚC, độc lập cài đặt của người dùng — đúng yêu cầu JSON.
+    " Bản trước dùng WRITE ... TO + NO-GROUPING + đổi ',' thành '.' + tự
+    " đảo dấu; cách đó phụ thuộc user setting VÀ không được phép trong
+    " ABAP Cloud. NUMBER = RAW giải quyết cả hai vấn đề.
+    rv_text = |{ lv_packed NUMBER = RAW }|.
     CONDENSE rv_text NO-GAPS.
-    REPLACE ALL OCCURRENCES OF `,` IN rv_text WITH `.`.
 
     " Bỏ các số 0 vô nghĩa ở cuối phần thập phân
     IF rv_text CS `.`.
@@ -449,12 +450,8 @@ CLASS zfic_hddt_json IMPLEMENTATION.
       ENDIF.
     ENDIF.
 
-    IF rv_text IS INITIAL.
+    IF rv_text IS INITIAL OR rv_text = `-0` OR rv_text = `-`.
       rv_text = `0`.
-    ENDIF.
-
-    IF lv_neg = abap_true AND rv_text <> `0`.
-      rv_text = `-` && rv_text.
     ENDIF.
 
   ENDMETHOD.
@@ -503,7 +500,7 @@ CLASS zfic_hddt_json IMPLEMENTATION.
 
     WHILE mv_pos < mv_len.
       DATA(lv_c) = substring( val = mv_src off = mv_pos len = 1 ).
-      IF lv_c = ` ` OR lv_c = cl_abap_char_utilities=>horizontal_tab
+      IF lv_c = ` ` OR lv_c = gv_tab
                     OR lv_c = gv_lf
                     OR lv_c = gv_cr.
         mv_pos = mv_pos + 1.
@@ -646,7 +643,7 @@ CLASS zfic_hddt_json IMPLEMENTATION.
         CASE lv_e.
           WHEN `n`. rv_value = rv_value && gv_lf.
           WHEN `r`. rv_value = rv_value && gv_cr.
-          WHEN `t`. rv_value = rv_value && cl_abap_char_utilities=>horizontal_tab.
+          WHEN `t`. rv_value = rv_value && gv_tab.
           WHEN `b` OR `f`. "  bỏ qua backspace / form feed
           WHEN `u`.
             IF mv_pos + 4 < mv_len.
@@ -654,14 +651,13 @@ CLASS zfic_hddt_json IMPLEMENTATION.
               TRY.
                   DATA lv_x2   TYPE x LENGTH 2.
                   DATA lv_xstr TYPE xstring.
-                  DATA lv_uni  TYPE string.
                   " Gán C chứa chữ số hex sang X = quy đổi hexa
                   lv_x2   = lv_hex.
                   lv_xstr = lv_x2.
-                  cl_abap_conv_in_ce=>create( encoding = 'UTF-16BE'
-                    )->convert( EXPORTING input = lv_xstr
-                                IMPORTING data  = lv_uni ).
-                  rv_value = rv_value && lv_uni.
+                  rv_value = rv_value
+                          && zfic_hddt_platform=>get( )->xstring_to_string(
+                               iv_data     = lv_xstr
+                               iv_encoding = `UTF-16BE` ).
                 CATCH cx_root.
                   " Không dịch được -> bỏ qua, không làm vỡ toàn bộ parse
               ENDTRY.
@@ -690,7 +686,7 @@ CLASS zfic_hddt_json IMPLEMENTATION.
       DATA(lv_c) = substring( val = mv_src off = mv_pos len = 1 ).
       IF lv_c = `,` OR lv_c = `}` OR lv_c = `]`
          OR lv_c = ` ` OR lv_c = gv_lf
-         OR lv_c = cl_abap_char_utilities=>horizontal_tab
+         OR lv_c = gv_tab
          OR lv_c = gv_cr.
         EXIT.
       ENDIF.

@@ -32,6 +32,7 @@ INTFS = [
     ("engine", "ZFIIF_HDDT_PROVIDER", "HDDT: Hop dong cho adapter nha cung cap"),
     ("engine", "ZFIIF_HDDT_SOURCE", "HDDT: Hop dong cho lop doc du lieu nguon"),
     ("engine", "ZFIIF_HDDT_SECRET", "HDDT: Diem cam lay secret tu vault"),
+    ("engine", "ZFIIF_HDDT_PLATFORM", "HDDT: Tach API co dien vs ABAP Cloud"),
 ]
 
 for folder, name, descr in INTFS:
@@ -55,6 +56,8 @@ CLASSES = [
     ("engine", "ZFIC_HDDT_JSON", "HDDT: Writer + parser JSON tu chua", True, False, None),
     ("engine", "ZFIC_HDDT_FACTORY", "HDDT: Nha may sinh adapter theo cau hinh", True, False, None),
     ("engine", "ZFIC_HDDT_SECRET", "HDDT: Bo giai quyet secret API", True, False, None),
+    ("engine", "ZFIC_HDDT_PLATFORM", "HDDT: Bo giai quyet nen tang", True, False, None),
+    ("engine", "ZFIC_HDDT_PLAT_CLASSIC", "HDDT: Nen tang ABAP co dien", True, False, None),
     ("engine", "ZFIC_HDDT_HTTP", "HDDT: Bo goi REST dieu khien bang cau hinh", True, False, None),
     ("engine", "ZFIC_HDDT_TOKEN", "HDDT: Quan ly access token", True, False, None),
     ("engine", "ZFIC_HDDT_LOG", "HDDT: Ghi log API va so dang ky hoa don", True, False, None),

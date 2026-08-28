@@ -81,6 +81,10 @@ CLASS zfic_hddt_prov_base DEFINITION
     METHODS get_config
       RETURNING VALUE(ro_config) TYPE REF TO zfic_hddt_config .
 
+    "! Lớp nền tảng — dùng cho escape URL, ký tự điều khiển, múi giờ.
+    METHODS platform
+      RETURNING VALUE(ro_platform) TYPE REF TO zfiif_hddt_platform .
+
     "! Câu ghi chú chuẩn cho hoá đơn điều chỉnh / thay thế.
     METHODS build_adjust_note
       IMPORTING is_adjust      TYPE zfiif_hddt_types=>ty_adjust
@@ -201,6 +205,13 @@ CLASS zfic_hddt_prov_base IMPLEMENTATION.
   ENDMETHOD.
 
 
+  METHOD platform.
+
+    ro_platform = zfic_hddt_platform=>get( ).
+
+  ENDMETHOD.
+
+
   METHOD map_val.
 
     get_config( )->map_value( EXPORTING iv_provider  = get_id( )
@@ -261,10 +272,14 @@ CLASS zfic_hddt_prov_base IMPLEMENTATION.
 
   METHOD to_epoch_millis.
 
-    DATA lv_ts   TYPE timestamp.
-    DATA lv_secs TYPE p LENGTH 16 DECIMALS 0.
-    DATA lv_tz   TYPE timezone.
-    DATA lv_time TYPE uzeit.
+    CONSTANTS lc_epoch TYPE d VALUE '19700101'.
+
+    DATA lv_ts    TYPE timestamp.
+    DATA lv_tz    TYPE timezone.
+    DATA lv_time  TYPE uzeit.
+    DATA lv_utc_d TYPE d.
+    DATA lv_utc_t TYPE t.
+    DATA lv_secs  TYPE p LENGTH 16 DECIMALS 0.
 
     IF iv_date IS INITIAL.
       RETURN.
@@ -273,17 +288,34 @@ CLASS zfic_hddt_prov_base IMPLEMENTATION.
 
     lv_tz = get_config( )->get_param( gc_parm_timezone ).
     IF lv_tz IS INITIAL.
-      lv_tz = sy-zonlo.
+      lv_tz = platform( )->get_time_zone( ).
     ENDIF.
 
     TRY.
+        " Đổi giờ địa phương sang UTC. CONVERT DATE ... INTO TIME STAMP
+        " là câu lệnh ABAP, dùng được ở cả hai nền tảng.
         CONVERT DATE iv_date TIME lv_time
                 INTO TIME STAMP lv_ts TIME ZONE lv_tz.
-        lv_secs = cl_abap_tstmp=>subtract( tstmp1 = lv_ts
-                                           tstmp2 = '19700101000000' ).
       CATCH cx_root.
         RETURN.
     ENDTRY.
+
+    " Tách timestamp YYYYMMDDhhmmss. Không dùng CL_ABAP_TSTMP vì lớp đó
+    " không chắc được phép trong ABAP Cloud; số học ngày/giờ thì luôn được.
+    DATA(lv_c) = |{ lv_ts NUMBER = RAW }|.
+    CONDENSE lv_c NO-GAPS.
+    IF strlen( lv_c ) < 14.
+      RETURN.
+    ENDIF.
+
+    lv_utc_d = lv_c(8).
+    lv_utc_t = lv_c+8(6).
+
+    " Trừ ngày kiểu D cho ngày kiểu D trong ABAP ra SỐ NGÀY
+    lv_secs = ( lv_utc_d - lc_epoch ) * 86400
+            + lv_utc_t(2) * 3600
+            + lv_utc_t+2(2) * 60
+            + lv_utc_t+4(2).
 
     rv_millis = |{ lv_secs * 1000 }|.
     CONDENSE rv_millis NO-GAPS.
@@ -310,9 +342,9 @@ CLASS zfic_hddt_prov_base IMPLEMENTATION.
         rv_body = rv_body && `&`.
       ENDIF.
       rv_body = rv_body
-             && cl_http_utility=>escape_url( <ls_f>-name )
+             && platform( )->escape_url( <ls_f>-name )
              && `=`
-             && cl_http_utility=>escape_url( <ls_f>-value ).
+             && platform( )->escape_url( <ls_f>-value ).
     ENDLOOP.
 
   ENDMETHOD.
