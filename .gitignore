@@ -1,0 +1,6 @@
+# Local scratch
+*.log
+*.tmp
+.DS_Store
+Thumbs.db
+tools/__pycache__/

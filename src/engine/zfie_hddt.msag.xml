@@ -1,0 +1,92 @@
+<?xml version="1.0" encoding="utf-8"?>
+<abapGit version="v1.0.0" serializer="LCL_OBJECT_MSAG" serializer_version="v1.0.0">
+ <asx:abap xmlns:asx="http://www.sap.com/abapxml" version="1.0">
+  <asx:values>
+   <T100A>
+    <ARBGB>ZFIE_HDDT</ARBGB>
+    <STEXT>HDDT: Thong bao tich hop hoa don dien tu</STEXT>
+    <MASTERLANG>E</MASTERLANG>
+   </T100A>
+   <T100_TEXTS>
+    <T100>
+     <SPRSL>E</SPRSL>
+     <ARBGB>ZFIE_HDDT</ARBGB>
+     <MSGNR>000</MSGNR>
+     <TEXT>&amp;1 &amp;2 &amp;3 &amp;4</TEXT>
+    </T100>
+    <T100>
+     <SPRSL>E</SPRSL>
+     <ARBGB>ZFIE_HDDT</ARBGB>
+     <MSGNR>001</MSGNR>
+     <TEXT>Không tìm thấy chứng từ nào theo điều kiện chọn</TEXT>
+    </T100>
+    <T100>
+     <SPRSL>E</SPRSL>
+     <ARBGB>ZFIE_HDDT</ARBGB>
+     <MSGNR>002</MSGNR>
+     <TEXT>Hãy chọn ít nhất một dòng trong danh sách</TEXT>
+    </T100>
+    <T100>
+     <SPRSL>E</SPRSL>
+     <ARBGB>ZFIE_HDDT</ARBGB>
+     <MSGNR>003</MSGNR>
+     <TEXT>Chưa có log gọi API cho chứng từ này</TEXT>
+    </T100>
+    <T100>
+     <SPRSL>E</SPRSL>
+     <ARBGB>ZFIE_HDDT</ARBGB>
+     <MSGNR>004</MSGNR>
+     <TEXT>Bạn không có quyền với công ty &amp;1</TEXT>
+    </T100>
+    <T100>
+     <SPRSL>E</SPRSL>
+     <ARBGB>ZFIE_HDDT</ARBGB>
+     <MSGNR>005</MSGNR>
+     <TEXT>Nhà cung cấp &amp;1 chưa khai báo hoặc đang bị khoá</TEXT>
+    </T100>
+    <T100>
+     <SPRSL>E</SPRSL>
+     <ARBGB>ZFIE_HDDT</ARBGB>
+     <MSGNR>006</MSGNR>
+     <TEXT>Bảng &amp;1 chưa sinh Table Maintenance Generator (SE11)</TEXT>
+    </T100>
+    <T100>
+     <SPRSL>E</SPRSL>
+     <ARBGB>ZFIE_HDDT</ARBGB>
+     <MSGNR>007</MSGNR>
+     <TEXT>Bạn không có quyền bảo trì bảng &amp;1</TEXT>
+    </T100>
+    <T100>
+     <SPRSL>E</SPRSL>
+     <ARBGB>ZFIE_HDDT</ARBGB>
+     <MSGNR>008</MSGNR>
+     <TEXT>Không mở được bảo trì bảng &amp;1 (mã lỗi &amp;2)</TEXT>
+    </T100>
+    <T100>
+     <SPRSL>E</SPRSL>
+     <ARBGB>ZFIE_HDDT</ARBGB>
+     <MSGNR>009</MSGNR>
+     <TEXT>Đã xử lý &amp;1 chứng từ: &amp;2 thành công, &amp;3 lỗi</TEXT>
+    </T100>
+    <T100>
+     <SPRSL>E</SPRSL>
+     <ARBGB>ZFIE_HDDT</ARBGB>
+     <MSGNR>010</MSGNR>
+     <TEXT>Chế độ Test run: chỉ dựng payload, không gọi API</TEXT>
+    </T100>
+    <T100>
+     <SPRSL>E</SPRSL>
+     <ARBGB>ZFIE_HDDT</ARBGB>
+     <MSGNR>011</MSGNR>
+     <TEXT>Chưa cấu hình nhà cung cấp cho công ty &amp;1</TEXT>
+    </T100>
+    <T100>
+     <SPRSL>E</SPRSL>
+     <ARBGB>ZFIE_HDDT</ARBGB>
+     <MSGNR>012</MSGNR>
+     <TEXT>Hoá đơn của chứng từ &amp;1 đã phát hành, không phát hành lại</TEXT>
+    </T100>
+   </T100_TEXTS>
+  </asx:values>
+ </asx:abap>
+</abapGit>

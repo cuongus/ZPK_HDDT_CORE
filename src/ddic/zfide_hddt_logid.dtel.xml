@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="utf-8"?>
+<abapGit version="v1.0.0" serializer="LCL_OBJECT_DTEL" serializer_version="v1.0.0">
+ <asx:abap xmlns:asx="http://www.sap.com/abapxml" version="1.0">
+  <asx:values>
+   <DD04V>
+    <ROLLNAME>ZFIDE_HDDT_LOGID</ROLLNAME>
+    <DDLANGUAGE>E</DDLANGUAGE>
+    <DATATYPE>CHAR</DATATYPE>
+    <LENG>000032</LENG>
+    <OUTPUTLEN>000032</OUTPUTLEN>
+    <HEADLEN>06</HEADLEN>
+    <SCRLEN1>06</SCRLEN1>
+    <SCRLEN2>14</SCRLEN2>
+    <SCRLEN3>14</SCRLEN3>
+    <DDTEXT>ID ban ghi log (GUID)</DDTEXT>
+    <REPTEXT>Log ID</REPTEXT>
+    <SCRTEXT_S>Log ID</SCRTEXT_S>
+    <SCRTEXT_M>ID ban ghi log</SCRTEXT_M>
+    <SCRTEXT_L>ID ban ghi log</SCRTEXT_L>
+    <DTELMASTER>E</DTELMASTER>
+   </DD04V>
+  </asx:values>
+ </asx:abap>
+</abapGit>
