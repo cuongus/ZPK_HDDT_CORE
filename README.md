@@ -137,6 +137,10 @@ Chi tiết + phân quyền + STRUST: [docs/06-cai-dat.md](docs/06-cai-dat.md)
 
 Mô tả trường: [docs/02-cau-hinh.md](docs/02-cau-hinh.md) · Log tích hợp: [docs/08-log-tich-hop.md](docs/08-log-tich-hop.md)
 
+> **Đọc trước khi sửa code:** [Code_Review.md](Code_Review.md) — decision log, bất biến
+> kiến trúc, logic từng bước pipeline, phân tầng classic/cloud, kết quả các lượt
+> review và checklist build lại. Đây là tài liệu sống, mỗi lượt sửa phải cập nhật.
+
 ---
 
 ## 6. Gọi từ code khác

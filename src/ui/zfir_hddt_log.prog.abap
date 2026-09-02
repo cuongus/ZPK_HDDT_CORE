@@ -203,8 +203,6 @@ CLASS lcl_log IMPLEMENTATION.
            req_size, res_size, masked, cont_type, full_url,
            caller, tcode, created_by
       FROM zfit_hddt_log
-      INTO CORRESPONDING FIELDS OF TABLE @gt_log
-      UP TO @lv_max ROWS
       WHERE created_at >= @lv_from
         AND created_at <= @lv_to
         AND bukrs      IN @lr_bukrs
@@ -213,7 +211,9 @@ CLASS lcl_log IMPLEMENTATION.
         AND provider   IN @s_prov
         AND action     IN @s_action
         AND http_code  IN @s_code
-      ORDER BY created_at DESCENDING.
+      ORDER BY created_at DESCENDING
+      INTO CORRESPONDING FIELDS OF TABLE @gt_log
+      UP TO @lv_max ROWS.
 
     IF p_test = abap_false.
       DELETE gt_log WHERE test_run = abap_true.

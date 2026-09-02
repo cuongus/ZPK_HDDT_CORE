@@ -10,6 +10,7 @@
      <item>/.gitignore</item>
      <item>/LICENSE</item>
      <item>/README.md</item>
+     <item>/Code_Review.md</item>
      <item>/docs/*</item>
      <item>/tools/*</item>
     </IGNORE>

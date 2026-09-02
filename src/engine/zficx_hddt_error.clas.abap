@@ -60,11 +60,6 @@ CLASS zficx_hddt_error DEFINITION
       RAISING
         zficx_hddt_error .
 
-    "! Tiện ích: raise exception từ SY-MSG* hiện hành
-    CLASS-METHODS raise_sy_message
-      RAISING
-        zficx_hddt_error .
-
     "! Lấy thông điệp để hiển thị / ghi log
     METHODS get_text_long
       RETURNING VALUE(rv_text) TYPE string .
@@ -125,21 +120,6 @@ CLASS zficx_hddt_error IMPLEMENTATION.
         iv_text      = iv_text
         iv_http_code = iv_http_code
         previous     = io_previous.
-
-  ENDMETHOD.
-
-
-  METHOD raise_sy_message.
-
-    DATA lv_text TYPE string.
-
-    MESSAGE ID sy-msgid TYPE sy-msgty NUMBER sy-msgno
-            WITH sy-msgv1 sy-msgv2 sy-msgv3 sy-msgv4
-            INTO lv_text.
-
-    RAISE EXCEPTION TYPE zficx_hddt_error
-      EXPORTING
-        iv_text = lv_text.
 
   ENDMETHOD.
 

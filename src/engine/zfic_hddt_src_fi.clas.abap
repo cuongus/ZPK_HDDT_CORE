@@ -384,11 +384,13 @@ CLASS zfic_hddt_src_fi IMPLEMENTATION.
       CONDENSE cs_buyer-address.
     ENDIF.
 
+    " Thứ tự mệnh đề theo cú pháp ABAP SQL chặt (strict mode): INTO và
+    " UP TO đứng SAU WHERE / ORDER BY — thứ tự cũ bị chặn khi dùng @.
     SELECT smtp_addr FROM adr6
-      INTO TABLE @DATA(lt_adr6)
-      UP TO 1 ROWS
       WHERE addrnumber = @ls_kna1-adrnr
-      ORDER BY consnumber.
+      ORDER BY consnumber
+      INTO TABLE @DATA(lt_adr6)
+      UP TO 1 ROWS.
     IF sy-subrc = 0.
       cs_buyer-email = lt_adr6[ 1 ]-smtp_addr.
     ENDIF.
