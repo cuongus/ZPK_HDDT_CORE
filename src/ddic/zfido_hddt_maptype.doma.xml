@@ -69,6 +69,34 @@
      <DOMVALUE_L>DOCTYPE</DOMVALUE_L>
      <DDTEXT>Loai chung tu ke toan</DDTEXT>
     </DD07V>
+    <DD07V>
+     <DOMNAME>ZFIDO_HDDT_MAPTYPE</DOMNAME>
+     <VALPOS>0009</VALPOS>
+     <DDLANGUAGE>E</DDLANGUAGE>
+     <DOMVALUE_L>TAXCODE</DOMVALUE_L>
+     <DDTEXT>Ma thue dau ra duoc phat hanh (mau CP)</DDTEXT>
+    </DD07V>
+    <DD07V>
+     <DOMNAME>ZFIDO_HDDT_MAPTYPE</DOMNAME>
+     <VALPOS>0010</VALPOS>
+     <DDLANGUAGE>E</DDLANGUAGE>
+     <DOMVALUE_L>TAXACCT</DOMVALUE_L>
+     <DDTEXT>Tai khoan thue GTGT loai khoi dong hang</DDTEXT>
+    </DD07V>
+    <DD07V>
+     <DOMNAME>ZFIDO_HDDT_MAPTYPE</DOMNAME>
+     <VALPOS>0011</VALPOS>
+     <DDLANGUAGE>E</DDLANGUAGE>
+     <DOMVALUE_L>BILLTYPE</DOMVALUE_L>
+     <DDTEXT>Loai hoa don SD duoc phat hanh</DDTEXT>
+    </DD07V>
+    <DD07V>
+     <DOMNAME>ZFIDO_HDDT_MAPTYPE</DOMNAME>
+     <VALPOS>0012</VALPOS>
+     <DDLANGUAGE>E</DDLANGUAGE>
+     <DOMVALUE_L>CONDTYPE</DOMVALUE_L>
+     <DDTEXT>Loai dieu kien gia SD -&gt; AMT+/AMT-/TAX</DDTEXT>
+    </DD07V>
    </DD07V_TAB>
   </asx:values>
  </asx:abap>

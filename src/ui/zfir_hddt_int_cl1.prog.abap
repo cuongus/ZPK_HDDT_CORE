@@ -8,6 +8,8 @@
 * Version   Ngày          Người sửa                Transport   Mô tả
 *=====================================================================
 * 1.0       28/08/2026    cuongus - CuongUS        abapGit     Tạo mới
+* 1.1       03/09/2026    cuongus - CuongUS        abapGit     Range mới,
+*                         cột đảo/billing/HĐ gốc, chọn HĐ gốc khi ĐC/TT
 *=====================================================================
 CLASS lcl_app DEFINITION FINAL CREATE PUBLIC.
 
@@ -80,10 +82,15 @@ CLASS lcl_app IMPLEMENTATION.
         DATA(ls_sel) = VALUE zfiif_hddt_source=>ty_selection(
           bukrs    = p_bukrs
           gjahr    = p_gjahr
-          r_docno  = CORRESPONDING #( s_belnr[] )
-          r_budat  = CORRESPONDING #( s_budat[] )
-          r_blart  = CORRESPONDING #( s_blart[] )
-          r_status = CORRESPONDING #( s_stat[] ) ).
+          r_docno   = CORRESPONDING #( s_belnr[] )
+          r_budat   = CORRESPONDING #( s_budat[] )
+          r_bldat   = CORRESPONDING #( s_bldat[] )
+          r_blart   = CORRESPONDING #( s_blart[] )
+          r_vbeln   = CORRESPONDING #( s_vbeln[] )
+          r_kunnr   = CORRESPONDING #( s_kunnr[] )
+          r_usnam   = CORRESPONDING #( s_usnam[] )
+          r_status  = CORRESPONDING #( s_stat[] )
+          xreversed = p_rever ).
 
         gt_request = lo_source->select_documents( ls_sel ).
 
@@ -108,7 +115,20 @@ CLASS lcl_app IMPLEMENTATION.
       <ls_alv>-gjahr      = <ls_req>-gjahr.
       <ls_alv>-src_type   = <ls_req>-src_type.
       <ls_alv>-src_docno  = <ls_req>-src_docno.
-      <ls_alv>-budat      = <ls_req>-invoice-header-inv_date.
+      <ls_alv>-blart      = <ls_req>-src_info-blart.
+      <ls_alv>-budat      = <ls_req>-src_info-budat.
+      <ls_alv>-bldat      = <ls_req>-src_info-bldat.
+      <ls_alv>-awkey      = <ls_req>-src_info-awkey.
+      <ls_alv>-inv_date   = <ls_req>-invoice-header-inv_date.
+      IF <ls_req>-src_info-xreversed = abap_true
+         OR <ls_req>-src_info-xcancel = abap_true.
+        <ls_alv>-reversed = icon_storno.
+      ENDIF.
+      READ TABLE <ls_req>-invoice-ext INTO DATA(ls_ext)
+           WITH KEY name = 'TAX_RATE_SUMMARY'.
+      IF sy-subrc = 0.
+        <ls_alv>-tax_summ = ls_ext-value.
+      ENDIF.
       <ls_alv>-buyer_code = <ls_req>-invoice-buyer-code.
       <ls_alv>-buyer_name = <ls_req>-invoice-buyer-legal_name.
       <ls_alv>-buyer_tax  = <ls_req>-invoice-buyer-tax_code.
@@ -134,6 +154,7 @@ CLASS lcl_app IMPLEMENTATION.
           <ls_alv>-inv_link   = ls_reg-inv_link.
           <ls_alv>-status     = ls_reg-status.
           <ls_alv>-message    = ls_reg-message.
+          <ls_alv>-ref_docno  = ls_reg-ref_docno.
         CATCH cx_sy_itab_line_not_found.
           <ls_alv>-status = zfiif_hddt_types=>gc_status-not_sent.
       ENDTRY.
@@ -241,6 +262,14 @@ CLASS lcl_app IMPLEMENTATION.
           )->set_icon( abap_true ).
 
         lo_cols->get_column( 'SRC_DOCNO' )->set_medium_text( 'Số chứng từ' ).
+        lo_cols->get_column( 'REVERSED' )->set_short_text( 'Đảo' ).
+        lo_cols->get_column( 'REVERSED' )->set_medium_text( 'Đã đảo/huỷ' ).
+        CAST cl_salv_column_table( lo_cols->get_column( 'REVERSED' )
+          )->set_icon( abap_true ).
+        lo_cols->get_column( 'AWKEY' )->set_medium_text( 'Billing SD' ).
+        lo_cols->get_column( 'INV_DATE' )->set_medium_text( 'Ngày lập HĐ' ).
+        lo_cols->get_column( 'REF_DOCNO' )->set_medium_text( 'CT hoá đơn gốc' ).
+        lo_cols->get_column( 'TAX_SUMM' )->set_medium_text( 'Thuế suất' ).
         lo_cols->get_column( 'BUYER_NAME' )->set_medium_text( 'Người mua' ).
         lo_cols->get_column( 'STATUS_TXT' )->set_medium_text( 'Diễn giải TT' ).
         lo_cols->get_column( 'MESSAGE' )->set_medium_text( 'Thông điệp' ).

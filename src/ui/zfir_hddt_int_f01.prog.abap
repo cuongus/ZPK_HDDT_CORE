@@ -9,6 +9,8 @@
 * Version   Ngày          Người sửa                Transport   Mô tả
 *=====================================================================
 * 1.0       28/08/2026    cuongus - CuongUS        abapGit     Tạo mới
+* 1.1       03/09/2026    cuongus - CuongUS        abapGit     Popup chọn
+*                         hoá đơn gốc, truyền chứng từ gốc cho engine
 *=====================================================================
 
 *&---------------------------------------------------------------------*
@@ -85,6 +87,18 @@ FORM fill_original CHANGING cs_request TYPE zfiif_hddt_types=>ty_request.
 
   DATA(ls_org) = ls_self.
 
+  " Điều chỉnh / thay thế mà sổ chưa biết chứng từ gốc -> hỏi người
+  " dùng (như popup TYPE_DC/BELNR/GJAHR của dự án tham chiếu). Huỷ thì
+  " chứng từ gốc là chính nó.
+  IF ls_self-ref_docno IS INITIAL
+     AND ( cs_request-action = zfiif_hddt_types=>gc_action-adjust_invoice
+        OR cs_request-action = zfiif_hddt_types=>gc_action-replace_invoice ).
+    PERFORM ask_original CHANGING ls_self-ref_docno ls_self-ref_gjahr.
+    IF ls_self-ref_docno IS INITIAL.
+      RETURN.                        " người dùng huỷ popup -> engine báo thiếu HĐ gốc
+    ENDIF.
+  ENDIF.
+
   " Chứng từ điều chỉnh có tham chiếu tới chứng từ gốc khác
   IF ls_self-ref_docno IS NOT INITIAL.
     DATA(ls_ref) = zfic_hddt_log=>read_invoice(
@@ -96,6 +110,13 @@ FORM fill_original CHANGING cs_request TYPE zfiif_hddt_types=>ty_request.
     IF ls_ref-serial IS NOT INITIAL OR ls_ref-seq IS NOT INITIAL.
       ls_org = ls_ref.
     ENDIF.
+    " Chứng từ SAP của HĐ gốc -> engine kiểm tra trạng thái / đảo và
+    " đổi trạng thái HĐ gốc sau khi phát hành thành công
+    cs_request-invoice-adjust-org_docno    = ls_self-ref_docno.
+    cs_request-invoice-adjust-org_gjahr    = COND #( WHEN ls_self-ref_gjahr IS NOT INITIAL
+                                                     THEN ls_self-ref_gjahr
+                                                     ELSE cs_request-gjahr ).
+    cs_request-invoice-adjust-org_src_type = cs_request-src_type.
   ENDIF.
 
   cs_request-invoice-adjust-org_serial   = ls_org-serial.
@@ -115,6 +136,59 @@ FORM fill_original CHANGING cs_request TYPE zfiif_hddt_types=>ty_request.
   IF cs_request-invoice-header-template IS INITIAL.
     cs_request-invoice-header-template = ls_self-template.
   ENDIF.
+
+ENDFORM.
+
+*&---------------------------------------------------------------------*
+*& Form ASK_ORIGINAL
+*&---------------------------------------------------------------------*
+*& Hỏi số chứng từ / năm của hoá đơn GỐC khi lập HĐ điều chỉnh, thay
+*& thế (POPUP_GET_VALUES — như dự án tham chiếu). Chứng từ gốc phải đã
+*& có trong sổ đăng ký; các điều kiện nghiệp vụ còn lại do engine kiểm.
+*& <-> CV_DOCNO  Số chứng từ gốc
+*& <-> CV_GJAHR  Năm chứng từ gốc
+*&---------------------------------------------------------------------*
+FORM ask_original CHANGING cv_docno TYPE zfide_hddt_docno
+                           cv_gjahr TYPE gjahr.
+
+  DATA lt_fields TYPE STANDARD TABLE OF sval WITH EMPTY KEY.
+  DATA lv_rc     TYPE c LENGTH 1.
+
+  lt_fields = VALUE #( ( tabname = 'BKPF' fieldname = 'BELNR' fieldtext = 'Số chứng từ gốc' field_obl = 'X' )
+                       ( tabname = 'BKPF' fieldname = 'GJAHR' fieldtext = 'Năm chứng từ gốc' field_obl = 'X'
+                         value = p_gjahr ) ).
+
+  CALL FUNCTION 'POPUP_GET_VALUES'
+    EXPORTING
+      popup_title     = 'Hoá đơn gốc cần điều chỉnh / thay thế'
+      start_column    = '10'
+      start_row       = '5'
+    IMPORTING
+      returncode      = lv_rc
+    TABLES
+      fields          = lt_fields
+    EXCEPTIONS
+      error_in_fields = 1
+      OTHERS          = 2.
+  IF sy-subrc <> 0 OR lv_rc = 'A'.
+    CLEAR: cv_docno, cv_gjahr.
+    RETURN.
+  ENDIF.
+
+  DATA lv_belnr TYPE belnr_d.
+  LOOP AT lt_fields ASSIGNING FIELD-SYMBOL(<ls_f>).
+    CASE <ls_f>-fieldname.
+      WHEN 'BELNR'.
+        " Chuyển về độ dài BELNR trước khi thêm số 0 đầu (ALPHA trên
+        " SVAL-VALUE 132 ký tự sẽ đệm sai)
+        lv_belnr = <ls_f>-value.
+        lv_belnr = |{ lv_belnr ALPHA = IN }|.
+        cv_docno = lv_belnr.
+      WHEN 'GJAHR'.
+        cv_gjahr = <ls_f>-value.
+    ENDCASE.
+  ENDLOOP.
+  CONDENSE cv_docno NO-GAPS.
 
 ENDFORM.
 

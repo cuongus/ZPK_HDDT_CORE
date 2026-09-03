@@ -99,6 +99,12 @@ CLASS zfic_hddt_log DEFINITION
       IMPORTING is_request TYPE zfiif_hddt_types=>ty_request .
 
     "! Đọc sổ đăng ký của 1 chứng từ (dùng cho điều chỉnh/thay thế).
+    "! Đánh dấu hoá đơn GỐC đã bị điều chỉnh / thay thế sau khi HĐ điều
+    "! chỉnh phát hành thành công (dự án tham chiếu ghi XREF2_HD 06/07).
+    METHODS mark_original
+      IMPORTING is_request TYPE zfiif_hddt_types=>ty_request
+                iv_status  TYPE zfide_hddt_status .
+
     CLASS-METHODS read_invoice
       IMPORTING iv_bukrs      TYPE bukrs
                 iv_gjahr      TYPE gjahr
@@ -390,7 +396,14 @@ CLASS zfic_hddt_log IMPLEMENTATION.
     ls_inv-waers        = ls_hdr-currency.
     ls_inv-exrate       = ls_hdr-exch_rate.
     ls_inv-adj_type     = is_request-invoice-adjust-adj_type.
-    ls_inv-ref_docno    = is_request-invoice-adjust-org_idkey.
+    " Tham chiếu HĐ gốc: ưu tiên số chứng từ SAP (để kiểm tra trạng thái
+    " và đảo), fallback idkey như bản 1.0
+    IF is_request-invoice-adjust-org_docno IS NOT INITIAL.
+      ls_inv-ref_docno = is_request-invoice-adjust-org_docno.
+      ls_inv-ref_gjahr = is_request-invoice-adjust-org_gjahr.
+    ELSEIF is_request-invoice-adjust-org_idkey IS NOT INITIAL.
+      ls_inv-ref_docno = is_request-invoice-adjust-org_idkey.
+    ENDIF.
     ls_inv-supp_taxcode = is_request-invoice-seller-tax_code.
 
     ls_inv-buyer_code = ls_buy-code.
@@ -481,6 +494,37 @@ CLASS zfic_hddt_log IMPLEMENTATION.
     IF lt_item IS NOT INITIAL.
       INSERT zfit_hddt_item FROM TABLE @lt_item.
     ENDIF.
+
+  ENDMETHOD.
+
+
+  METHOD mark_original.
+
+    DATA(ls_adj) = is_request-invoice-adjust.
+    IF ls_adj-org_docno IS INITIAL.
+      RETURN.
+    ENDIF.
+
+    DATA(lv_gjahr) = COND gjahr( WHEN ls_adj-org_gjahr IS NOT INITIAL
+                                 THEN ls_adj-org_gjahr ELSE is_request-gjahr ).
+    DATA(lv_type)  = COND zfide_hddt_srctype( WHEN ls_adj-org_src_type IS NOT INITIAL
+                                              THEN ls_adj-org_src_type ELSE is_request-src_type ).
+    DATA lv_ts  TYPE timestampl.
+    DATA lv_msg TYPE zfide_hddt_msg.
+    GET TIME STAMP FIELD lv_ts.
+    lv_msg = |Đã { COND string( WHEN iv_status = zfiif_hddt_types=>gc_status-replaced
+                                THEN 'thay thế' ELSE 'điều chỉnh' ) }| &&
+             | bởi chứng từ { is_request-src_docno }/{ is_request-gjahr }|.
+
+    UPDATE zfit_hddt_inv
+      SET status     = @iv_status,
+          message    = @lv_msg,
+          changed_by = @sy-uname,
+          changed_at = @lv_ts
+      WHERE bukrs     = @is_request-bukrs
+        AND gjahr     = @lv_gjahr
+        AND src_type  = @lv_type
+        AND src_docno = @ls_adj-org_docno.
 
   ENDMETHOD.
 

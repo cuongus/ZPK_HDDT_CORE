@@ -6,10 +6,12 @@
 * Version   Ngày          Người sửa                Transport   Mô tả
 *=====================================================================
 * 1.0       28/08/2026    cuongus - CuongUS        abapGit     Tạo mới
+* 1.1       03/09/2026    cuongus - CuongUS        abapGit     Cột BLART/
+*                         BLDAT/AWKEY/đảo/HĐ gốc/thuế suất
 *=====================================================================
 TYPE-POOLS icon.
 
-TABLES bkpf.
+TABLES: bkpf, bseg.
 
 *---------------------------------------------------------------------*
 * Dòng hiển thị trên ALV
@@ -20,7 +22,12 @@ TYPES: BEGIN OF gty_alv,
          gjahr      TYPE gjahr,
          src_type   TYPE zfide_hddt_srctype,
          src_docno  TYPE zfide_hddt_docno,
+         blart      TYPE blart,
          budat      TYPE dats,
+         bldat      TYPE dats,
+         awkey      TYPE awkey,           " số billing SD tham chiếu
+         reversed   TYPE c LENGTH 4,      " icon: CT đã đảo / billing đã huỷ
+         inv_date   TYPE dats,
          buyer_code TYPE kunnr,
          buyer_name TYPE c LENGTH 120,
          buyer_tax  TYPE zfide_hddt_taxcode,
@@ -37,6 +44,8 @@ TYPES: BEGIN OF gty_alv,
          mscqt      TYPE zfide_hddt_mscqt,
          sec_code   TYPE zfide_hddt_sec,
          inv_link   TYPE zfide_hddt_link,
+         ref_docno  TYPE zfide_hddt_docno, " chứng từ HĐ gốc (điều chỉnh/thay thế)
+         tax_summ   TYPE c LENGTH 20,     " thuế suất: 10% / Nhiều loại
          status     TYPE zfide_hddt_status,
          status_txt TYPE c LENGTH 60,
          msgty      TYPE symsgty,

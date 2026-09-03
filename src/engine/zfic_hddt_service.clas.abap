@@ -107,6 +107,19 @@ CLASS zfic_hddt_service DEFINITION
       IMPORTING is_cred    TYPE zfit_hddt_cred
       CHANGING  cs_request TYPE zfiif_hddt_types=>ty_request .
 
+    "! Kiểm tra nghiệp vụ theo trạng thái sổ HĐĐT và trạng thái chứng từ
+    "! nguồn (đảo/huỷ) — port từ ZPG_INT_E_INVOICE get_data_integration
+    "! và dieu_chinh_e_invoices. Tắt bằng tham số STATUS_CHECK = 'N'.
+    METHODS check_action
+      IMPORTING is_request TYPE zfiif_hddt_types=>ty_request
+                iv_action  TYPE zfide_hddt_action
+      RAISING   zficx_hddt_error .
+
+    METHODS check_original
+      IMPORTING is_request TYPE zfiif_hddt_types=>ty_request
+                iv_action  TYPE zfide_hddt_action
+      RAISING   zficx_hddt_error .
+
     METHODS derive_status
       IMPORTING iv_provider TYPE zfide_hddt_prov
                 iv_action   TYPE zfide_hddt_action
@@ -181,6 +194,13 @@ CLASS zfic_hddt_service IMPLEMENTATION.
 *---- 4. Điền mặc định + tính tổng ------------------------------------*
         fill_defaults( EXPORTING is_cred    = ls_cred
                        CHANGING  cs_request = ls_request ).
+
+*---- 4b. Kiểm tra nghiệp vụ theo trạng thái --------------------------*
+        " Chặn phát hành lại, phát hành chứng từ đã đảo, huỷ khi chưa đảo,
+        " điều chỉnh/thay thế hoá đơn gốc chưa phát hành hoặc khác khách
+        " hàng/tiền tệ. Áp cả Test run để người dùng thấy lỗi sớm.
+        check_action( is_request = ls_request
+                      iv_action  = lv_action ).
 
 *---- 5. Secret + payload --------------------------------------------*
         " Adapter cần secret vì một số nhà cung cấp (FPT) nhận tài khoản
@@ -317,6 +337,16 @@ CLASS zfic_hddt_service IMPLEMENTATION.
           IF rs_result-success = abap_true
              AND ls_request-invoice-items IS NOT INITIAL.
             mo_log->save_items( ls_request ).
+          ENDIF.
+          " HĐ điều chỉnh / thay thế thành công -> đổi trạng thái HĐ gốc
+          IF rs_result-success = abap_true.
+            IF lv_action = zfiif_hddt_types=>gc_action-adjust_invoice.
+              mo_log->mark_original( is_request = ls_request
+                                     iv_status  = zfiif_hddt_types=>gc_status-adjusted ).
+            ELSEIF lv_action = zfiif_hddt_types=>gc_action-replace_invoice.
+              mo_log->mark_original( is_request = ls_request
+                                     iv_status  = zfiif_hddt_types=>gc_status-replaced ).
+            ENDIF.
           ENDIF.
         ENDIF.
 
@@ -624,6 +654,221 @@ CLASS zfic_hddt_service IMPLEMENTATION.
                                          * cs_invoice-header-exch_rate.
       cs_invoice-summary-total_l         = cs_invoice-summary-total
                                          * cs_invoice-header-exch_rate.
+    ENDIF.
+
+  ENDMETHOD.
+
+
+  METHOD check_action.
+
+    " Tắt kiểm tra bằng STATUS_CHECK = 'N' (ví dụ nạp lại lịch sử)
+    DATA(lv_switch) = mo_config->get_param( iv_key      = zfiif_hddt_types=>gc_parm-status_check
+                                            iv_provider = is_request-provider
+                                            iv_bukrs    = is_request-bukrs ).
+    TRANSLATE lv_switch TO UPPER CASE.
+    CONDENSE lv_switch.
+    IF lv_switch = 'N' OR lv_switch = 'OFF'.
+      RETURN.
+    ENDIF.
+
+    " Request tự do (không gắn chứng từ SAP) không kiểm tra được
+    IF is_request-src_docno IS INITIAL.
+      RETURN.
+    ENDIF.
+
+    DATA(ls_reg) = zfic_hddt_log=>read_invoice( iv_bukrs     = is_request-bukrs
+                                                iv_gjahr     = is_request-gjahr
+                                                iv_src_type  = is_request-src_type
+                                                iv_src_docno = is_request-src_docno ).
+    DATA(lv_status) = COND zfide_hddt_status( WHEN ls_reg-status IS INITIAL
+                                              THEN zfiif_hddt_types=>gc_status-not_sent
+                                              ELSE ls_reg-status ).
+    DATA(lv_docno) = |{ is_request-src_docno }|.
+    CONDENSE lv_docno.
+
+    " Trạng thái chứng từ nguồn: lấy từ request, thiếu thì hỏi lớp nguồn
+    DATA(ls_src) = is_request-src_info.
+    IF ls_src IS INITIAL AND is_request-src_type IS NOT INITIAL.
+      TRY.
+          DATA(ls_state) = zfic_hddt_factory=>get_source(
+                             iv_bukrs    = is_request-bukrs
+                             iv_src_type = is_request-src_type
+                           )->get_doc_state( iv_bukrs = is_request-bukrs
+                                             iv_gjahr = is_request-gjahr
+                                             iv_docno = is_request-src_docno ).
+          ls_src-xreversed = ls_state-xreversed.
+          ls_src-stblg     = ls_state-stblg.
+        CATCH zficx_hddt_error.
+          " Không có lớp nguồn -> bỏ qua phần kiểm tra đảo
+      ENDTRY.
+    ENDIF.
+    DATA(lv_reversed) = xsdbool( ls_src-xreversed = abap_true
+                              OR ls_src-xcancel   = abap_true
+                              OR ls_src-stblg IS NOT INITIAL ).
+
+    CASE iv_action.
+
+      WHEN zfiif_hddt_types=>gc_action-create_invoice
+        OR zfiif_hddt_types=>gc_action-create_draft
+        OR zfiif_hddt_types=>gc_action-preview_draft
+        OR zfiif_hddt_types=>gc_action-approve_invoice.
+
+        IF lv_status <> zfiif_hddt_types=>gc_status-not_sent
+           AND lv_status <> zfiif_hddt_types=>gc_status-error.
+          zficx_hddt_error=>raise_text(
+            |Chứng từ { lv_docno } đã tích hợp HĐĐT (trạng thái { lv_status }| &&
+            |, số { ls_reg-serial } { ls_reg-seq }) - không phát hành lại.| ).
+        ENDIF.
+        IF lv_reversed = abap_true.
+          zficx_hddt_error=>raise_text(
+            |Chứng từ { lv_docno } đã bị đảo/huỷ trên SAP - không lập hoá đơn.| ).
+        ENDIF.
+
+      WHEN zfiif_hddt_types=>gc_action-adjust_invoice
+        OR zfiif_hddt_types=>gc_action-replace_invoice.
+
+        IF lv_status <> zfiif_hddt_types=>gc_status-not_sent
+           AND lv_status <> zfiif_hddt_types=>gc_status-error.
+          zficx_hddt_error=>raise_text(
+            |Chứng từ { lv_docno } đã có HĐĐT (trạng thái { lv_status }) - | &&
+            |không dùng làm hoá đơn điều chỉnh/thay thế.| ).
+        ENDIF.
+        IF lv_reversed = abap_true.
+          zficx_hddt_error=>raise_text(
+            |Chứng từ điều chỉnh/thay thế { lv_docno } đã bị đảo trên SAP.| ).
+        ENDIF.
+        check_original( is_request = is_request
+                        iv_action  = iv_action ).
+
+      WHEN zfiif_hddt_types=>gc_action-cancel_invoice
+        OR zfiif_hddt_types=>gc_action-delete_invoice
+        OR zfiif_hddt_types=>gc_action-wrong_notice.
+
+        IF ls_reg-created_at IS INITIAL
+           OR lv_status = zfiif_hddt_types=>gc_status-not_sent
+           OR lv_status = zfiif_hddt_types=>gc_status-error.
+          zficx_hddt_error=>raise_text(
+            |Chứng từ { lv_docno } chưa phát hành HĐĐT - không có gì để huỷ.| ).
+        ENDIF.
+        IF lv_status = zfiif_hddt_types=>gc_status-cancelled.
+          zficx_hddt_error=>raise_text(
+            |Hoá đơn của chứng từ { lv_docno } đã huỷ trước đó.| ).
+        ENDIF.
+        " Quy tắc kế toán của dự án tham chiếu: phải đảo chứng từ SAP
+        " trước khi huỷ hoá đơn điện tử (trừ khi tắt bằng tham số).
+        DATA(lv_req_rev) = mo_config->get_param( iv_key      = zfiif_hddt_types=>gc_parm-cancel_req_rev
+                                                 iv_provider = is_request-provider
+                                                 iv_bukrs    = is_request-bukrs ).
+        TRANSLATE lv_req_rev TO UPPER CASE.
+        CONDENSE lv_req_rev.
+        IF lv_req_rev <> 'N' AND lv_req_rev <> 'OFF' AND lv_reversed = abap_false.
+          zficx_hddt_error=>raise_text(
+            |Phải đảo chứng từ { lv_docno } trên SAP trước khi huỷ hoá đơn điện tử| &&
+            | (tham số CANCEL_REQUIRES_REVERSAL).| ).
+        ENDIF.
+
+      WHEN zfiif_hddt_types=>gc_action-search_invoice
+        OR zfiif_hddt_types=>gc_action-get_file
+        OR zfiif_hddt_types=>gc_action-send_mail.
+
+        IF ls_reg-created_at IS INITIAL.
+          zficx_hddt_error=>raise_text(
+            |Chứng từ { lv_docno } chưa tích hợp HĐĐT - không có gì để tra cứu.| ).
+        ENDIF.
+
+      WHEN OTHERS.
+    ENDCASE.
+
+  ENDMETHOD.
+
+
+  METHOD check_original.
+
+    DATA(ls_adj) = is_request-invoice-adjust.
+
+    IF ls_adj-org_serial IS INITIAL AND ls_adj-org_seq IS INITIAL
+       AND ls_adj-org_idkey IS INITIAL AND ls_adj-org_docno IS INITIAL.
+      zficx_hddt_error=>raise_text(
+        `Thiếu thông tin hoá đơn gốc (ký hiệu / số) khi lập hoá đơn điều chỉnh/thay thế.` ).
+    ENDIF.
+
+    " Chỉ kiểm tra sâu khi biết chứng từ SAP của hoá đơn gốc
+    IF ls_adj-org_docno IS INITIAL.
+      RETURN.
+    ENDIF.
+
+    DATA(lv_gjahr) = COND gjahr( WHEN ls_adj-org_gjahr IS NOT INITIAL
+                                 THEN ls_adj-org_gjahr ELSE is_request-gjahr ).
+    DATA(lv_type)  = COND zfide_hddt_srctype( WHEN ls_adj-org_src_type IS NOT INITIAL
+                                              THEN ls_adj-org_src_type ELSE is_request-src_type ).
+    DATA(lv_org)   = |{ ls_adj-org_docno }/{ lv_gjahr }|.
+
+    IF ls_adj-org_docno = is_request-src_docno AND lv_gjahr = is_request-gjahr
+       AND lv_type = is_request-src_type.
+      zficx_hddt_error=>raise_text(
+        |Hoá đơn gốc trùng với chính chứng từ { is_request-src_docno }.| ).
+    ENDIF.
+
+    DATA(ls_org) = zfic_hddt_log=>read_invoice( iv_bukrs     = is_request-bukrs
+                                                iv_gjahr     = lv_gjahr
+                                                iv_src_type  = lv_type
+                                                iv_src_docno = ls_adj-org_docno ).
+    IF ls_org-created_at IS INITIAL.
+      zficx_hddt_error=>raise_text(
+        |Chứng từ gốc { lv_org } chưa có trong sổ đăng ký HĐĐT (ZFIT_HDDT_INV).| ).
+    ENDIF.
+
+    CASE ls_org-status.
+      WHEN zfiif_hddt_types=>gc_status-replaced.
+        zficx_hddt_error=>raise_text(
+          |Hoá đơn gốc { lv_org } đã bị thay thế - không điều chỉnh/thay thế lần nữa.| ).
+      WHEN zfiif_hddt_types=>gc_status-cancelled.
+        zficx_hddt_error=>raise_text( |Hoá đơn gốc { lv_org } đã huỷ.| ).
+      WHEN zfiif_hddt_types=>gc_status-issued
+        OR zfiif_hddt_types=>gc_status-coded
+        OR zfiif_hddt_types=>gc_status-adjusted
+        OR zfiif_hddt_types=>gc_status-sent
+        OR zfiif_hddt_types=>gc_status-wait_seq.
+        " hợp lệ
+      WHEN OTHERS.
+        zficx_hddt_error=>raise_text(
+          |Hoá đơn gốc { lv_org } chưa phát hành (trạng thái { ls_org-status }).| ).
+    ENDCASE.
+
+    IF ls_org-buyer_code IS NOT INITIAL
+       AND is_request-invoice-buyer-code IS NOT INITIAL
+       AND ls_org-buyer_code <> is_request-invoice-buyer-code.
+      zficx_hddt_error=>raise_text(
+        |Khách hàng của hoá đơn gốc ({ ls_org-buyer_code }) khác chứng từ hiện tại| &&
+        | ({ is_request-invoice-buyer-code }).| ).
+    ENDIF.
+
+    IF ls_org-waers IS NOT INITIAL
+       AND is_request-invoice-header-currency IS NOT INITIAL
+       AND ls_org-waers <> is_request-invoice-header-currency.
+      zficx_hddt_error=>raise_text(
+        |Loại tiền hoá đơn gốc ({ ls_org-waers }) khác chứng từ hiện tại| &&
+        | ({ is_request-invoice-header-currency }).| ).
+    ENDIF.
+
+    " Thay thế: chứng từ gốc phải được đảo trên SAP trước
+    IF iv_action = zfiif_hddt_types=>gc_action-replace_invoice.
+      DATA ls_state TYPE zfiif_hddt_source=>ty_doc_state.
+      TRY.
+          ls_state = zfic_hddt_factory=>get_source(
+                       iv_bukrs    = is_request-bukrs
+                       iv_src_type = lv_type
+                     )->get_doc_state( iv_bukrs = is_request-bukrs
+                                       iv_gjahr = lv_gjahr
+                                       iv_docno = ls_adj-org_docno ).
+        CATCH zficx_hddt_error.
+          CLEAR ls_state.            " không có lớp nguồn -> bỏ qua kiểm tra đảo
+      ENDTRY.
+      IF ls_state-exists = abap_true AND ls_state-xreversed = abap_false.
+        zficx_hddt_error=>raise_text(
+          |Chứng từ gốc { lv_org } chưa được đảo trên SAP - hoá đơn thay thế| &&
+          | yêu cầu đảo chứng từ gốc trước.| ).
+      ENDIF.
     ENDIF.
 
   ENDMETHOD.

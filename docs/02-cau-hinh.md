@@ -104,7 +104,9 @@ dòng `INV_TYPE` rỗng. Dòng ngoài khoảng hiệu lực bị bỏ qua.
 | `SRC_TYPE` | `FI` / `SD` / `MM` / `GOM` / `CUST` |
 | `CLASSNAME` | Lớp implement `ZFIIF_HDDT_SOURCE` |
 
-Mặc định: `('', 'FI') → ZFIC_HDDT_SRC_FI`.
+Mặc định: `('', 'FI') → ZFIC_HDDT_SRC_FI` (chứng từ FI, kể cả FI sinh từ
+billing SD) và `('', 'SD') → ZFIC_HDDT_SRC_SD` (billing SD **chưa** có chứng từ
+FI). Cả hai kế thừa `ZFIC_HDDT_SRC_BASE`. Logic chi tiết: [09-nguon-du-lieu.md](09-nguon-du-lieu.md).
 
 Công ty có nghiệp vụ riêng: copy `ZFIC_HDDT_SRC_FI` thành
 `ZFIC_HDDT_SRC_FI_1000`, sửa, rồi thêm dòng `(1000, 'FI')` trỏ lớp mới. Dòng
@@ -133,6 +135,19 @@ Nhờ vậy đặt được giá trị chung rồi ghi đè cho một công ty.
 | `FPT_AUN` | `''` lưu nháp · `1` số do SAP cấp · `2` FPT cấp số |
 | `FPT_USER_IN_BODY` | `X` gửi nút `user` trong payload · `N` không (khi dùng Basic/JWT) |
 | `FPT_PLACE` | Địa danh — bắt buộc khi huỷ hoá đơn theo TT78 |
+| `INV_DATE_MAX_BACKDAYS` | Ngày lập HĐ lùi tối đa N ngày so với hôm nay (seed `1`); trống = không giới hạn |
+| `BUYER_TAX_IDTYPE` / `BUYER_ID_IDTYPE` | Loại số định danh BP (`BUT0ID-TYPE`) chứa MST (`VATRU`) / CCCD (`FS0001`) |
+| `BUYER_NAME_FIELDS` | Trường `BUT000` ghép thành tên tổ chức, vd `NAME_ORG1,NAME_ORG2,NAME_ORG3,NAME_ORG4` |
+| `ADDR_COUNTRY_SUFFIX` | Hậu tố nối vào địa chỉ VN (`Việt Nam`); `-` = không thêm |
+| `EXCH_RATE_FACTOR` | Hệ số nhân `BKPF-KURSF` (dự án cũ dùng 1000), mặc định `1` |
+| `SELLER_FROM_T001` | `X` = người bán từ `T001/ADRC/ADR6`; `SELLER_*` chỉ điền chỗ trống |
+| `TEXT_LANGU` | Ngôn ngữ tên đơn vị tính / vật tư (`E`) |
+| `ITEM_TEXT_IDS` | Long text lấy tên hàng theo thứ tự, `ID:OBJECT;ID:OBJECT` (`ZI03:VBBP;GRUN:MATERIAL`) |
+| `ITEM_QTY_ABS` | `X` = số lượng luôn dương |
+| `DEFAULT_PAYMENT` | Hình thức thanh toán khi chứng từ không có `ZLSCH` (`TM/CK`) |
+| `TAX_COND_TYPE` | Loại điều kiện thuế đầu ra tra `A003/KONP` khi thiếu BSET (`MWAS`) |
+| `STATUS_CHECK` | `N` = tắt kiểm tra nghiệp vụ theo trạng thái trong engine |
+| `CANCEL_REQUIRES_REVERSAL` | `N` = cho huỷ HĐĐT khi chứng từ SAP chưa đảo (mặc định bắt buộc đảo) |
 
 ---
 
@@ -202,6 +217,10 @@ Không tìm thấy dòng nào → core tự suy từ mã HTTP + action. Bảng n
 | `UNIT` | `MEINS` | đơn vị theo NCC | |
 | `GLACCT` | tài khoản doanh thu | `X` | tên hàng hoá mặc định |
 | `INVTYPE` / `ITEMTYPE` / `CURRENCY` / `DOCTYPE` | tương tự | | |
+| `TAXCODE` | mẫu `MWSKZ` (CP: `O*`, `**`) | `X` | mã thuế đầu ra được phát hành |
+| `TAXACCT` | mẫu tài khoản (`3331*`) | `X` | TK thuế GTGT loại khỏi dòng hàng |
+| `BILLTYPE` | `VBRK-FKART` | `X` | loại billing SD phát hành khi chưa có FI (**bắt buộc** cho nguồn SD) |
+| `CONDTYPE` | `KSCHL` | `AMT+` / `AMT-` / `TAX` | vai trò loại điều kiện giá SD |
 
 - `PROVIDER` để trống = ánh xạ dùng ở **tầng đọc dữ liệu nguồn** (không phụ
   thuộc nhà cung cấp).

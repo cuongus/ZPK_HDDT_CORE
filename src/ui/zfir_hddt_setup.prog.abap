@@ -149,7 +149,13 @@ CLASS lcl_setup IMPLEMENTATION.
     put_src( VALUE #( bukrs     = space
                       src_type  = 'FI'
                       classname = 'ZFIC_HDDT_SRC_FI'
-                      descr     = 'Doc chung tu FI BKPF/BSEG/BSET'
+                      descr     = 'Doc chung tu FI BKPF/BSEG/BSET (ke ca FI tu billing SD)'
+                      xactive   = abap_true ) ).
+    " Billing SD chưa sinh chứng từ FI (VBRK/VBRP)
+    put_src( VALUE #( bukrs     = space
+                      src_type  = 'SD'
+                      classname = 'ZFIC_HDDT_SRC_SD'
+                      descr     = 'Doc hoa don billing SD chua co chung tu FI'
                       xactive   = abap_true ) ).
 
     " Tham số chung — PROVIDER và BUKRS để trống = áp dụng toàn hệ
@@ -181,6 +187,97 @@ CLASS lcl_setup IMPLEMENTATION.
     put_parm( VALUE #( parm_key = 'PLATFORM_CLASS'
                        parm_val = ''
                        descr    = 'Lop nen tang; trong = ABAP co dien' ) ).
+
+    " --- Tầng đọc dữ liệu nguồn (port từ dự án HĐĐT private cloud) ---
+    put_parm( VALUE #( parm_key = zfiif_hddt_types=>gc_parm-inv_date_maxback
+                       parm_val = '1'
+                       descr    = 'Ngay lap HD lui toi da N ngay so voi hom nay' ) ).
+    put_parm( VALUE #( parm_key = zfiif_hddt_types=>gc_parm-buyer_tax_idtype
+                       parm_val = 'VATRU'
+                       descr    = 'Loai so dinh danh BP chua ma so thue (BUT0ID-TYPE)' ) ).
+    put_parm( VALUE #( parm_key = zfiif_hddt_types=>gc_parm-buyer_id_idtype
+                       parm_val = 'FS0001'
+                       descr    = 'Loai so dinh danh BP chua CCCD/ho chieu' ) ).
+    put_parm( VALUE #( parm_key = zfiif_hddt_types=>gc_parm-buyer_name_flds
+                       parm_val = 'NAME_ORG1,NAME_ORG2,NAME_ORG3,NAME_ORG4'
+                       descr    = 'Truong BUT000 ghep thanh ten nguoi mua' ) ).
+    put_parm( VALUE #( parm_key = zfiif_hddt_types=>gc_parm-addr_country_sfx
+                       parm_val = 'Việt Nam'
+                       descr    = 'Hau to quoc gia noi vao dia chi VN (- = khong)' ) ).
+    put_parm( VALUE #( parm_key = zfiif_hddt_types=>gc_parm-exch_rate_factor
+                       parm_val = '1'
+                       descr    = 'He so nhan ty gia BKPF-KURSF (TCURF factor)' ) ).
+    put_parm( VALUE #( parm_key = zfiif_hddt_types=>gc_parm-seller_from_t001
+                       parm_val = 'X'
+                       descr    = 'X = nguoi ban lay tu T001/ADRC, SELLER_* chi bo sung' ) ).
+    put_parm( VALUE #( parm_key = zfiif_hddt_types=>gc_parm-text_langu
+                       parm_val = 'E'
+                       descr    = 'Ngon ngu ten don vi tinh / ten vat tu' ) ).
+    put_parm( VALUE #( parm_key = zfiif_hddt_types=>gc_parm-item_text_ids
+                       parm_val = 'ZI03:VBBP;GRUN:MATERIAL'
+                       descr    = 'Long text lay ten hang (ID:OBJECT;...)' ) ).
+    put_parm( VALUE #( parm_key = zfiif_hddt_types=>gc_parm-item_qty_abs
+                       parm_val = 'X'
+                       descr    = 'X = so luong luon duong' ) ).
+    put_parm( VALUE #( parm_key = zfiif_hddt_types=>gc_parm-default_payment
+                       parm_val = 'TM/CK'
+                       descr    = 'Hinh thuc thanh toan khi chung tu khong co ZLSCH' ) ).
+    put_parm( VALUE #( parm_key = zfiif_hddt_types=>gc_parm-tax_cond_type
+                       parm_val = 'MWAS'
+                       descr    = 'Loai dieu kien thue dau ra (A003/KONP) khi thieu BSET' ) ).
+    put_parm( VALUE #( parm_key = zfiif_hddt_types=>gc_parm-status_check
+                       parm_val = 'X'
+                       descr    = 'Kiem tra nghiep vu theo trang thai (N = tat)' ) ).
+    put_parm( VALUE #( parm_key = zfiif_hddt_types=>gc_parm-cancel_req_rev
+                       parm_val = 'X'
+                       descr    = 'Phai dao chung tu SAP truoc khi huy HDDT (N = tat)' ) ).
+
+    " Mã thuế đầu ra được phát hành HĐĐT (mẫu CP) — như dự án tham chiếu
+    put_map( VALUE #( map_type  = zfiif_hddt_types=>gc_map_type-tax_code
+                      sap_value = 'O*'
+                      ext_value = 'X'
+                      ext_text  = 'Ma thue dau ra' ) ).
+    put_map( VALUE #( map_type  = zfiif_hddt_types=>gc_map_type-tax_code
+                      sap_value = '**'
+                      ext_value = 'X'
+                      ext_text  = 'Ma thue tong hop' ) ).
+    " Mã thuế đặc biệt -> thuế suất âm (OX = KKKNT, OG = KCT) — như dự án tham chiếu
+    put_map( VALUE #( map_type  = zfiif_hddt_types=>gc_map_type-tax_rate
+                      sap_value = 'OX'
+                      ext_value = '-2'
+                      ext_text  = 'KKKNT' ) ).
+    put_map( VALUE #( map_type  = zfiif_hddt_types=>gc_map_type-tax_rate
+                      sap_value = 'OG'
+                      ext_value = '-1'
+                      ext_text  = 'KCT' ) ).
+    " Tài khoản thuế GTGT đầu ra loại khỏi dòng hàng (VÍ DỤ theo COA VN
+    " của dự án tham chiếu — sửa theo hệ thống của bạn)
+    put_map( VALUE #( map_type  = zfiif_hddt_types=>gc_map_type-tax_acct
+                      sap_value = '3331*'
+                      ext_value = 'X'
+                      ext_text  = 'Thue GTGT dau ra' ) ).
+    " Loại điều kiện giá SD (VÍ DỤ theo dự án tham chiếu ZPR0/ZC04/ZC05/ZMST)
+    put_map( VALUE #( map_type  = zfiif_hddt_types=>gc_map_type-cond_type
+                      sap_value = 'ZPR0'
+                      ext_value = 'AMT+'
+                      ext_text  = 'Gia ban' ) ).
+    put_map( VALUE #( map_type  = zfiif_hddt_types=>gc_map_type-cond_type
+                      sap_value = 'ZC04'
+                      ext_value = 'AMT-'
+                      ext_text  = 'Chiet khau' ) ).
+    put_map( VALUE #( map_type  = zfiif_hddt_types=>gc_map_type-cond_type
+                      sap_value = 'ZC05'
+                      ext_value = 'AMT-'
+                      ext_text  = 'Chiet khau' ) ).
+    put_map( VALUE #( map_type  = zfiif_hddt_types=>gc_map_type-cond_type
+                      sap_value = 'ZMST'
+                      ext_value = 'TAX'
+                      ext_text  = 'Thue GTGT' ) ).
+    " Loại hoá đơn SD được phát hành khi CHƯA có chứng từ FI (VÍ DỤ)
+    put_map( VALUE #( map_type  = zfiif_hddt_types=>gc_map_type-bill_type
+                      sap_value = 'ZBT'
+                      ext_value = 'X'
+                      ext_text  = 'Billing khong sinh FI (vi du du an tham chieu)' ) ).
 
     " Nhãn thuế suất đặc biệt — dùng khi tax_rate < 0
     put_map( VALUE #( map_type  = zfiif_hddt_types=>gc_map_type-tax_rate

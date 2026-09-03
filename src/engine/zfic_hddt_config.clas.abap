@@ -99,6 +99,15 @@ CLASS zfic_hddt_config DEFINITION
                 iv_bukrs        TYPE bukrs OPTIONAL
       RETURNING VALUE(rv_flag)  TYPE abap_bool .
 
+    TYPES ty_t_map_list TYPE STANDARD TABLE OF zfit_hddt_map WITH DEFAULT KEY .
+
+    "! Toàn bộ dòng ánh xạ của một loại (danh sách tài khoản, mẫu mã
+    "! thuế, loại hoá đơn SD...). Tầng đọc nguồn dùng để lọc theo danh sách.
+    METHODS get_map_list
+      IMPORTING iv_provider    TYPE zfide_hddt_prov
+                iv_map_type    TYPE zfide_hddt_maptype
+      RETURNING VALUE(rt_map)  TYPE ty_t_map_list .
+
     METHODS get_source_class
       IMPORTING iv_bukrs        TYPE bukrs
                 iv_src_type     TYPE zfide_hddt_srctype
@@ -471,6 +480,20 @@ CLASS zfic_hddt_config IMPLEMENTATION.
       rv_date = sy-datum.
     ENDIF.
 
+    " Không lùi ngày lập quá N ngày so với hôm nay (tham số
+    " INV_DATE_MAX_BACKDAYS; dự án tham chiếu cố định 1 ngày). Trống =
+    " không giới hạn.
+    DATA(lv_max) = get_param( iv_key   = zfiif_hddt_types=>gc_parm-inv_date_maxback
+                              iv_bukrs = iv_bukrs ).
+    CONDENSE lv_max NO-GAPS.
+    IF lv_max IS NOT INITIAL AND lv_max CO '0123456789 '.
+      DATA lv_days TYPE i.
+      lv_days = lv_max.
+      IF sy-datum - rv_date > lv_days.
+        rv_date = sy-datum - lv_days.
+      ENDIF.
+    ENDIF.
+
   ENDMETHOD.
 
 
@@ -509,6 +532,18 @@ CLASS zfic_hddt_config IMPLEMENTATION.
     TRANSLATE lv_value TO UPPER CASE.
     rv_flag = xsdbool( lv_value = 'X' OR lv_value = 'TRUE'
                     OR lv_value = 'Y' OR lv_value = '1' ).
+
+  ENDMETHOD.
+
+
+  METHOD get_map_list.
+
+    load_buffer( ).
+
+    LOOP AT mt_map ASSIGNING FIELD-SYMBOL(<ls_map>)
+         WHERE provider = iv_provider AND map_type = iv_map_type.
+      APPEND <ls_map> TO rt_map.
+    ENDLOOP.
 
   ENDMETHOD.
 

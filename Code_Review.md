@@ -28,6 +28,12 @@ push GitHub `cuongus/ZPK_HDDT_CORE`.**
 | D9 | Cấu hình dùng **fallback 4 cấp** cho tham số | Đặt chung rồi ghi đè cho 1 công ty / 1 NCC | `(prov,bukrs) → (prov,'') → ('',bukrs) → ('','')` — không đổi thứ tự |
 | D10 | Ánh xạ giá trị **fail-safe**: không có cấu hình → trả nguyên giá trị SAP | Không chặn nghiệp vụ; sai lệch lộ trong log/response | `MAP_VALUE` không raise |
 | D11 | Đặt tên theo `fis-sap-naming-convention-cuongus`: `Z FI <T> _ HDDT _ <tên>` | Skill quy định | `ZFIC_` class, `ZFIIF_` interface, `ZFICX_` exception, `ZFIT_` bảng, `ZFIDE_`/`ZFIDO_` DE/domain, `ZFIR_` report, `ZFI_` tcode |
+| D12 | Tầng đọc nguồn **port từ dự án HĐĐT private cloud** (`ZPG_INT_E_INVOICE` trong `zhddt.docx` + FUGR `ZFG_E_INVOICES` trên EEMC), viết lại theo canonical model | Người dùng xác nhận logic FI/Billing của dự án đó là chuẩn (03/09/2026) | **Giữ logic, bỏ hằng số**: `O*`/`**`, `3331*`, `ZPR0/ZC04/ZC05/ZMST`, `ZBT`, `VATRU`, `FS0001`, `ZI03/GRUN` → MAP/PARM, seed trong SETUP ghi rõ *VÍ DỤ*. Chi tiết: docs/09 |
+| D13 | Chênh lệch làm tròn thuế dồn vào **dòng cuối** cùng thuế suất | Theo dự án tham chiếu (lượt 3 dùng dòng có amount lớn nhất) | `ZFIC_HDDT_SRC_BASE=>RECONCILE_TAX` |
+| D14 | Kiểm tra nghiệp vụ theo trạng thái nằm trong **engine** (`CHECK_ACTION`, bước 4b), không ở UI | Job/BAPI cũng phải bị chặn; dự án cũ để trong FORM `get_data_integration` của report | Áp cả Test run; tắt bằng `STATUS_CHECK = N` |
+| D15 | **Huỷ** HĐĐT yêu cầu chứng từ SAP đã đảo; **thay thế** yêu cầu chứng từ gốc đã đảo | Quy tắc kế toán của dự án tham chiếu (`ZCANCELINV` chỉ khi `xreversed`; `type_dc = 2` yêu cầu `stblg`) | `CANCEL_REQUIRES_REVERSAL = N` để tắt huỷ; thay thế không có công tắc |
+| D16 | Lớp nguồn là nơi **duy nhất** đọc bảng nghiệp vụ SAP → thêm `GET_DOC_STATE` vào `ZFIIF_HDDT_SOURCE` | Engine cần biết đảo/huỷ nhưng không được `SELECT bkpf/vbrk` | Lớp nguồn cloud cài bằng CDS released; `ty_request-src_info` mang thông tin sẵn để không SELECT lại |
+| D17 | `ZFIT_HDDT_INV-REF_DOCNO` lưu **số chứng từ SAP** của HĐ gốc (+ `REF_GJAHR`), không lưu idkey | Cần đọc lại sổ/ trạng thái đảo của HĐ gốc | `adjust-org_docno/org_gjahr/org_src_type`; fallback idkey cho bản ghi cũ |
 
 **Bối cảnh đã kiểm chứng (không suy đoán):**
 - Code cũ EEMC (Viettel) và VJC (FPT): cùng tên `ZFM_CREATE_E_INVOICES`, khác nội dung hoàn toàn; destination hardcode `'EINVOICES'` / `'EINVOICES_FPT'`.
@@ -58,6 +64,12 @@ ZFIC_HDDT_SERVICE  ── cửa vào duy nhất, không raise
    ├── ZFIC_HDDT_PROV_VIETTEL
    ├── ZFIC_HDDT_PROV_FPT
    └── ZFIC_HDDT_PROV_TEMPLATE ── ZFIC_HDDT_PROV_VNPT
+
+        ZFIIF_HDDT_SOURCE ── hợp đồng đọc nguồn (SELECT_DOCUMENTS, GET_DOC_STATE)
+                │
+   ZFIC_HDDT_SRC_BASE (abstract: buyer/seller/thuế/tên hàng/sổ đăng ký)
+   ├── ZFIC_HDDT_SRC_FI   BKPF/BSEG/BSET (+VBRP/ACDOCA khi AWTYP = VBRK)
+   └── ZFIC_HDDT_SRC_SD   VBRK/VBRP/PRCD_ELEMENTS chưa có FI
 ```
 
 | Bất biến | Kiểm bằng |
@@ -69,6 +81,8 @@ ZFIC_HDDT_SERVICE  ── cửa vào duy nhất, không raise
 | I5. Mật khẩu không bao giờ đi vào `ZFIT_HDDT_LOG` | `MASK_SECRETS` chạy trước `to_raw` trong `LOG_CALL` |
 | I6. Số trong JSON: `.` thập phân, `-` phía trước, không zero dẫn đầu | `FORMAT_NUMBER` dùng `NUMBER = RAW` |
 | I7. `IDKEY` ổn định giữa các lần thử lại | `fill_defaults`: `bukrs+gjahr+src_docno` nếu caller không truyền |
+| I8. Engine không SELECT bảng nghiệp vụ SAP (BKPF/BSEG/VBRK/BUT000…) — chỉ lớp nguồn | `grep -rliE "FROM (bkpf|bseg|bset|vbrk|vbrp|but000|kna1)" src/engine` → chỉ `zfic_hddt_src_*` |
+| I9. Hằng số nghiệp vụ **riêng của khách hàng** (mã thuế, tài khoản, loại điều kiện, text ID Z) không nằm trong code; mặc định trong code chỉ được là giá trị chuẩn SAP (`VATRU`, `GRUN`, `MWAS`) | `grep -rnE "(3331|ZPR0|ZMST|ZBT|FS0001|ZI03|ZC0[45])" src/engine` → 0 (chỉ có trong `ZFIR_HDDT_SETUP` làm seed) |
 
 ---
 
@@ -217,14 +231,25 @@ Kế thừa Template. Không có tài liệu API → **không hardcode payload**
 
 ---
 
-## 9. Logic đọc nguồn FI — `ZFIC_HDDT_SRC_FI`
+## 9. Logic tầng đọc nguồn — `ZFIC_HDDT_SRC_BASE` / `_FI` / `_SD`
 
-- BKPF theo bukrs/gjahr/belnr/budat/blart, `xreversal = space`; BSEG + BSET theo range belnr; lọc `r_status` bằng `ZFIT_HDDT_INV`.
-- Buyer: dòng `KOART='D'` → KNA1 (+ADRC, ADR6 email đầu tiên theo consnumber).
-- Payment: `ZLSCH` → MAP PAYMENT (**provider = space** ở tầng nguồn).
-- Items: BSEG `KOART='S' AND SHKZG='H'`; tên = SGTXT | MAP GLACCT ext_text | HKONT; `amount = WRBTR` (nguyên tệ); `tax_rate` = MAP TAXRATE theo MWSKZ, fallback `BSET-KBETR/10`; `tax_amount` tính theo % rồi **chốt theo BSET** — chênh lệch dồn vào dòng có amount lớn nhất cùng thuế suất.
-- Taxes lấy thẳng từ BSET (`FWBAS/FWSTE` nguyên tệ, `HWBAS/HWSTE` VND).
-- Cuối cùng gọi `ZFIC_HDDT_SERVICE=>aggregate_invoice`.
+Chi tiết đối chiếu từng bước với dự án tham chiếu: **docs/09-nguon-du-lieu.md**. Tóm tắt để review:
+
+**Chọn chứng từ FI** — `BKPF JOIN BSEG (KOART='D')`; `XREVERSING = space`; chứng từ bị đảo chỉ giữ khi sổ đã có số HĐ hoặc `xreversed` tick; mã thuế dòng KH khớp MAP `TAXCODE`; BLART theo range → MAP `DOCTYPE`; range mới `BLDAT/VBELN(AWKEY)/KUNNR/USNAM`; một chứng từ = dòng KH đầu tiên.
+
+**Dòng hàng FI** — `KOART='S' AND MWSKZ<>space`; MAP `GLACCT` (nếu khai) và **không** thuộc MAP `TAXACCT`; dấu `H → +WRBTR`, `S → −WRBTR` (nguyên tệ); tên: SGTXT → GLACCT text → MAKT → số TK; CT từ SD (AWTYP=VBRK): nối `ACDOCA (AWREF/AWITEM) → VBRP`, tên theo `ITEM_TEXT_IDS` (long text) → MAKT → ARKTX; thuế suất MAP `TAXRATE` → `BSET-KBETR/10` → `A003/KONP`; tiền thuế dòng `line_tax` (VND 0 lẻ) rồi **chốt theo BSET** (`taxes_from_bset`, dấu `S → âm`; `reconcile_tax` dồn chênh lệch vào **dòng cuối** cùng thuế suất — D13).
+
+**Header** — `exch_rate_of` (VND → 1, else `abs(KURSF) × EXCH_RATE_FACTOR`); `resolve_invoice_date` có cap `INV_DATE_MAX_BACKDAYS`; thanh toán `BSEG-ZLSCH → VBRK-ZLSCH → DEFAULT_PAYMENT` qua MAP `PAYMENT`; `contract_no = VBKD-BSTKD`; `src_info` điền đủ cho engine.
+
+**Người mua** — BSEC (khách lẻ, không cache) → `CVI_CUST_LINK/BUT000` (cá nhân: first+last; tổ chức: `BUYER_NAME_FIELDS`) → `BUT020` addrnumber lớn nhất → `ADRC` + `clean_address` (regex gộp `, ,`, hậu tố `ADDR_COUNTRY_SUFFIX`/`T005T`) → `BUT0ID` (`BUYER_TAX_IDTYPE`, `BUYER_ID_IDTYPE`) → `ADR6`/`ADR2` nối `;` → `BUT0BK/BNKA` theo BVTYP → fallback `KNA1`. Cache theo KUNNR.
+
+**Người bán** — `T001 → ADRC → ADR6`, cache theo BUKRS, bật bằng `SELLER_FROM_T001`; `SELLER_*` chỉ điền chỗ trống.
+
+**Nguồn SD chưa có FI** — MAP `BILLTYPE` bắt buộc; loại billing đã có BKPF; `FKSTO` như đảo; GJAHR = năm dương lịch FKDAT; dòng hàng theo MAP `CONDTYPE` (`AMT+/AMT-/TAX`) hoặc `NETWR/MWSBP`.
+
+**Kết thúc** — `finalize_request`: `ITEM_QTY_ABS`, người bán, `ext TAX_RATE_SUMMARY`, `ZFIC_HDDT_SERVICE=>aggregate_invoice`.
+
+**Kiểm tra nghiệp vụ (engine, bước 4b)** — `CHECK_ACTION`/`CHECK_ORIGINAL` theo bảng ở docs/09 §5; sau thành công `MARK_ORIGINAL` đổi HĐ gốc sang 60/70. UI hỏi HĐ gốc bằng `POPUP_GET_VALUES` khi sổ chưa có `REF_DOCNO`.
 
 ---
 
@@ -233,7 +258,7 @@ Kế thừa Template. Không có tài liệu API → **không hardcode payload**
 | Tầng | Object | API classic-only còn dùng | Ghi chú |
 |---|---|---|---|
 | **Dùng chung** (phải cloud-safe) | 5 interface, `ZFICX_HDDT_ERROR`, `ZFIC_HDDT_JSON`, `ZFIC_HDDT_PROV_*` | **không** (đã rà lượt 3) | `sy-datum/uzeit/uname` được phép (CASLA đang dùng) |
-| **Classic** | `ZFIC_HDDT_HTTP` (`cl_http_client`, `MESSAGE ID`, `cl_abap_char_utilities`), `ZFIC_HDDT_PLAT_CLASSIC`, `ZFIC_HDDT_LOG` (`cl_system_uuid`, `sy-cprog`, `sy-tcode`), `ZFIC_HDDT_TOKEN` (`cl_abap_tstmp`), `ZFIC_HDDT_SRC_FI`, toàn bộ `src/ui` | có, hợp lệ | Bản cloud tương ứng chưa có |
+| **Classic** | `ZFIC_HDDT_HTTP` (`cl_http_client`, `MESSAGE ID`, `cl_abap_char_utilities`), `ZFIC_HDDT_PLAT_CLASSIC`, `ZFIC_HDDT_LOG` (`cl_system_uuid`, `sy-cprog`, `sy-tcode`), `ZFIC_HDDT_TOKEN` (`cl_abap_tstmp`), **`ZFIC_HDDT_SRC_BASE/_FI/_SD`** (SELECT bảng SAP trực tiếp, `READ_TEXT`, `A003/KONP`), toàn bộ `src/ui` (`POPUP_GET_VALUES`) | có, hợp lệ | Bản cloud tương ứng chưa có; lớp nguồn cloud khai qua `ZFIT_HDDT_SRC` |
 | **Nửa chừng** | `ZFIC_HDDT_CONFIG`, `_FACTORY`, `_SECRET`, `_PLATFORM`, `_SERVICE` | không thấy classic-only | nhưng dùng DDIC `ZFIT_HDDT_*` — trên CASLA phải đối chiếu với 9 BO cấu hình sẵn có |
 
 Bảng API tách qua `ZFIIF_HDDT_PLATFORM`:
@@ -268,6 +293,13 @@ Bảng API tách qua `ZFIIF_HDDT_PLATFORM`:
 | 3 | Trung | `( bukrs = @p OR @p IS INITIAL )` không hợp lệ ABAP SQL | RANGE rỗng |
 | 3 | Thấp | `UP TO n ROWS` / `INTO` đứng trước `WHERE` (thứ tự cũ, bị chặn strict mode) | chuyển sau `ORDER BY` (`zfic_hddt_src_fi`, `zfir_hddt_log`) |
 | 3 | Thấp | `raise_sy_message` dùng `MESSAGE ID` trong exception dùng chung, không ai gọi | xoá → shared exception cloud-clean |
+| 4 | Trung | `BSEC-TELF1` không chắc tồn tại (dự án tham chiếu không dùng) | bỏ TELF1, dùng `BANKS/BANKL/BANKN/INTAD` |
+| 4 | Trung | `ALPHA = IN` trên `SVAL-VALUE` (CHAR132) đệm số 0 sai độ dài | gán vào `belnr_d` trước rồi ALPHA |
+| 4 | Thấp | Host expression `@( \|...\| )` trong `UPDATE ... SET` (cần 7.50+) | tính vào biến trước |
+| 4 | Thấp | `SHIFT ... DELETING TRAILING` trên STRING không cắt độ dài; `CO` với CHAR có blank đuôi | `replace( regex )`; thêm blank vào tập `CO` |
+| 4 | Thấp | `RAISE EXCEPTION lx` trong CATCH để ném lại lỗi của chính TRY (đọc `mv_text CS`) | tách TRY chỉ bao `get_doc_state`, kiểm tra ngoài TRY |
+| 4 | Thấp | `CATCH cx_sy_conversion_no_number` cho `CONV posnr( char )` (không raise) | bỏ |
+| 4 | Trung | Lượt 3 dồn chênh lệch thuế vào dòng lớn nhất, dự án tham chiếu dùng dòng cuối | theo tham chiếu (D13) |
 
 ## 12. Còn mở / chưa kiểm chứng
 
@@ -280,7 +312,9 @@ Bảng API tách qua `ZFIIF_HDDT_PLATFORM`:
 | Cao | Viettel bất đồng bộ: `invoiceNo` rỗng → phải `SEARCH_INVOICE` sau 30–90s | job quét `STATUS=20` chưa có |
 | Trung | Bản cloud: `ZFIC_HDDT_PLAT_CLOUD`, `ZFIC_HDDT_HTTP_CLOUD`, tách `ZCL_MANAGE_VIETTEL_EINVOICES` trên CASLA thành adapter | cần cookie `Casla_Dev` (080) để ghi |
 | Trung | Đối chiếu bảng cấu hình mới với 9 BO cấu hình CASLA (`ZJP_R_HD_*`) | tránh 2 bộ cấu hình song song |
-| Trung | Nguồn SD / MM / hoá đơn gom | interface `ZFIIF_HDDT_SOURCE` đã có |
+| Trung | Nguồn MM, hoá đơn **gom** (`ZGOM_INV`, `ztb_e_gomh/goml/map_gom`), **phiếu xuất kho** (`get_pxk` MKPF/MSEG), ghi ngược `BKPF` (`XREF1_HD/XBLNR/XREF2_HD`) | chưa port từ dự án tham chiếu — docs/09 §7 |
+| Trung | **[Unverified]** trên hệ thật: `BSEC-BANKS/BANKL/BANKN/INTAD`, `ACDOCA-BUZEI = BSEG-BUZEI` với CT billing, `PRCD_ELEMENTS-KINAK`, `KONP-LOEVM_KO`, `INTERFACES … ABSTRACT METHODS` + `REDEFINITION` ở lớp con | activate lần đầu sẽ lộ |
+| Thấp | Nguồn SD: GJAHR = năm dương lịch FKDAT — lệch với công ty có năm tài chính khác | dùng `T009` nếu cần |
 | Thấp | VNPT: quy ước `OK:`/`ERR:` **[Unverified]**, chưa có tài liệu | adapter template |
 | Thấp | Viettel `originalInvoiceType/originalTemplateCode` cho HĐ gốc ngoài hệ thống | truyền qua `invoice-ext` |
 | Thấp | Cột `Transport` trong header vẫn `abapGit` | điền TR khi release |
@@ -300,6 +334,12 @@ Bảng API tách qua `ZFIIF_HDDT_PLATFORM`:
 - [ ] Không dùng API classic-only trong adapter (grep §10).
 - [ ] Nạp mặc định vào `ZFIR_HDDT_SETUP`; viết `docs/0x-provider-<ncc>.md` với nguồn tham chiếu và mục tài liệu.
 
+**Khi sửa tầng đọc nguồn**
+- [ ] Hằng số nghiệp vụ mới (mã thuế, tài khoản, loại điều kiện, text ID) → MAP/PARM + seed *VÍ DỤ* trong SETUP, không hardcode (I9).
+- [ ] Điền đủ `ty_request-src_info` (đảo/huỷ) và cài `GET_DOC_STATE` — engine dựa vào đó để kiểm tra.
+- [ ] Gọi `finalize_request` cuối `build_one`.
+- [ ] Đối chiếu bước tương ứng trong docs/09 và ghi khác biệt vào đó.
+
 **Khi sửa engine**
 - [ ] Không SELECT bảng cấu hình ngoài `ZFIC_HDDT_CONFIG`.
 - [ ] Không để `EXECUTE` raise ra ngoài.
@@ -318,3 +358,4 @@ Bảng API tách qua `ZFIIF_HDDT_PLATFORM`:
 | 1 | 28/08/2026 | Build ban đầu 141 file; tự soát khi viết | 4 lỗi sửa ngay (§11) |
 | 2 | 28/08/2026 | Đối chiếu tài liệu Viettel v2.44 (162 trang) + FPT v2.4.7; phát hiện `ZPK_HDDT_CORE` tồn tại trên CASLA; tách tầng dùng chung | 4 lỗi Viettel + 1 sự cố script; tầng chung cloud-clean |
 | 3 | 28/08/2026 | Log tích hợp xstring + che secret + màn hình log; rà lại toàn bộ cú pháp SQL strict mode, API phân tầng, method thừa | 1 lỗi bảo mật nghiêm trọng, 5 lỗi cú pháp/logic; tạo tài liệu này |
+| 4 | 03/09/2026 | Port tầng đọc nguồn FI/Billing từ dự án private cloud (`zhddt.docx` + `ZFG_E_INVOICES` EEMC): `SRC_BASE` mới, `SRC_FI` viết lại, `SRC_SD` mới, `CHECK_ACTION` trong engine, `GET_DOC_STATE`, popup HĐ gốc, 13 PARM + 4 MAP_TYPE mới; tự rà cú pháp | 8 điểm sửa (§11 lượt 4); D12–D17; I8–I9; docs/09 |

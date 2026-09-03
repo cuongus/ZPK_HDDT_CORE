@@ -77,6 +77,10 @@ DOMAINS = [
         ("CURRENCY", "Loai tien"),
         ("GLACCT", "Tai khoan ke toan sinh dong hang hoa"),
         ("DOCTYPE", "Loai chung tu ke toan"),
+        ("TAXCODE", "Ma thue dau ra duoc phat hanh (mau CP)"),
+        ("TAXACCT", "Tai khoan thue GTGT loai khoi dong hang"),
+        ("BILLTYPE", "Loai hoa don SD duoc phat hanh"),
+        ("CONDTYPE", "Loai dieu kien gia SD -> AMT+/AMT-/TAX"),
     ]),
     ("ZFIDO_HDDT_SRCTYPE", "CHAR", 4, 0, "HDDT: Loai nguon du lieu SAP", [
         ("FI", "FI document (BKPF/BSEG)"),

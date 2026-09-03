@@ -36,6 +36,7 @@ INTERFACE zfiif_hddt_types
   TYPES ty_r_kunnr TYPE RANGE OF kunnr.
   TYPES ty_r_blart TYPE RANGE OF blart.
   TYPES ty_r_status TYPE RANGE OF zfide_hddt_status.
+  TYPES ty_r_usnam  TYPE RANGE OF syuname.
 
 *---------------------------------------------------------------------*
 * 2. Thông tin người bán
@@ -67,6 +68,9 @@ INTERFACE zfiif_hddt_types
            bank_acct   TYPE string,
            id_number   TYPE string,   " CMND/CCCD/hộ chiếu
            budget_code TYPE string,    " mã quan hệ ngân sách
+           ref_no      TYPE string,    " số tham chiếu KH (VBKD-BSTKD)
+           " abap_true = khách lẻ (dữ liệu từ BSEC, không lưu cache)
+           one_time    TYPE abap_bool,
            " '1' = người mua không lấy hoá đơn
            not_get_invoice TYPE abap_bool,
          END OF ty_buyer.
@@ -151,6 +155,10 @@ INTERFACE zfiif_hddt_types
            org_seq       TYPE zfide_hddt_seq,
            org_inv_date  TYPE dats,
            org_idkey     TYPE zfide_hddt_idkey,
+           " Chứng từ SAP của hoá đơn gốc (để kiểm tra trạng thái / đảo)
+           org_src_type  TYPE zfide_hddt_srctype,
+           org_docno     TYPE zfide_hddt_docno,
+           org_gjahr     TYPE gjahr,
            " Số & ngày biên bản thoả thuận điều chỉnh
            doc_ref_no    TYPE string,
            doc_ref_date  TYPE dats,
@@ -197,6 +205,30 @@ INTERFACE zfiif_hddt_types
   TYPES ty_t_invoice TYPE STANDARD TABLE OF ty_invoice WITH DEFAULT KEY.
 
 *---------------------------------------------------------------------*
+* 10b. Thông tin chứng từ nguồn trên SAP (do lớp đọc nguồn điền)
+*---------------------------------------------------------------------*
+  " Engine dùng để kiểm tra nghiệp vụ theo trạng thái chứng từ:
+  "   - đã bị đảo (XREVERSED) thì không được phát hành, nhưng BẮT BUỘC
+  "     phải đảo trước khi huỷ / thay thế (quy tắc kế toán VN);
+  "   - hoá đơn SD bị huỷ (FKSTO) xử lý tương tự.
+  TYPES: BEGIN OF ty_src_info,
+           blart     TYPE blart,
+           budat     TYPE dats,
+           bldat     TYPE dats,
+           cpudt     TYPE dats,
+           usnam     TYPE syuname,
+           xblnr     TYPE xblnr,
+           kunnr     TYPE kunnr,
+           awtyp     TYPE awtyp,
+           awkey     TYPE awkey,
+           xreversed TYPE abap_bool,
+           stblg     TYPE belnr_d,
+           stjah     TYPE gjahr,
+           fkart     TYPE fkart,
+           xcancel   TYPE abap_bool,
+         END OF ty_src_info.
+
+*---------------------------------------------------------------------*
 * 11. Request / Result của một lần gọi API
 *---------------------------------------------------------------------*
   TYPES: BEGIN OF ty_request,
@@ -208,6 +240,7 @@ INTERFACE zfiif_hddt_types
            gjahr     TYPE gjahr,
            src_type  TYPE zfide_hddt_srctype,
            src_docno TYPE zfide_hddt_docno,
+           src_info  TYPE ty_src_info,
            invoice   TYPE ty_invoice,
            " Tham số tự do cho các nghiệp vụ tra cứu / huỷ / lấy file
            params    TYPE ty_t_kv,
@@ -299,6 +332,11 @@ INTERFACE zfiif_hddt_types
                currency  TYPE zfide_hddt_maptype VALUE 'CURRENCY',
                gl_acct   TYPE zfide_hddt_maptype VALUE 'GLACCT',
                doc_type  TYPE zfide_hddt_maptype VALUE 'DOCTYPE',
+               " Tầng đọc nguồn (PROVIDER = space):
+               tax_code  TYPE zfide_hddt_maptype VALUE 'TAXCODE',  " mẫu MWSKZ đầu ra (O*, **)
+               tax_acct  TYPE zfide_hddt_maptype VALUE 'TAXACCT',  " TK thuế GTGT loại khỏi dòng hàng
+               bill_type TYPE zfide_hddt_maptype VALUE 'BILLTYPE', " VBRK-FKART được phát hành
+               cond_type TYPE zfide_hddt_maptype VALUE 'CONDTYPE', " PRCD_ELEMENTS-KSCHL -> AMT+/AMT-/TAX
              END OF gc_map_type.
 
   " Tên tham số trong ZFIT_HDDT_PARM
@@ -314,6 +352,22 @@ INTERFACE zfiif_hddt_types
                seller_tel      TYPE zfide_hddt_parmkey VALUE 'SELLER_TEL',
                seller_bank     TYPE zfide_hddt_parmkey VALUE 'SELLER_BANK',
                seller_acct     TYPE zfide_hddt_parmkey VALUE 'SELLER_ACCT',
+               " --- tầng đọc dữ liệu nguồn (port từ dự án HĐĐT private cloud)
+               inv_date_maxback TYPE zfide_hddt_parmkey VALUE 'INV_DATE_MAX_BACKDAYS',
+               buyer_tax_idtype TYPE zfide_hddt_parmkey VALUE 'BUYER_TAX_IDTYPE',
+               buyer_id_idtype  TYPE zfide_hddt_parmkey VALUE 'BUYER_ID_IDTYPE',
+               buyer_name_flds  TYPE zfide_hddt_parmkey VALUE 'BUYER_NAME_FIELDS',
+               addr_country_sfx TYPE zfide_hddt_parmkey VALUE 'ADDR_COUNTRY_SUFFIX',
+               exch_rate_factor TYPE zfide_hddt_parmkey VALUE 'EXCH_RATE_FACTOR',
+               seller_from_t001 TYPE zfide_hddt_parmkey VALUE 'SELLER_FROM_T001',
+               text_langu       TYPE zfide_hddt_parmkey VALUE 'TEXT_LANGU',
+               item_text_ids    TYPE zfide_hddt_parmkey VALUE 'ITEM_TEXT_IDS',
+               item_qty_abs     TYPE zfide_hddt_parmkey VALUE 'ITEM_QTY_ABS',
+               default_payment  TYPE zfide_hddt_parmkey VALUE 'DEFAULT_PAYMENT',
+               tax_cond_type    TYPE zfide_hddt_parmkey VALUE 'TAX_COND_TYPE',
+               " --- kiểm tra nghiệp vụ theo trạng thái trong engine
+               status_check     TYPE zfide_hddt_parmkey VALUE 'STATUS_CHECK',
+               cancel_req_rev   TYPE zfide_hddt_parmkey VALUE 'CANCEL_REQUIRES_REVERSAL',
              END OF gc_parm.
 
   " Placeholder được engine thay thế trong ZFIT_HDDT_ACT-API_PATH

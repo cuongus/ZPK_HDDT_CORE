@@ -65,6 +65,30 @@
     </item>
     <item>
      <ID>S</ID>
+     <KEY>S_BLDAT</KEY>
+     <ENTRY>Ngay chung tu</ENTRY>
+     <LENGTH>13</LENGTH>
+    </item>
+    <item>
+     <ID>S</ID>
+     <KEY>S_VBELN</KEY>
+     <ENTRY>So billing SD</ENTRY>
+     <LENGTH>13</LENGTH>
+    </item>
+    <item>
+     <ID>S</ID>
+     <KEY>S_KUNNR</KEY>
+     <ENTRY>Khach hang</ENTRY>
+     <LENGTH>10</LENGTH>
+    </item>
+    <item>
+     <ID>S</ID>
+     <KEY>S_USNAM</KEY>
+     <ENTRY>Nguoi hach toan</ENTRY>
+     <LENGTH>15</LENGTH>
+    </item>
+    <item>
+     <ID>S</ID>
      <KEY>P_SRCT</KEY>
      <ENTRY>Loai nguon du lieu</ENTRY>
      <LENGTH>18</LENGTH>
@@ -80,6 +104,12 @@
      <KEY>S_STAT</KEY>
      <ENTRY>Trang thai HDDT</ENTRY>
      <LENGTH>15</LENGTH>
+    </item>
+    <item>
+     <ID>S</ID>
+     <KEY>P_REVER</KEY>
+     <ENTRY>Lay ca chung tu da dao / billing da huy</ENTRY>
+     <LENGTH>39</LENGTH>
     </item>
     <item>
      <ID>S</ID>
