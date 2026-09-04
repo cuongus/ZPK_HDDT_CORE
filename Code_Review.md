@@ -359,3 +359,35 @@ Bảng API tách qua `ZFIIF_HDDT_PLATFORM`:
 | 2 | 28/08/2026 | Đối chiếu tài liệu Viettel v2.44 (162 trang) + FPT v2.4.7; phát hiện `ZPK_HDDT_CORE` tồn tại trên CASLA; tách tầng dùng chung | 4 lỗi Viettel + 1 sự cố script; tầng chung cloud-clean |
 | 3 | 28/08/2026 | Log tích hợp xstring + che secret + màn hình log; rà lại toàn bộ cú pháp SQL strict mode, API phân tầng, method thừa | 1 lỗi bảo mật nghiêm trọng, 5 lỗi cú pháp/logic; tạo tài liệu này |
 | 4 | 03/09/2026 | Port tầng đọc nguồn FI/Billing từ dự án private cloud (`zhddt.docx` + `ZFG_E_INVOICES` EEMC): `SRC_BASE` mới, `SRC_FI` viết lại, `SRC_SD` mới, `CHECK_ACTION` trong engine, `GET_DOC_STATE`, popup HĐ gốc, 13 PARM + 4 MAP_TYPE mới; tự rà cú pháp | 8 điểm sửa (§11 lượt 4); D12–D17; I8–I9; docs/09 |
+
+## 15. Rà naming convention Private Cloud (chuẩn 03.09.2026) — CHỜ QUYẾT ĐỊNH
+
+Rà theo skill `fis-sap-private-cloud-naming` (tài liệu `QUY_UOC_DAT_TEN_SAP_PRIVATE_CLOUD_v1.0.docx`, 03.09.2026). Package được đặt tên theo skill cũ `fis-sap-naming-convention-cuongus` (D11: `Z FI <T> _ HDDT _`), chuẩn mới quy định **một prefix duy nhất cho mỗi loại object** nên xung đột toàn diện.
+
+| Hạng mục | Kết quả | Chuẩn mới | Ghi chú |
+|---|---|---|---|
+| 14 bảng `ZFIT_HDDT_*` | ✗ | `ZTB_HDDT_*` (≤16: dài nhất `ZTB_HDDT_PROV` = 13) | |
+| 47 DE `ZFIDE_HDDT_*` / 10 domain `ZFIDO_HDDT_*` | ✗ | `ZDE_HDDT_*` / `ZDO_HDDT_*` | |
+| 19 class `ZFIC_HDDT_*` | ✗ | `ZCL_HDDT_*` | |
+| 5 interface `ZFIIF_HDDT_*` | ✗ | `ZIF_HDDT_*` | |
+| Exception `ZFICX_HDDT_ERROR` | ✗ | `ZCX_HDDT_ERROR` | |
+| 4 report `ZFIR_HDDT_*` | ✗ | `ZPG_HDDT_*` | |
+| Include `_INT_TOP/_SEL/_CL1/_EVT/_F01` | ✗ | `<report>_TOP` / `_F01` (chỉ TOP/F01/O01/I01) | `_SEL/_CL1/_EVT` không có trong chuẩn → gộp vào `_TOP`/`_F01` hoặc bổ sung chuẩn |
+| Message class `ZFIE_HDDT` | ✗ | `ZMS_HDDT` | |
+| Tcode `ZFI_HDDT`, `_CFG`, `_LOG` | ✗ | `ZFI001`–`ZFI003` (`Z<MOD><3 số>`) | **[Unverified]** chưa biết số nào còn trống trên hệ đích |
+| Package `ZPK_HDDT_CORE` + `_DDIC/_ENGINE/_PROV/_UI` | ✓ prefix | `ZPK_<dự án>[_<lớp>]` | gốc không chứa object ✓ |
+| Điều khoản §11 (giữ tên object cũ) | **không áp dụng** | | package chưa import/release lên hệ nào → đổi tên lúc này rẻ nhất, sau lần import đầu sẽ đắt (§0.5) |
+| Text người dùng thấy: message class T100 | ✓ có dấu | | |
+| Text người dùng thấy: selection text / text element 3 report | ✗ không dấu | bắt buộc có dấu | sửa trong `tools/gen_meta.py` PROGS tpool |
+| Text người dùng thấy: label 47 DE (5 text/DE) | ✗ không dấu | bắt buộc có dấu | hiện lên tiêu đề cột ALV mặc định / F1 |
+| Text người dùng thấy: fixed value domain `ZFIDO_HDDT_STATUS`… | ✗ không dấu | bắt buộc có dấu | `status_text` đọc DD07T → user thấy "Chua tich hop" |
+| Tiêu đề cột ALV đặt trong code, popup | ✓ có dấu | | |
+| Mô tả object/package/comment | ✓ (được phép không dấu) | | |
+| Biến: `lv_/lt_/ls_/lo_`, `gt_/gv_/gc_`, `p_/s_` | ✓ | | |
+| Biến: field-symbol `<ls_/<lv_/<lt_…>` (415 chỗ) | ✗ | `<FS_…>` | đổi máy được |
+| Tham số: `iv_/ev_/cv_/rv_` cho scalar (223 `iv_`) | ✗ **[Inference]** | bảng chỉ liệt kê `I_/E_/C_/R_` cho scalar; `IT_/IS_`, `RT_/RS_` ✓ | cần xác nhận với người ban hành chuẩn trước khi đổi |
+| Biến nhận giá trị `cl_gui_frontend_services` phải TOÀN CỤC | ✗ | `save_file` (ZFIR_HDDT_INT_F01) dùng `lv_filename/lv_path/lv_fullpath/lv_action` cục bộ | bẫy `SYSTEM_POINTER_PENDING` — sửa độc lập với quyết định đổi tên |
+| Tên chỉ A–Z 0–9 _, viết hoa, tự mô tả, không `$TMP` | ✓ | | |
+| Mô tả TR `TEAM\ACCOUNT\mô tả` | chưa áp dụng | | ghi vào docs/06 cho lần import đầu |
+
+**Đề xuất (chưa thực hiện, chờ người dùng chốt):** đổi tên toàn bộ theo bảng trên bằng script (mapping ~100 tên, đổi cả tên file abapGit, chuỗi `classname` trong SETUP, `MESSAGE … (zfie_hddt)`, docs), thêm dấu cho DE label / domain text / selection text, sửa biến `cl_gui_frontend_services` thành toàn cục; đổi prefix biến `<fs_>`/`i_` theo xác nhận. Nếu người dùng chọn giữ tên: bổ sung họ `ZFI*_HDDT_*` vào §11 của tài liệu chuẩn (không được để chuẩn và code lệch nhau ngầm).
