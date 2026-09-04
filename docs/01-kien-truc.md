@@ -21,7 +21,7 @@ Nếu để những khác biệt này nằm rải rác trong code nghiệp vụ 
 
 ### 2.1 Chỉ một model dữ liệu
 
-`ZFIIF_HDDT_TYPES=>ty_invoice` là **canonical model** — hình dạng hoá đơn theo
+`ZIF_HDDT_TYPES=>ty_invoice` là **canonical model** — hình dạng hoá đơn theo
 nghiệp vụ Việt Nam, không theo bất kỳ nhà cung cấp nào:
 
 ```
@@ -46,15 +46,15 @@ Không phải mọi khác biệt đều cần code. Ba loại sau chỉ là dữ
 
 | Khác biệt | Nơi khai |
 |---|---|
-| URL, timeout, chứng chỉ SSL, proxy | `ZFIT_HDDT_CONN` (hoặc SM59) |
-| Nghiệp vụ nào gọi endpoint nào, method gì | `ZFIT_HDDT_ACT` |
+| URL, timeout, chứng chỉ SSL, proxy | `ZTB_HDDT_CONN` (hoặc SM59) |
+| Nghiệp vụ nào gọi endpoint nào, method gì | `ZTB_HDDT_ACT` |
 | MST phải nối vào URL hay không | placeholder `{taxcode}` trong `API_PATH` |
-| Mã trả về nào nghĩa là gì | `ZFIT_HDDT_STAT` |
-| Thuế suất / hình thức thanh toán / tài khoản | `ZFIT_HDDT_MAP` |
+| Mã trả về nào nghĩa là gì | `ZTB_HDDT_STAT` |
+| Thuế suất / hình thức thanh toán / tài khoản | `ZTB_HDDT_MAP` |
 
 ### 2.3 Khác biệt về **hình dạng payload** → adapter
 
-Chỉ phần này cần ABAP. `ZFIIF_HDDT_PROVIDER` có 8 method, trong đó adapter con
+Chỉ phần này cần ABAP. `ZIF_HDDT_PROVIDER` có 8 method, trong đó adapter con
 bắt buộc chỉ 3:
 
 | Method | Bắt buộc | Việc |
@@ -68,12 +68,12 @@ bắt buộc chỉ 3:
 | `build_login_payload` | | payload cho endpoint đăng nhập |
 | `extract_token` | | bóc token khỏi response |
 
-`ZFIC_HDDT_PROV_BASE` đã cài đặt 5 method còn lại một cách hợp lý.
+`ZCL_HDDT_PROV_BASE` đã cài đặt 5 method còn lại một cách hợp lý.
 
 ### 2.4 Chọn adapter bằng cấu hình, không bằng `CASE`
 
 ```abap
-" ZFIC_HDDT_FACTORY
+" ZCL_HDDT_FACTORY
 DATA(lv_class) = lo_config->get_provider_class( lv_provider ).  " từ bảng
 CREATE OBJECT ro_object TYPE (lv_class).                        " động
 ro_provider ?= ro_object.
@@ -83,34 +83,34 @@ IF ro_provider->get_id( ) <> lv_provider.  " chặn cấu hình sai
 Đây là lý do engine không cần biết tên nhà cung cấp nào. Thêm nhà cung cấp thứ
 tư = 1 lớp mới + 1 dòng bảng, engine không đổi, không cần test hồi quy engine.
 
-## 3. Luồng xử lý `ZFIC_HDDT_SERVICE=>EXECUTE`
+## 3. Luồng xử lý `ZCL_HDDT_SERVICE=>EXECUTE`
 
 ```
- 1. provider   ← ZFIT_HDDT_PARM.ACTIVE_PROVIDER  hoặc suy từ ZFIT_HDDT_CRED
- 2. adapter    ← ZFIC_HDDT_FACTORY (CREATE OBJECT động)
+ 1. provider   ← ZTB_HDDT_PARM.ACTIVE_PROVIDER  hoặc suy từ ZTB_HDDT_CRED
+ 2. adapter    ← ZCL_HDDT_FACTORY (CREATE OBJECT động)
  3. action     ← adapter->resolve_action( )
-    endpoint   ← ZFIT_HDDT_ACT
-    tài khoản  ← ZFIT_HDDT_CRED (có kiểm tra hiệu lực theo ngày)
-    kết nối    ← ZFIT_HDDT_CONN
+    endpoint   ← ZTB_HDDT_ACT
+    tài khoản  ← ZTB_HDDT_CRED (có kiểm tra hiệu lực theo ngày)
+    kết nối    ← ZTB_HDDT_CONN
  4. điền mặc định + tính bảng thuế + tổng cộng          [core]
- 5. secret     ← ZFIC_HDDT_SECRET (vault hoặc bảng); test run → '********'
+ 5. secret     ← ZCL_HDDT_SECRET (vault hoặc bảng); test run → '********'
     payload    ← adapter->build_payload( )
     ── nếu Test run: DỪNG, trả payload ──
- 6. token      ← ZFIC_HDDT_TOKEN (cache trong ZFIT_HDDT_TOK) nếu AUTH_MODE=T/O
-    gọi HTTP   ← ZFIC_HDDT_HTTP (destination hoặc URL, method/header từ cấu hình)
+ 6. token      ← ZCL_HDDT_TOKEN (cache trong ZTB_HDDT_TOK) nếu AUTH_MODE=T/O
+    gọi HTTP   ← ZCL_HDDT_HTTP (destination hoặc URL, method/header từ cấu hình)
     HTTP 401   → đăng nhập lại đúng 1 lần rồi gọi lại
  7. result     ← adapter->parse_response( )
- 8. trạng thái ← ZFIT_HDDT_STAT, không có thì suy từ mã HTTP + action
- 9. log        → ZFIT_HDDT_LOG (request + response)
-    sổ HĐ      → ZFIT_HDDT_INV + ZFIT_HDDT_ITEM
+ 8. trạng thái ← ZTB_HDDT_STAT, không có thì suy từ mã HTTP + action
+ 9. log        → ZTB_HDDT_LOG (request + response)
+    sổ HĐ      → ZTB_HDDT_INV + ZTB_HDDT_ITEM
 ```
 
-`EXECUTE` bắt cả `zficx_hddt_error` và `cx_root` — job xử lý 5.000 hoá đơn
+`EXECUTE` bắt cả `zcx_hddt_error` và `cx_root` — job xử lý 5.000 hoá đơn
 không được chết vì 1 chứng từ lỗi.
 
 ## 4. Vì sao tự viết JSON writer/parser
 
-`ZFIC_HDDT_JSON` không dùng serializer theo tên field ABAP, vì:
+`ZCL_HDDT_JSON` không dùng serializer theo tên field ABAP, vì:
 
 1. **Chữ hoa/thường**: tên field ABAP luôn về chữ thường khi serialize, nên mã
    cũ phải chạy `REPLACE ALL OCCURRENCES` với 40+ dòng trong bảng
@@ -129,12 +129,12 @@ phiên bản API cũng không làm vỡ adapter.
 
 | Cần làm gì | Cách làm | Có phải sửa core? |
 |---|---|---|
-| Đổi nhà cung cấp | đổi `ACTIVE_PROVIDER` + `ZFIT_HDDT_CRED` | không |
-| Đổi URL / môi trường | `ZFIT_HDDT_CONN` | không |
-| NCC thêm/đổi endpoint | `ZFIT_HDDT_ACT` | không |
+| Đổi nhà cung cấp | đổi `ACTIVE_PROVIDER` + `ZTB_HDDT_CRED` | không |
+| Đổi URL / môi trường | `ZTB_HDDT_CONN` | không |
+| NCC thêm/đổi endpoint | `ZTB_HDDT_ACT` | không |
 | NCC đổi tên một thẻ JSON | sửa 1 dòng trong lớp adapter tương ứng | không |
-| Thêm nhà cung cấp thứ 4 (JSON/XML đơn giản) | mẫu payload trong `ZFIT_HDDT_TPL` + dòng `ZFIT_HDDT_PROV` trỏ `ZFIC_HDDT_PROV_TEMPLATE` | không |
-| Thêm nhà cung cấp phức tạp | 1 lớp kế thừa `ZFIC_HDDT_PROV_BASE` + 1 dòng `ZFIT_HDDT_PROV` | không |
-| Nghiệp vụ đọc dữ liệu khác | lớp implement `ZFIIF_HDDT_SOURCE` + `ZFIT_HDDT_SRC` | không |
-| Lấy mật khẩu từ vault | lớp implement `ZFIIF_HDDT_SECRET` + tham số `SECRET_CLASS` | không |
-| Nguồn SD / MM / hoá đơn gom | lớp mới implement `ZFIIF_HDDT_SOURCE` | không |
+| Thêm nhà cung cấp thứ 4 (JSON/XML đơn giản) | mẫu payload trong `ZTB_HDDT_TPL` + dòng `ZTB_HDDT_PROV` trỏ `ZCL_HDDT_PROV_TEMPLATE` | không |
+| Thêm nhà cung cấp phức tạp | 1 lớp kế thừa `ZCL_HDDT_PROV_BASE` + 1 dòng `ZTB_HDDT_PROV` | không |
+| Nghiệp vụ đọc dữ liệu khác | lớp implement `ZIF_HDDT_SOURCE` + `ZTB_HDDT_SRC` | không |
+| Lấy mật khẩu từ vault | lớp implement `ZIF_HDDT_SECRET` + tham số `SECRET_CLASS` | không |
+| Nguồn SD / MM / hoá đơn gom | lớp mới implement `ZIF_HDDT_SOURCE` | không |

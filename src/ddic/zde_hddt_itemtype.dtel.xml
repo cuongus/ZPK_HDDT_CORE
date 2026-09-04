@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="utf-8"?>
+<abapGit version="v1.0.0" serializer="LCL_OBJECT_DTEL" serializer_version="v1.0.0">
+ <asx:abap xmlns:asx="http://www.sap.com/abapxml" version="1.0">
+  <asx:values>
+   <DD04V>
+    <ROLLNAME>ZDE_HDDT_ITEMTYPE</ROLLNAME>
+    <DDLANGUAGE>E</DDLANGUAGE>
+    <DOMNAME>ZDO_HDDT_ITEMTYPE</DOMNAME>
+    <HEADLEN>02</HEADLEN>
+    <SCRLEN1>06</SCRLEN1>
+    <SCRLEN2>14</SCRLEN2>
+    <SCRLEN3>23</SCRLEN3>
+    <DDTEXT>Hình thức dòng hàng hoá</DDTEXT>
+    <REPTEXT>HT</REPTEXT>
+    <SCRTEXT_S>H.thức</SCRTEXT_S>
+    <SCRTEXT_M>Hình thức dòng</SCRTEXT_M>
+    <SCRTEXT_L>Hình thức dòng hàng hoá</SCRTEXT_L>
+    <DTELMASTER>E</DTELMASTER>
+   </DD04V>
+  </asx:values>
+ </asx:abap>
+</abapGit>

@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="utf-8"?>
+<abapGit version="v1.0.0" serializer="LCL_OBJECT_DTEL" serializer_version="v1.0.0">
+ <asx:abap xmlns:asx="http://www.sap.com/abapxml" version="1.0">
+  <asx:values>
+   <DD04V>
+    <ROLLNAME>ZDE_HDDT_AUTH</ROLLNAME>
+    <DDLANGUAGE>E</DDLANGUAGE>
+    <DOMNAME>ZDO_HDDT_AUTH</DOMNAME>
+    <HEADLEN>02</HEADLEN>
+    <SCRLEN1>08</SCRLEN1>
+    <SCRLEN2>16</SCRLEN2>
+    <SCRLEN3>20</SCRLEN3>
+    <DDTEXT>Phương thức xác thực API</DDTEXT>
+    <REPTEXT>XT</REPTEXT>
+    <SCRTEXT_S>Xác thực</SCRTEXT_S>
+    <SCRTEXT_M>Ph.thức xác thực</SCRTEXT_M>
+    <SCRTEXT_L>Phương thức xác thực</SCRTEXT_L>
+    <DTELMASTER>E</DTELMASTER>
+   </DD04V>
+  </asx:values>
+ </asx:abap>
+</abapGit>

@@ -1,6 +1,6 @@
 # 08 — Log tích hợp
 
-Transaction: **`ZFI_HDDT_LOG`** · Bảng: `ZFIT_HDDT_LOG`
+Transaction: **`ZFI003`** · Bảng: `ZTB_HDDT_LOG`
 
 ## 1. Mục đích
 
@@ -23,7 +23,7 @@ Nút **Tải nguyên bản** lưu đúng byte đã đi trên đường truyền 
 
 ## 2. Vì sao payload lưu dạng XSTRING
 
-`REQ_BODY` / `RES_BODY` / `REQ_HEADER` / `RES_HEADER` có kiểu `ZFIDE_HDDT_RAW`
+`REQ_BODY` / `RES_BODY` / `REQ_HEADER` / `RES_HEADER` có kiểu `ZDE_HDDT_RAW`
 (DDIC `RAWSTRING`).
 
 > **Đính chính một hiểu nhầm phổ biến:** field kiểu `STRING` trong bảng DDIC
@@ -52,7 +52,7 @@ VNPT :  { "account": "...", "acpass": "...", ... }
 Nếu ghi nguyên văn thì mật khẩu API nằm plaintext trong bảng log — ai đọc được
 bảng là đọc được mật khẩu, kể cả người chỉ được cấp quyền *xem log*.
 
-`ZFIC_HDDT_LOG=>MASK_SECRETS( )` che **trước khi ghi**, ở 4 dạng:
+`ZCL_HDDT_LOG=>MASK_SECRETS( )` che **trước khi ghi**, ở 4 dạng:
 
 | Dạng | Trước | Sau |
 |---|---|---|
@@ -61,7 +61,7 @@ bảng là đọc được mật khẩu, kể cả người chỉ được cấp
 | form-urlencoded | `password=abc&x=1` | `password=********&x=1` |
 | HTTP header | `Authorization: Basic eGY6...` | `Authorization: ********` |
 
-Danh sách thẻ khai trong `ZFIT_HDDT_PARM`, key **`LOG_MASK_TAGS`**, cách nhau
+Danh sách thẻ khai trong `ZTB_HDDT_PARM`, key **`LOG_MASK_TAGS`**, cách nhau
 bằng dấu phẩy. Mặc định:
 
 ```
@@ -74,7 +74,7 @@ Cột `MASKED` trên ALV cho biết dòng đó có thật sự bị che gì hay 
 > Việc che là **một chiều, không phục hồi được** — đúng như mong muốn. Nếu cần
 > đối chiếu chính xác cả mật khẩu (rất hiếm), phải lấy từ phía nhà cung cấp.
 
-## 4. Cấu trúc bảng `ZFIT_HDDT_LOG`
+## 4. Cấu trúc bảng `ZTB_HDDT_LOG`
 
 | Nhóm | Trường |
 |---|---|
@@ -91,7 +91,7 @@ Cột `MASKED` trên ALV cho biết dòng đó có thật sự bị che gì hay 
 số lần hiển thị là **số lần gọi thật**. Nhờ trường này nhìn ngay ra chứng từ
 nào phải gọi 5 lần mới thành công.
 
-`CALLER` phân biệt phát hành từ màn hình `ZFI_HDDT`, từ job nền, hay từ
+`CALLER` phân biệt phát hành từ màn hình `ZFI001`, từ job nền, hay từ
 enhancement — khi một chứng từ có nhiều dòng log thì đây là thứ cho biết ai
 đã gọi.
 
@@ -104,16 +104,16 @@ trăm KB mỗi dòng, đọc cả 500 dòng là vô ích. Nội dung chỉ đư�
 Mặc định lần chạy **Test run** (chỉ dựng payload, không gọi API) **không** ghi
 log, để bảng không bị rác khi người dùng xem trước hàng loạt.
 
-Bật vết đó bằng `ZFIT_HDDT_PARM` key **`LOG_TEST_RUN` = `X`** — hữu ích khi cần
+Bật vết đó bằng `ZTB_HDDT_PARM` key **`LOG_TEST_RUN` = `X`** — hữu ích khi cần
 biết ai đã xem payload nào. Dòng test run có `TEST_RUN = X` và mặc định bị ẩn
 khỏi danh sách; tick "Kèm cả dòng Test run" để hiện.
 
-Test run cũng **không đọc mật khẩu thật** (xem `ZFIC_HDDT_SERVICE`), payload
+Test run cũng **không đọc mật khẩu thật** (xem `ZCL_HDDT_SERVICE`), payload
 hiển thị luôn là `"password":"********"` — nên hai lớp bảo vệ độc lập nhau.
 
 ## 6. Tắt lưu payload
 
-`ZFIT_HDDT_PARM` key `LOG_PAYLOAD`:
+`ZTB_HDDT_PARM` key `LOG_PAYLOAD`:
 
 | Giá trị | Hành vi |
 |---|---|
@@ -126,7 +126,7 @@ Chỉ tắt khi đã có nơi lưu bằng chứng khác. Tắt rồi thì màn h
 
 ## 7. Xem JSON
 
-`ZFIC_HDDT_JSON=>PRETTY( )` xuống dòng + thụt lề bằng cách duyệt ký tự, có theo
+`ZCL_HDDT_JSON=>PRETTY( )` xuống dòng + thụt lề bằng cách duyệt ký tự, có theo
 dõi trạng thái "đang trong chuỗi" nên dấu `{` `}` `,` nằm trong tên hàng hoá
 không làm vỡ định dạng. Không dùng `CL_SXML` vì API đó khác nhau giữa hai nền
 tảng — hàm này chạy được ở cả ABAP cổ điển và ABAP Cloud.
@@ -150,7 +150,7 @@ hướng:
 
 ```abap
 DATA lv_empty TYPE xstring.
-UPDATE zfit_hddt_log
+UPDATE ztb_hddt_log
    SET req_body   = @lv_empty,
        res_body   = @lv_empty,
        req_header = @lv_empty,
@@ -159,7 +159,7 @@ UPDATE zfit_hddt_log
    AND req_body  <> @lv_empty.
 ```
 
-3. Đưa `ZFIT_HDDT_LOG` vào chiến lược archiving của hệ thống.
+3. Đưa `ZTB_HDDT_LOG` vào chiến lược archiving của hệ thống.
 
 Theo dõi dung lượng bằng `REQ_SIZE` + `RES_SIZE` thay vì đếm dòng — hai chứng từ
 cùng số dòng có thể chênh nhau 50 lần về byte.
@@ -168,7 +168,7 @@ cùng số dòng có thể chênh nhau 50 lần về byte.
 
 Bảng log chứa thông tin người mua (tên, MST, địa chỉ, email) → là **dữ liệu cá
 nhân**. Đặt authorization group riêng khi sinh Table Maintenance Generator, và
-chỉ cấp `ZFI_HDDT_LOG` cho người thực sự cần điều tra sự cố.
+chỉ cấp `ZFI003` cho người thực sự cần điều tra sự cố.
 
 Secret đã được che lúc ghi nên rủi ro lộ mật khẩu được xử lý ở gốc, không phụ
 thuộc vào việc cấp quyền có đúng hay không.

@@ -28,11 +28,11 @@ def write(folder, name, ext, ser, body):
 # INTERFACE
 # ---------------------------------------------------------------------------
 INTFS = [
-    ("engine", "ZFIIF_HDDT_TYPES", "HDDT: Kieu du lieu chuan hoa hoa don dien tu"),
-    ("engine", "ZFIIF_HDDT_PROVIDER", "HDDT: Hop dong cho adapter nha cung cap"),
-    ("engine", "ZFIIF_HDDT_SOURCE", "HDDT: Hop dong cho lop doc du lieu nguon"),
-    ("engine", "ZFIIF_HDDT_SECRET", "HDDT: Diem cam lay secret tu vault"),
-    ("engine", "ZFIIF_HDDT_PLATFORM", "HDDT: Tach API co dien vs ABAP Cloud"),
+    ("engine", "ZIF_HDDT_TYPES", "HDDT: Kieu du lieu chuan hoa hoa don dien tu"),
+    ("engine", "ZIF_HDDT_PROVIDER", "HDDT: Hop dong cho adapter nha cung cap"),
+    ("engine", "ZIF_HDDT_SOURCE", "HDDT: Hop dong cho lop doc du lieu nguon"),
+    ("engine", "ZIF_HDDT_SECRET", "HDDT: Diem cam lay secret tu vault"),
+    ("engine", "ZIF_HDDT_PLATFORM", "HDDT: Tach API co dien vs ABAP Cloud"),
 ]
 
 for folder, name, descr in INTFS:
@@ -51,25 +51,25 @@ for folder, name, descr in INTFS:
 # CLASS  (folder, name, descr, final?, abstract?, category)
 # ---------------------------------------------------------------------------
 CLASSES = [
-    ("engine", "ZFICX_HDDT_ERROR", "HDDT: Exception dung chung", False, False, "40"),
-    ("engine", "ZFIC_HDDT_CONFIG", "HDDT: Truy cap cau hinh (co buffer)", True, False, None),
-    ("engine", "ZFIC_HDDT_JSON", "HDDT: Writer + parser JSON tu chua", True, False, None),
-    ("engine", "ZFIC_HDDT_FACTORY", "HDDT: Nha may sinh adapter theo cau hinh", True, False, None),
-    ("engine", "ZFIC_HDDT_SECRET", "HDDT: Bo giai quyet secret API", True, False, None),
-    ("engine", "ZFIC_HDDT_PLATFORM", "HDDT: Bo giai quyet nen tang", True, False, None),
-    ("engine", "ZFIC_HDDT_PLAT_CLASSIC", "HDDT: Nen tang ABAP co dien", True, False, None),
-    ("engine", "ZFIC_HDDT_HTTP", "HDDT: Bo goi REST dieu khien bang cau hinh", True, False, None),
-    ("engine", "ZFIC_HDDT_TOKEN", "HDDT: Quan ly access token", True, False, None),
-    ("engine", "ZFIC_HDDT_LOG", "HDDT: Ghi log API va so dang ky hoa don", True, False, None),
-    ("engine", "ZFIC_HDDT_SERVICE", "HDDT: Service facade - cua vao duy nhat", True, False, None),
-    ("engine", "ZFIC_HDDT_SRC_BASE", "HDDT: Lop cha doc du lieu nguon (buyer/seller/thue)", False, True, None),
-    ("engine", "ZFIC_HDDT_SRC_FI", "HDDT: Doc du lieu nguon chung tu FI", False, False, None),
-    ("engine", "ZFIC_HDDT_SRC_SD", "HDDT: Doc hoa don billing SD chua co FI", False, False, None),
-    ("prov", "ZFIC_HDDT_PROV_BASE", "HDDT: Lop cha truu tuong cho adapter", False, True, None),
-    ("prov", "ZFIC_HDDT_PROV_VIETTEL", "HDDT: Adapter Viettel SInvoice", True, False, None),
-    ("prov", "ZFIC_HDDT_PROV_FPT", "HDDT: Adapter FPT eInvoice", True, False, None),
-    ("prov", "ZFIC_HDDT_PROV_TEMPLATE", "HDDT: Adapter tong quat theo mau payload", False, False, None),
-    ("prov", "ZFIC_HDDT_PROV_VNPT", "HDDT: Adapter VNPT / Vinaphone", True, False, None),
+    ("engine", "ZCX_HDDT_ERROR", "HDDT: Exception dung chung", False, False, "40"),
+    ("engine", "ZCL_HDDT_CONFIG", "HDDT: Truy cap cau hinh (co buffer)", True, False, None),
+    ("engine", "ZCL_HDDT_JSON", "HDDT: Writer + parser JSON tu chua", True, False, None),
+    ("engine", "ZCL_HDDT_FACTORY", "HDDT: Nha may sinh adapter theo cau hinh", True, False, None),
+    ("engine", "ZCL_HDDT_SECRET", "HDDT: Bo giai quyet secret API", True, False, None),
+    ("engine", "ZCL_HDDT_PLATFORM", "HDDT: Bo giai quyet nen tang", True, False, None),
+    ("engine", "ZCL_HDDT_PLAT_CLASSIC", "HDDT: Nen tang ABAP co dien", True, False, None),
+    ("engine", "ZCL_HDDT_HTTP", "HDDT: Bo goi REST dieu khien bang cau hinh", True, False, None),
+    ("engine", "ZCL_HDDT_TOKEN", "HDDT: Quan ly access token", True, False, None),
+    ("engine", "ZCL_HDDT_LOG", "HDDT: Ghi log API va so dang ky hoa don", True, False, None),
+    ("engine", "ZCL_HDDT_SERVICE", "HDDT: Service facade - cua vao duy nhat", True, False, None),
+    ("engine", "ZCL_HDDT_SRC_BASE", "HDDT: Lop cha doc du lieu nguon (buyer/seller/thue)", False, True, None),
+    ("engine", "ZCL_HDDT_SRC_FI", "HDDT: Doc du lieu nguon chung tu FI", False, False, None),
+    ("engine", "ZCL_HDDT_SRC_SD", "HDDT: Doc hoa don billing SD chua co FI", False, False, None),
+    ("prov", "ZCL_HDDT_PROV_BASE", "HDDT: Lop cha truu tuong cho adapter", False, True, None),
+    ("prov", "ZCL_HDDT_PROV_VIETTEL", "HDDT: Adapter Viettel SInvoice", True, False, None),
+    ("prov", "ZCL_HDDT_PROV_FPT", "HDDT: Adapter FPT eInvoice", True, False, None),
+    ("prov", "ZCL_HDDT_PROV_TEMPLATE", "HDDT: Adapter tong quat theo mau payload", False, False, None),
+    ("prov", "ZCL_HDDT_PROV_VNPT", "HDDT: Adapter VNPT / Vinaphone", True, False, None),
 ]
 
 for folder, name, descr, final, abstract, category in CLASSES:
@@ -97,59 +97,56 @@ for folder, name, descr, final, abstract, category in CLASSES:
 # tpool: list of (ID, KEY, ENTRY)
 # ---------------------------------------------------------------------------
 PROGS = [
-    ("ui", "ZFIR_HDDT_INTEGRATION", "1", [
-        ("R", "", "Tich hop hoa don dien tu"),
-        ("I", "B01", "Chung tu nguon"),
-        ("I", "B02", "Nha cung cap va trang thai"),
-        ("I", "B03", "Tuy chon xu ly"),
-        ("S", "P_BUKRS", "Ma cong ty"),
-        ("S", "P_GJAHR", "Nam tai chinh"),
-        ("S", "S_BELNR", "So chung tu"),
-        ("S", "S_BUDAT", "Ngay ghi so"),
-        ("S", "S_BLART", "Loai chung tu"),
-        ("S", "S_BLDAT", "Ngay chung tu"),
-        ("S", "S_VBELN", "So billing SD"),
-        ("S", "S_KUNNR", "Khach hang"),
-        ("S", "S_USNAM", "Nguoi hach toan"),
-        ("S", "P_SRCT", "Loai nguon du lieu"),
-        ("S", "P_PROV", "Nha cung cap (trong = theo cau hinh)"),
-        ("S", "S_STAT", "Trang thai HDDT"),
-        ("S", "P_REVER", "Lay ca chung tu da dao / billing da huy"),
-        ("S", "P_TEST", "Test run (chi dung payload)"),
+    ("ui", "ZPG_HDDT_INTEGRATION", "1", [
+        ("R", "", "Tích hợp hoá đơn điện tử"),
+        ("I", "B01", "Chứng từ nguồn"),
+        ("I", "B02", "Nhà cung cấp và trạng thái"),
+        ("I", "B03", "Tuỳ chọn xử lý"),
+        ("S", "P_BUKRS", "Mã công ty"),
+        ("S", "P_GJAHR", "Năm tài chính"),
+        ("S", "S_BELNR", "Số chứng từ"),
+        ("S", "S_BUDAT", "Ngày ghi sổ"),
+        ("S", "S_BLART", "Loại chứng từ"),
+        ("S", "S_BLDAT", "Ngày chứng từ"),
+        ("S", "S_VBELN", "Số billing SD"),
+        ("S", "S_KUNNR", "Khách hàng"),
+        ("S", "S_USNAM", "Người hạch toán"),
+        ("S", "P_SRCT", "Loại nguồn dữ liệu"),
+        ("S", "P_PROV", "NCC (trống = theo cấu hình)"),
+        ("S", "S_STAT", "Trạng thái HĐĐT"),
+        ("S", "P_REVER", "Lấy cả CT đã đảo/billing huỷ"),
+        ("S", "P_TEST", "Test run (chỉ dựng payload)"),
     ]),
-    ("ui", "ZFIR_HDDT_INT_TOP", "I", [("R", "", "Include ZFIR_HDDT_INT_TOP")]),
-    ("ui", "ZFIR_HDDT_INT_SEL", "I", [("R", "", "Include ZFIR_HDDT_INT_SEL")]),
-    ("ui", "ZFIR_HDDT_INT_CL1", "I", [("R", "", "Include ZFIR_HDDT_INT_CL1")]),
-    ("ui", "ZFIR_HDDT_INT_EVT", "I", [("R", "", "Include ZFIR_HDDT_INT_EVT")]),
-    ("ui", "ZFIR_HDDT_INT_F01", "I", [("R", "", "Include ZFIR_HDDT_INT_F01")]),
-    ("ui", "ZFIR_HDDT_CONFIG", "1", [
-        ("R", "", "Cau hinh tich hop hoa don dien tu"),
+    ("ui", "ZPG_HDDT_INTEGRATION_TOP", "I", [("R", "", "Include ZPG_HDDT_INTEGRATION_TOP")]),
+    ("ui", "ZPG_HDDT_INTEGRATION_F01", "I", [("R", "", "Include ZPG_HDDT_INTEGRATION_F01")]),
+    ("ui", "ZPG_HDDT_CONFIG", "1", [
+        ("R", "", "Cấu hình tích hợp hoá đơn điện tử"),
     ]),
-    ("ui", "ZFIR_HDDT_LOG", "1", [
-        ("R", "", "Log tich hop hoa don dien tu"),
-        ("I", "B01", "Chung tu / thoi diem"),
-        ("I", "B02", "Loc theo ket qua"),
-        ("S", "P_BUKRS", "Ma cong ty"),
-        ("S", "P_GJAHR", "Nam tai chinh"),
-        ("S", "S_DOCNO", "So chung tu nguon"),
-        ("S", "S_DATE", "Ngay ghi log"),
-        ("S", "S_PROV", "Nha cung cap"),
-        ("S", "S_ACTION", "Ma nghiep vu"),
-        ("S", "S_CODE", "Ma HTTP"),
-        ("S", "P_ONLYER", "Chi hien dong loi"),
-        ("S", "P_TEST", "Kem ca dong Test run"),
-        ("S", "P_MAX", "So dong toi da"),
+    ("ui", "ZPG_HDDT_LOG", "1", [
+        ("R", "", "Log tích hợp hoá đơn điện tử"),
+        ("I", "B01", "Chứng từ / thời điểm"),
+        ("I", "B02", "Lọc theo kết quả"),
+        ("S", "P_BUKRS", "Mã công ty"),
+        ("S", "P_GJAHR", "Năm tài chính"),
+        ("S", "S_DOCNO", "Số chứng từ nguồn"),
+        ("S", "S_DATE", "Ngày ghi log"),
+        ("S", "S_PROV", "Nhà cung cấp"),
+        ("S", "S_ACTION", "Mã nghiệp vụ"),
+        ("S", "S_CODE", "Mã HTTP"),
+        ("S", "P_ONLYER", "Chỉ hiện dòng lỗi"),
+        ("S", "P_TEST", "Kèm cả dòng Test run"),
+        ("S", "P_MAX", "Số dòng tối đa"),
     ]),
-    ("ui", "ZFIR_HDDT_SETUP", "1", [
-        ("R", "", "Nap cau hinh khoi tao HDDT"),
-        ("I", "B01", "Pham vi nap cau hinh"),
-        ("I", "B02", "Che do chay"),
-        ("S", "P_BASE", "Danh muc / tham so / nguon du lieu chung"),
-        ("S", "P_PROV1", "Cau hinh Viettel SInvoice"),
-        ("S", "P_PROV2", "Cau hinh FPT eInvoice"),
-        ("S", "P_PROV3", "Cau hinh VNPT (khung)"),
-        ("S", "P_OVWRT", "Ghi de ban ghi da ton tai"),
-        ("S", "P_TEST", "Chi mo phong, khong ghi bang"),
+    ("ui", "ZPG_HDDT_SETUP", "1", [
+        ("R", "", "Nạp cấu hình khởi tạo HĐĐT"),
+        ("I", "B01", "Phạm vi nạp cấu hình"),
+        ("I", "B02", "Chế độ chạy"),
+        ("S", "P_BASE", "Danh mục, tham số, nguồn chung"),
+        ("S", "P_PROV1", "Cấu hình Viettel SInvoice"),
+        ("S", "P_PROV2", "Cấu hình FPT eInvoice"),
+        ("S", "P_PROV3", "Cấu hình VNPT (khung)"),
+        ("S", "P_OVWRT", "Ghi đè bản ghi đã tồn tại"),
+        ("S", "P_TEST", "Chỉ mô phỏng, không ghi bảng"),
     ]),
 ]
 
@@ -179,7 +176,7 @@ for folder, name, subc, tpool in PROGS:
 # ---------------------------------------------------------------------------
 # MESSAGE CLASS
 # ---------------------------------------------------------------------------
-MSAG = "ZFIE_HDDT"
+MSAG = "ZMS_HDDT"
 MSAG_TEXT = "HDDT: Thong bao tich hop hoa don dien tu"
 MESSAGES = [
     ("000", "&1 &2 &3 &4"),
@@ -218,9 +215,9 @@ write("engine", MSAG, "msag", "LCL_OBJECT_MSAG", b)
 # TRANSACTION
 # ---------------------------------------------------------------------------
 TRANS = [
-    ("ZFI_HDDT", "ZFIR_HDDT_INTEGRATION", "Tich hop hoa don dien tu"),
-    ("ZFI_HDDT_CFG", "ZFIR_HDDT_CONFIG", "Cau hinh hoa don dien tu"),
-    ("ZFI_HDDT_LOG", "ZFIR_HDDT_LOG", "Log tich hop hoa don dien tu"),
+    ("ZFI001", "ZPG_HDDT_INTEGRATION", "Tích hợp hoá đơn điện tử"),
+    ("ZFI002", "ZPG_HDDT_CONFIG", "Cấu hình hoá đơn điện tử"),
+    ("ZFI003", "ZPG_HDDT_LOG", "Log tích hợp hoá đơn điện tử"),
 ]
 
 for tcode, prog, text in TRANS:

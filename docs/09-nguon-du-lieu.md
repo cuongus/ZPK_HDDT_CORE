@@ -13,35 +13,35 @@ Private Cloud mà người dùng đánh giá phần FI/Billing là chuẩn:
 Nguyên tắc khi port: **giữ logic, bỏ hằng số**. Mọi giá trị đặc thù của dự án
 cũ (mã thuế `O*`, tài khoản `3331*`, loại điều kiện `ZPR0/ZC04/ZC05/ZMST`,
 loại billing `ZBT`, loại số định danh `VATRU`/`FS0001`, text ID `ZI03`/`GRUN`)
-đều chuyển thành bản ghi `ZFIT_HDDT_MAP` / `ZFIT_HDDT_PARM`. Chương trình
-`ZFIR_HDDT_SETUP` nạp chúng làm **ví dụ** — phải rà lại theo hệ thống của bạn.
+đều chuyển thành bản ghi `ZTB_HDDT_MAP` / `ZTB_HDDT_PARM`. Chương trình
+`ZPG_HDDT_SETUP` nạp chúng làm **ví dụ** — phải rà lại theo hệ thống của bạn.
 
 ---
 
 ## 1. Kiến trúc tầng nguồn
 
 ```
-ZFIIF_HDDT_SOURCE            select_documents( ty_selection ) -> ty_t_request
+ZIF_HDDT_SOURCE            select_documents( ty_selection ) -> ty_t_request
         │                    get_doc_state( bukrs gjahr docno ) -> ty_doc_state
         ▼
-ZFIC_HDDT_SRC_BASE (abstract) người bán, người mua, thuế suất, chốt thuế,
+ZCL_HDDT_SRC_BASE (abstract) người bán, người mua, thuế suất, chốt thuế,
         │                     tên hàng, đơn vị, thanh toán, tỷ giá, sổ đăng ký
-        ├── ZFIC_HDDT_SRC_FI  BKPF/BSEG/BSET (+ VBRP/ACDOCA khi AWTYP = VBRK)
-        └── ZFIC_HDDT_SRC_SD  VBRK/VBRP/PRCD_ELEMENTS chưa có chứng từ FI
+        ├── ZCL_HDDT_SRC_FI  BKPF/BSEG/BSET (+ VBRP/ACDOCA khi AWTYP = VBRK)
+        └── ZCL_HDDT_SRC_SD  VBRK/VBRP/PRCD_ELEMENTS chưa có chứng từ FI
 ```
 
-- Lớp nguồn được chọn bằng `ZFIT_HDDT_SRC (BUKRS, SRC_TYPE) → CLASSNAME`.
-  Mặc định: `('', 'FI') → ZFIC_HDDT_SRC_FI`, `('', 'SD') → ZFIC_HDDT_SRC_SD`.
+- Lớp nguồn được chọn bằng `ZTB_HDDT_SRC (BUKRS, SRC_TYPE) → CLASSNAME`.
+  Mặc định: `('', 'FI') → ZCL_HDDT_SRC_FI`, `('', 'SD') → ZCL_HDDT_SRC_SD`.
 - Lớp nguồn là nơi **duy nhất** đọc bảng nghiệp vụ SAP. Engine cần biết chứng
   từ đã đảo/huỷ hay chưa thì gọi `get_doc_state` — không `SELECT bkpf` trong
-  `ZFIC_HDDT_SERVICE`.
+  `ZCL_HDDT_SERVICE`.
 - Tầng này thuộc **nền tảng cổ điển** (đọc bảng trực tiếp, `READ_TEXT`,
   `POPUP_GET_VALUES`). Trên Public Cloud khai lớp nguồn khác trong
-  `ZFIT_HDDT_SRC` (đọc CDS released) — engine/adapter không đổi.
+  `ZTB_HDDT_SRC` (đọc CDS released) — engine/adapter không đổi.
 
 ---
 
-## 2. Nguồn FI — `ZFIC_HDDT_SRC_FI`
+## 2. Nguồn FI — `ZCL_HDDT_SRC_FI`
 
 ### 2.1 Chọn chứng từ (port từ `FORM get_data`)
 
@@ -49,7 +49,7 @@ ZFIC_HDDT_SRC_BASE (abstract) người bán, người mua, thuế suất, chốt
 |---|---|
 | `BKPF INNER JOIN BSEG` với `koart = 'D'` | như cũ — một chứng từ = dòng khách hàng đầu tiên |
 | `bkpf~xreversing NE 'X'` | `k~xreversing = space` — không lấy chứng từ **đảo** |
-| `xreversed NE 'X' OR ( xreversed = 'X' AND serial NE '' )` | `keep_document`: chứng từ **bị đảo** chỉ giữ khi sổ `ZFIT_HDDT_INV` đã có số HĐ (để huỷ) hoặc người dùng tick *Lấy cả CT đã đảo* |
+| `xreversed NE 'X' OR ( xreversed = 'X' AND serial NE '' )` | `keep_document`: chứng từ **bị đảo** chỉ giữ khi sổ `ZTB_HDDT_INV` đã có số HĐ (để huỷ) hoặc người dùng tick *Lấy cả CT đã đảo* |
 | `mwskz LIKE 'O%' OR mwskz = '**'` | MAP `TAXCODE` (mẫu CP) trên mã thuế dòng khách hàng; seed `O*`, `**` |
 | `ztb_e_doctype` | range `BLART` màn hình, trống → MAP `DOCTYPE`, trống nữa → mọi loại |
 | `awkey IN s_vbeln`, `usnam IN s_usnam`, `s_kunnr`, `s_bldat` | các range mới của `ty_selection` |
@@ -61,7 +61,7 @@ ZFIC_HDDT_SRC_BASE (abstract) người bán, người mua, thuế suất, chốt
 |---|---|---|
 | `currency` | `BKPF-WAERS` | |
 | `exch_rate` | `exch_rate_of`: VND/tiền ghi sổ → 1; khác → `abs(KURSF) × EXCH_RATE_FACTOR` | dự án cũ nhân cứng 1000 → thành tham số, mặc định 1 |
-| `inv_date` | `ZFIT_HDDT_DATE` (1 BUDAT / 2 CPUDT / 3 SY-DATUM / 4 BLDAT) rồi **cap** `INV_DATE_MAX_BACKDAYS` | dự án cũ: `IF sy-datum - date > 1 THEN sy-datum - 1` → tham số, seed `1` |
+| `inv_date` | `ZTB_HDDT_DATE` (1 BUDAT / 2 CPUDT / 3 SY-DATUM / 4 BLDAT) rồi **cap** `INV_DATE_MAX_BACKDAYS` | dự án cũ: `IF sy-datum - date > 1 THEN sy-datum - 1` → tham số, seed `1` |
 | `note` | `BKPF-BKTXT` | |
 | `contract_no` | `VBKD-BSTKD` của đơn bán (khi có billing) | dự án cũ đưa vào `bstkd` |
 | `payments` | `BSEG-ZLSCH` dòng khách → không có thì `VBRK-ZLSCH` → không có thì `DEFAULT_PAYMENT` | MAP `PAYMENT` |
@@ -88,7 +88,7 @@ qua `CALL TRANSACTION` + `ESLH/ESLL`) — đặc thù một khách hàng, không
 
 ---
 
-## 3. Nguồn Billing SD chưa có FI — `ZFIC_HDDT_SRC_SD`
+## 3. Nguồn Billing SD chưa có FI — `ZCL_HDDT_SRC_SD`
 
 Port từ nhánh *Billing No FI* (`vbrk~fkart IN ('FP','ZBT')`, `vbeln NOT IN
 acdoca`) và `process_sd_no_refer_fi`.
@@ -104,7 +104,7 @@ acdoca`) và `process_sd_no_refer_fi`.
 
 ---
 
-## 4. Người bán / người mua — `ZFIC_HDDT_SRC_BASE`
+## 4. Người bán / người mua — `ZCL_HDDT_SRC_BASE`
 
 ### Người bán (`ZFM_GET_SELLER`)
 `T001 (BUTXT, STCEG, ADRNR)` → `ADRC` (NAME1+NAME2, địa chỉ ghép
@@ -129,7 +129,7 @@ thoại) → `ADR6` email đầu tiên. Cache theo `BUKRS`. Bật bằng
 
 ---
 
-## 5. Kiểm tra nghiệp vụ theo trạng thái — `ZFIC_HDDT_SERVICE=>CHECK_ACTION`
+## 5. Kiểm tra nghiệp vụ theo trạng thái — `ZCL_HDDT_SERVICE=>CHECK_ACTION`
 
 Port từ `get_data_integration` và `dieu_chinh_e_invoices`, chạy ở **engine**
 (bước 4b, sau `fill_defaults`, áp cả Test run) để job/BAPI cũng bị chặn.
@@ -137,7 +137,7 @@ Tắt bằng `STATUS_CHECK = N`.
 
 Ánh xạ trạng thái dự án cũ → package:
 
-| Cũ | Ý nghĩa | Package `ZFIDO_HDDT_STATUS` |
+| Cũ | Ý nghĩa | Package `ZDO_HDDT_STATUS` |
 |---|---|---|
 | 01 | chưa tích hợp | 00 |
 | 02 | đã lập nháp | 30 (chờ duyệt) |
@@ -156,7 +156,7 @@ Tắt bằng `STATUS_CHECK = N`.
 | Huỷ / xoá / thông báo sai sót | đã có trong sổ và trạng thái ∉ {00, 90, 80}; chứng từ SAP **đã đảo** (`CANCEL_REQUIRES_REVERSAL`, `N` để tắt) |
 | Tra cứu / lấy file / gửi mail | đã có trong sổ |
 
-Sau khi HĐ điều chỉnh / thay thế thành công, `ZFIC_HDDT_LOG=>MARK_ORIGINAL`
+Sau khi HĐ điều chỉnh / thay thế thành công, `ZCL_HDDT_LOG=>MARK_ORIGINAL`
 đổi trạng thái HĐ gốc thành 60 / 70 (dự án cũ ghi `XREF2_HD = 06/07`).
 
 Chọn HĐ gốc trên màn hình: nếu sổ chưa có `REF_DOCNO`, `FORM fill_original`
@@ -200,10 +200,10 @@ cho engine.
 |---|---|
 | Hoá đơn **gom** (`ZGOM_INV`, `ztb_e_gomh/goml/map_gom`, `NUMBER_GET_NEXT`) | nghiệp vụ riêng; cần lớp nguồn `GOM` + bảng gom — interface đã có |
 | **Phiếu xuất kho** (`get_pxk`: MKPF/MSEG, `ztb_e_bwart`, RESB) | lớp nguồn `MM`/`PXK` riêng |
-| Ghi ngược `BKPF` (`XREF1_HD` ngày, `XBLNR` ký hiệu#số, `XREF2_HD` 04/06/07) | UPDATE trực tiếp BKPF — cân nhắc BAPI/`FI_DOCUMENT_CHANGE`; hiện trạng thái nằm ở `ZFIT_HDDT_INV` |
+| Ghi ngược `BKPF` (`XREF1_HD` ngày, `XBLNR` ký hiệu#số, `XREF2_HD` 04/06/07) | UPDATE trực tiếp BKPF — cân nhắc BAPI/`FI_DOCUMENT_CHANGE`; hiện trạng thái nằm ở `ZTB_HDDT_INV` |
 | `ZLONGTEXT` trên BSEG | trường Z của khách hàng |
 | Service entry sheet BOQ (`ZO02`) | đặc thù |
-| `ztb_e_status` (mã NCC → trạng thái + `gom_flag`) | đã có `ZFIT_HDDT_STAT` |
+| `ztb_e_status` (mã NCC → trạng thái + `gom_flag`) | đã có `ZTB_HDDT_STAT` |
 
 **[Unverified]** trên hệ thật: tên trường `BSEC-BANKS/BANKL/BANKN/INTAD`,
 `ACDOCA-BUZEI = BSEG-BUZEI` cho chứng từ billing, `PRCD_ELEMENTS-KINAK`,

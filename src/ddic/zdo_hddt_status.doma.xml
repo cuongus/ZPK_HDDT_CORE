@@ -1,0 +1,89 @@
+<?xml version="1.0" encoding="utf-8"?>
+<abapGit version="v1.0.0" serializer="LCL_OBJECT_DOMA" serializer_version="v1.0.0">
+ <asx:abap xmlns:asx="http://www.sap.com/abapxml" version="1.0">
+  <asx:values>
+   <DD01V>
+    <DOMNAME>ZDO_HDDT_STATUS</DOMNAME>
+    <DDLANGUAGE>E</DDLANGUAGE>
+    <DATATYPE>CHAR</DATATYPE>
+    <LENG>000002</LENG>
+    <OUTPUTLEN>000002</OUTPUTLEN>
+    <VALEXI>X</VALEXI>
+    <DDTEXT>HDDT: Trang thai hoa don trong SAP</DDTEXT>
+    <DOMMASTER>E</DOMMASTER>
+   </DD01V>
+   <DD07V_TAB>
+    <DD07V>
+     <DOMNAME>ZDO_HDDT_STATUS</DOMNAME>
+     <VALPOS>0001</VALPOS>
+     <DDLANGUAGE>E</DDLANGUAGE>
+     <DOMVALUE_L>00</DOMVALUE_L>
+     <DDTEXT>Chưa tích hợp</DDTEXT>
+    </DD07V>
+    <DD07V>
+     <DOMNAME>ZDO_HDDT_STATUS</DOMNAME>
+     <VALPOS>0002</VALPOS>
+     <DDLANGUAGE>E</DDLANGUAGE>
+     <DOMVALUE_L>10</DOMVALUE_L>
+     <DDTEXT>Đã gửi - chờ phản hồi</DDTEXT>
+    </DD07V>
+    <DD07V>
+     <DOMNAME>ZDO_HDDT_STATUS</DOMNAME>
+     <VALPOS>0003</VALPOS>
+     <DDLANGUAGE>E</DDLANGUAGE>
+     <DOMVALUE_L>20</DOMVALUE_L>
+     <DDTEXT>Chờ cấp số</DDTEXT>
+    </DD07V>
+    <DD07V>
+     <DOMNAME>ZDO_HDDT_STATUS</DOMNAME>
+     <VALPOS>0004</VALPOS>
+     <DDLANGUAGE>E</DDLANGUAGE>
+     <DOMVALUE_L>30</DOMVALUE_L>
+     <DDTEXT>Chờ duyệt</DDTEXT>
+    </DD07V>
+    <DD07V>
+     <DOMNAME>ZDO_HDDT_STATUS</DOMNAME>
+     <VALPOS>0005</VALPOS>
+     <DDLANGUAGE>E</DDLANGUAGE>
+     <DOMVALUE_L>40</DOMVALUE_L>
+     <DDTEXT>Đã phát hành</DDTEXT>
+    </DD07V>
+    <DD07V>
+     <DOMNAME>ZDO_HDDT_STATUS</DOMNAME>
+     <VALPOS>0006</VALPOS>
+     <DDLANGUAGE>E</DDLANGUAGE>
+     <DOMVALUE_L>50</DOMVALUE_L>
+     <DDTEXT>Đã được CQT cấp mã</DDTEXT>
+    </DD07V>
+    <DD07V>
+     <DOMNAME>ZDO_HDDT_STATUS</DOMNAME>
+     <VALPOS>0007</VALPOS>
+     <DDLANGUAGE>E</DDLANGUAGE>
+     <DOMVALUE_L>60</DOMVALUE_L>
+     <DDTEXT>Đã điều chỉnh</DDTEXT>
+    </DD07V>
+    <DD07V>
+     <DOMNAME>ZDO_HDDT_STATUS</DOMNAME>
+     <VALPOS>0008</VALPOS>
+     <DDLANGUAGE>E</DDLANGUAGE>
+     <DOMVALUE_L>70</DOMVALUE_L>
+     <DDTEXT>Đã thay thế</DDTEXT>
+    </DD07V>
+    <DD07V>
+     <DOMNAME>ZDO_HDDT_STATUS</DOMNAME>
+     <VALPOS>0009</VALPOS>
+     <DDLANGUAGE>E</DDLANGUAGE>
+     <DOMVALUE_L>80</DOMVALUE_L>
+     <DDTEXT>Đã huỷ</DDTEXT>
+    </DD07V>
+    <DD07V>
+     <DOMNAME>ZDO_HDDT_STATUS</DOMNAME>
+     <VALPOS>0010</VALPOS>
+     <DDLANGUAGE>E</DDLANGUAGE>
+     <DOMVALUE_L>90</DOMVALUE_L>
+     <DDTEXT>Lỗi tích hợp</DDTEXT>
+    </DD07V>
+   </DD07V_TAB>
+  </asx:values>
+ </asx:abap>
+</abapGit>

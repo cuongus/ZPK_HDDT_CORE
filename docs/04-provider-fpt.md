@@ -1,6 +1,6 @@
 # 04 — Adapter FPT eInvoice
 
-Lớp: `ZFIC_HDDT_PROV_FPT` (kế thừa `ZFIC_HDDT_PROV_BASE`)
+Lớp: `ZCL_HDDT_PROV_FPT` (kế thừa `ZCL_HDDT_PROV_BASE`)
 
 ## 1. Nguồn tham chiếu đã dùng
 
@@ -11,7 +11,7 @@ Lớp: `ZFIC_HDDT_PROV_FPT` (kế thừa `ZFIC_HDDT_PROV_BASE`)
 
 Các phần dưới đây **đã đối chiếu tài liệu**, không phải suy đoán.
 
-## 2. Endpoint (đã nạp bởi `ZFIR_HDDT_SETUP`)
+## 2. Endpoint (đã nạp bởi `ZPG_HDDT_SETUP`)
 
 Base URL UAT: `https://api-uat.einvoice.fpt.com.vn`
 
@@ -78,7 +78,7 @@ Adapter cài trong `GET_HEADERS( )`, chỉ khi `ACTION = SEARCH_INVOICE`:
 
 | Header | Nguồn |
 |---|---|
-| `stax` | `ZFIT_HDDT_CRED-TAXCODE` |
+| `stax` | `ZTB_HDDT_CRED-TAXCODE` |
 | `form` / `serial` / `seq` / `sid` | header hoá đơn trong request |
 | `type` | `ty_request-params['type']`, mặc định `json`; các giá trị khác: `xml`, `pdf`, `cvt`, `base64xml` |
 | `fd` / `td` / `btax` / `api` / `lang` | do caller truyền trong `ty_request-params` |
@@ -106,7 +106,7 @@ Header rỗng bị xoá để FPT không hiểu là điều kiện lọc trống
 | `place` | tham số `FPT_PLACE` theo công ty, hoặc `header-place`. **Bắt buộc** |
 | `noti_type` | `1` = Huỷ |
 | `type_ref` | `1` = HĐ theo NĐ123/2020 |
-| `form`/`serial`/`seq`/`idt` | lấy từ request; nếu trống thì đọc sổ đăng ký `ZFIT_HDDT_INV` |
+| `form`/`serial`/`seq`/`idt` | lấy từ request; nếu trống thì đọc sổ đăng ký `ZTB_HDDT_INV` |
 
 ## 6. Xoá hoá đơn chờ cấp số (mục 3.10.3)
 
@@ -134,12 +134,12 @@ không phải JSON — adapter nhận biết và xử lý.
 
 | Cách | `AUTH_MODE` | `FPT_USER_IN_BODY` | Ghi chú |
 |---|---|---|---|
-| Tài khoản trong payload | `N` | `X` | Mặc định `ZFIR_HDDT_SETUP` nạp. Đơn giản nhất, nhưng mật khẩu phải nằm trong `APISECRET` hoặc vault |
+| Tài khoản trong payload | `N` | `X` | Mặc định `ZPG_HDDT_SETUP` nạp. Đơn giản nhất, nhưng mật khẩu phải nằm trong `APISECRET` hoặc vault |
 | Basic auth (mục 3.10.5.2) | `B` | `N` | Dùng được RFC destination → **an toàn nhất** |
 | JWT (mục 3.11) | `T` | `N` | Core gọi `/c_signin`, body trả về là chuỗi JWT thuần; cache theo `TOKEN_TTL` |
 
 ## 9. Tài khoản UAT trong tài liệu
 
 Tài liệu dùng ví dụ `0100100008.admin`. Định dạng tài khoản FPT là
-`<MST>.<tên đăng nhập>`, khai vào `ZFIT_HDDT_CRED-APIUSER`;
+`<MST>.<tên đăng nhập>`, khai vào `ZTB_HDDT_CRED-APIUSER`;
 `TAXCODE` chỉ điền phần MST.

@@ -1,6 +1,6 @@
 # 05 — Adapter VNPT / Vinaphone (theo mẫu payload)
 
-Lớp: `ZFIC_HDDT_PROV_VNPT` → kế thừa `ZFIC_HDDT_PROV_TEMPLATE`
+Lớp: `ZCL_HDDT_PROV_VNPT` → kế thừa `ZCL_HDDT_PROV_TEMPLATE`
 
 ## 1. Trạng thái — đọc trước
 
@@ -9,13 +9,13 @@ Bộ tài liệu chỉ gồm Viettel v2.44 và FPT v2.4.7.
 
 Vì vậy adapter VNPT **không hardcode** cấu trúc payload — nếu tự suy đoán thì
 gần như chắc chắn sai và tệ hơn là *trông như đúng*. Thay vào đó nó dựng payload
-từ **mẫu (template)** khai trong bảng `ZFIT_HDDT_TPL`.
+từ **mẫu (template)** khai trong bảng `ZTB_HDDT_TPL`.
 
 Khi có tài liệu VNPT, việc cần làm:
 
-1. Dán mẫu payload vào `ZFIT_HDDT_TPL` (một dòng cho mỗi nghiệp vụ).
-2. Khai endpoint vào `ZFIT_HDDT_ACT`.
-3. Khai URL / xác thực vào `ZFIT_HDDT_CONN`, bật `XACTIVE`.
+1. Dán mẫu payload vào `ZTB_HDDT_TPL` (một dòng cho mỗi nghiệp vụ).
+2. Khai endpoint vào `ZTB_HDDT_ACT`.
+3. Khai URL / xác thực vào `ZTB_HDDT_CONN`, bật `XACTIVE`.
 
 **Không phải viết một dòng ABAP nào.**
 
@@ -34,9 +34,9 @@ cả payload **XML**.
 | `{{buyer.<field>}}` | `ty_invoice-buyer` (code, tax_code, legal_name, person_name, address, phone, email, bank_name, bank_acct, id_number, budget_code) |
 | `{{summary.<field>}}` | `ty_invoice-summary` (amount_wo_tax, amount_wo_tax_l, tax_amount, tax_amount_l, total, total_l, disc_amount, amount_in_words) |
 | `{{adjust.<field>}}` | `ty_invoice-adjust` (adj_type, adj_direction, org_serial, org_seq, org_inv_date, doc_ref_no, doc_ref_date, reason) |
-| `{{cred.<field>}}` | `ZFIT_HDDT_CRED` (taxcode, template, serial, apiuser, apisecret) |
+| `{{cred.<field>}}` | `ZTB_HDDT_CRED` (taxcode, template, serial, apiuser, apisecret) |
 | `{{req.<field>}}` | `ty_request` (bukrs, gjahr, src_type, src_docno, provider, action) |
-| `{{parm.<TEN_THAM_SO>}}` | `ZFIT_HDDT_PARM` của chính nhà cung cấp này |
+| `{{parm.<TEN_THAM_SO>}}` | `ZTB_HDDT_PARM` của chính nhà cung cấp này |
 
 ### Hàm dựng sẵn
 
@@ -82,7 +82,7 @@ ghi chú) — nếu không, một dấu `"` trong tên khách hàng sẽ làm v�
 
 ## 3. Ví dụ mẫu JSON
 
-`ZFIT_HDDT_TPL`: `PROVIDER = VNPT`, `ACTION = CREATE_INVOICE`, `XACTIVE = X`
+`ZTB_HDDT_TPL`: `PROVIDER = VNPT`, `ACTION = CREATE_INVOICE`, `XACTIVE = X`
 
 ```json
 {
@@ -123,7 +123,7 @@ ghi chú) — nếu không, một dấu `"` trong tên khách hàng sẽ làm v�
 
 > Thủ thuật `{}` ở cuối mảng: mẫu là chuỗi văn bản nên không tự bỏ dấu phẩy sau
 > phần tử cuối. Nếu nhà cung cấp không chấp nhận phần tử rỗng, hãy dùng adapter
-> chuyên biệt (kế thừa `ZFIC_HDDT_PROV_BASE`, dùng `ZFIC_HDDT_JSON` writer — nó
+> chuyên biệt (kế thừa `ZCL_HDDT_PROV_BASE`, dùng `ZCL_HDDT_JSON` writer — nó
 > quản lý dấu phẩy tự động).
 
 ## 4. Ví dụ mẫu XML
@@ -161,24 +161,24 @@ API VNPT cổ điển nhận một chuỗi XML trong tham số `xmlInvData`:
 </Invoice></Inv></Invoices>
 ```
 
-Nhớ đặt `ZFIT_HDDT_ACT-CONT_TYPE` phù hợp (`text/xml` hoặc
+Nhớ đặt `ZTB_HDDT_ACT-CONT_TYPE` phù hợp (`text/xml` hoặc
 `application/soap+xml`).
 
 ## 5. Bóc response
 
-`ZFIC_HDDT_PROV_VNPT~PARSE_RESPONSE` xử lý:
+`ZCL_HDDT_PROV_VNPT~PARSE_RESPONSE` xử lý:
 
 | Dạng response | Cách xử lý |
 |---|---|
-| JSON / XML (bắt đầu `{`, `[`, `<`) | chuyển cho lớp cha `ZFIC_HDDT_PROV_TEMPLATE`: parse JSON, bóc `serial`, `seq`, `sec`, `link`, `message` |
+| JSON / XML (bắt đầu `{`, `[`, `<`) | chuyển cho lớp cha `ZCL_HDDT_PROV_TEMPLATE`: parse JSON, bóc `serial`, `seq`, `sec`, `link`, `message` |
 | Text `OK:<mẫu>;<ký hiệu>-<số>` | `SUCCESS = X`, tách `TEMPLATE` / `SERIAL` / `SEQ` |
-| Text `ERR:<n>` | `PROV_STATUS = 'ERR<n>'`, tra `ZFIT_HDDT_STAT` để ra thông điệp tiếng Việt |
+| Text `ERR:<n>` | `PROV_STATUS = 'ERR<n>'`, tra `ZTB_HDDT_STAT` để ra thông điệp tiếng Việt |
 
 > **[Unverified]** Quy ước `OK:` / `ERR:n` là quy ước phổ biến của API VNPT cổ
 > điển, **chưa đối chiếu tài liệu**. Nếu hợp đồng của bạn dùng REST/JSON thì
 > nhánh JSON của lớp cha đã xử lý sẵn, không cần sửa gì.
 
-Khai bảng mã lỗi VNPT vào `ZFIT_HDDT_STAT` để có thông điệp tiếng Việt:
+Khai bảng mã lỗi VNPT vào `ZTB_HDDT_STAT` để có thông điệp tiếng Việt:
 
 ```
 PROVIDER=VNPT  ACTION=*  RC_CODE=ERR1  SAP_STATUS=90  MSGTY=E  MSG_TEXT=Tai khoan khong hop le
@@ -188,7 +188,7 @@ PROVIDER=VNPT  ACTION=*  RC_CODE=OK    SAP_STATUS=40  MSGTY=S  MSG_TEXT=Da phat 
 
 ## 6. Khi nào nên viết adapter chuyên biệt thay vì dùng mẫu
 
-| Dùng mẫu (`ZFIT_HDDT_TPL`) | Viết lớp riêng |
+| Dùng mẫu (`ZTB_HDDT_TPL`) | Viết lớp riêng |
 |---|---|
 | Payload dạng "phẳng", ánh xạ 1-1 với canonical model | Cần logic điều kiện (thẻ này chỉ gửi khi điều chỉnh tăng…) |
 | Không phải bỏ thẻ rỗng | Phải bỏ thẻ rỗng theo từng trường hợp |

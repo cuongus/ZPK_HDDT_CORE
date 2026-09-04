@@ -1,6 +1,6 @@
 # 03 — Adapter Viettel SInvoice
 
-Lớp: `ZFIC_HDDT_PROV_VIETTEL` (kế thừa `ZFIC_HDDT_PROV_BASE`)
+Lớp: `ZCL_HDDT_PROV_VIETTEL` (kế thừa `ZCL_HDDT_PROV_BASE`)
 
 ## 1. Nguồn tham chiếu — ĐÃ ĐỐI CHIẾU TÀI LIỆU
 
@@ -14,7 +14,7 @@ Bản đầu tiên của adapter dựng theo tên component DDIC của mã cũ (
 bảng `ZTB_JSON_REPLACE` để sửa chữ hoa/thường). Sau khi đối chiếu tài liệu v2.44:
 **toàn bộ tên thẻ đã đúng**, nhưng phát hiện **4 lỗi thật** — đã sửa, xem §7.
 
-## 2. Endpoint + Content-Type (đúng theo mục 7, đã nạp bởi `ZFIR_HDDT_SETUP`)
+## 2. Endpoint + Content-Type (đúng theo mục 7, đã nạp bởi `ZPG_HDDT_SETUP`)
 
 Base URL: `https://api-vinvoice.viettel.vn` — chỉ tới **host**, vì `/auth/login`
 không cùng tiền tố với `/services/einvoiceapplication/api/…`
@@ -35,7 +35,7 @@ không cùng tiền tố với `/services/einvoiceapplication/api/…`
 `…` = `/services/einvoiceapplication/api/InvoiceAPI`
 
 Ba nghiệp vụ gốc / điều chỉnh / thay thế **dùng chung một endpoint** — phân biệt
-bằng thẻ `adjustmentType`. Đây là lý do `ZFIT_HDDT_ACT` tách theo *nghiệp vụ*
+bằng thẻ `adjustmentType`. Đây là lý do `ZTB_HDDT_ACT` tách theo *nghiệp vụ*
 chứ không theo *endpoint*: FPT thì mỗi nghiệp vụ một URL riêng.
 
 > Ngoài ra tài liệu còn ghi form-urlencoded cho các mục 7.4 (lấy file có mã bí
@@ -130,7 +130,7 @@ Còn có: `itemType` (loại hàng hoá đặc thù — bắt buộc khi `select
 | `6` | Hàng hoá đặc trưng (NĐ70) — bắt buộc kèm `itemType` | có | có |
 
 Ánh xạ `item_type` của canonical model → `selection` nằm trong
-`ZFIT_HDDT_MAP` (`MAP_TYPE = ITEMTYPE`, `PROVIDER = VIETTEL`), nạp sẵn:
+`ZTB_HDDT_MAP` (`MAP_TYPE = ITEMTYPE`, `PROVIDER = VIETTEL`), nạp sẵn:
 `0→1` hàng hoá · `1→5` khuyến mại · `2→3` chiết khấu · `3→2` ghi chú.
 Sửa được bằng cấu hình, không phải sửa code.
 
@@ -160,9 +160,9 @@ Nhóm thẻ `is…Pos` và `isIncreaseItem` **chỉ gửi khi `adjustmentType = 
 
 | Tham số | Bắt buộc | Cách adapter điền |
 |---|---|---|
-| `supplierTaxCode` | ✔ | `ZFIT_HDDT_CRED-TAXCODE` |
+| `supplierTaxCode` | ✔ | `ZTB_HDDT_CRED-TAXCODE` |
 | `templateCode` | | mẫu số từ request, thiếu thì đọc sổ đăng ký |
-| `invoiceNo` | ✔ | ký hiệu + số; thiếu thì đọc `ZFIT_HDDT_INV`, không có thì báo lỗi rõ |
+| `invoiceNo` | ✔ | ký hiệu + số; thiếu thì đọc `ZTB_HDDT_INV`, không có thì báo lỗi rõ |
 | `strIssueDate` | ✔ | **epoch millis** ngày phát hành |
 | `additionalReferenceDesc` | ✔ | tên văn bản thoả thuận huỷ (max 400); trống thì dùng lý do huỷ để không bị 400 |
 | `additionalReferenceDate` | ✔ | **epoch millis** ngày thoả thuận |
@@ -205,7 +205,7 @@ Response phát hành (mục 7.2):
 nếu response trả `"invoiceNo": ""` thì **sau 30–90 giây** phải gọi lại
 `SEARCH_INVOICE` (7.21) để lấy số hoá đơn. Adapter đã đặt trạng thái
 `20 – Chờ cấp số` cho trường hợp này. Nên có job nền quét
-`ZFIT_HDDT_INV` với `STATUS = '20'` rồi gọi `SEARCH_INVOICE` — chưa cài trong
+`ZTB_HDDT_INV` với `STATUS = '20'` rồi gọi `SEARCH_INVOICE` — chưa cài trong
 bản này, xem việc còn lại ở [06-cai-dat.md §9](06-cai-dat.md).
 
 `codeOfTax` chỉ có giá trị với **hoá đơn máy tính tiền**; loại khác trả `null`.
@@ -214,9 +214,9 @@ bản này, xem việc còn lại ở [06-cai-dat.md §9](06-cai-dat.md).
 
 | # | Lỗi | Hậu quả nếu không sửa | Đã sửa |
 |---|---|---|---|
-| 1 | Huỷ hoá đơn (7.9) và tra cứu (7.21) gửi **JSON**, tài liệu yêu cầu **form-urlencoded** | Viettel không parse được body → huỷ hoá đơn luôn thất bại | `BUILD_FORM( )` trong lớp cha; `CONT_TYPE` trong `ZFIT_HDDT_ACT` |
+| 1 | Huỷ hoá đơn (7.9) và tra cứu (7.21) gửi **JSON**, tài liệu yêu cầu **form-urlencoded** | Viettel không parse được body → huỷ hoá đơn luôn thất bại | `BUILD_FORM( )` trong lớp cha; `CONT_TYPE` trong `ZTB_HDDT_ACT` |
 | 2 | `strIssueDate` / `additionalReferenceDate` gửi chuỗi `YYYY-MM-DD hh:mm:ss`, tài liệu yêu cầu **epoch millis** | Ngày sai định dạng → 400 | dùng `TO_EPOCH_MILLIS( )` |
-| 3 | **Thiếu hẳn thẻ `selection`** | Dòng ghi chú bị cộng vào tổng tiền, dòng chiết khấu bị tính như hàng hoá bán → **sai số tiền trên hoá đơn thuế** | `GET_SELECTION( )` + ánh xạ `ITEMTYPE` trong `ZFIT_HDDT_MAP`; dòng chiết khấu tự gửi `isIncreaseItem = false` |
+| 3 | **Thiếu hẳn thẻ `selection`** | Dòng ghi chú bị cộng vào tổng tiền, dòng chiết khấu bị tính như hàng hoá bán → **sai số tiền trên hoá đơn thuế** | `GET_SELECTION( )` + ánh xạ `ITEMTYPE` trong `ZTB_HDDT_MAP`; dòng chiết khấu tự gửi `isIncreaseItem = false` |
 | 4 | Tách `SERIAL`/`SEQ` bằng cách đoán chữ số ở cuối `invoiceNo` | Ký hiệu TT78 kết thúc bằng số (ví dụ `K23T01`) bị cắt sai → sổ đăng ký ghi sai số hoá đơn | bỏ **tiền tố ký hiệu đã biết** từ cấu hình; chỉ khi không khớp mới quay lại cách đoán |
 
 Thiếu sót nhỏ đã bổ sung cùng lúc: `adjustedNote` (lý do sai sót),
@@ -228,13 +228,13 @@ Thiếu sót nhỏ đã bổ sung cùng lúc: `adjustedNote` (lý do sai sót),
 Tài liệu: *"Cookie: giá trị access_token **hoặc** Authorization: username/pass
 như đăng nhập trên web"*.
 
-| `ZFIT_HDDT_CONN-AUTH_MODE` | Cách hoạt động |
+| `ZTB_HDDT_CONN-AUTH_MODE` | Cách hoạt động |
 |---|---|
 | `B` | Basic auth — đơn giản nhất, dùng được RFC destination (an toàn nhất) |
-| `T` | Bearer token: core gọi `LOGIN` → `/auth/login`, cache trong `ZFIT_HDDT_TOK` theo `TOKEN_TTL`; HTTP 401 thì đăng nhập lại đúng 1 lần |
+| `T` | Bearer token: core gọi `LOGIN` → `/auth/login`, cache trong `ZTB_HDDT_TOK` theo `TOKEN_TTL`; HTTP 401 thì đăng nhập lại đúng 1 lần |
 | `H` | Gửi kèm header `username` / `password` (cách mã cũ ở hệ EEMC dùng) |
 
-## 9. Quy tắc ngày lập hoá đơn — ảnh hưởng cấu hình `ZFIT_HDDT_DATE`
+## 9. Quy tắc ngày lập hoá đơn — ảnh hưởng cấu hình `ZTB_HDDT_DATE`
 
 Mục 7.2 mô tả 4 trường hợp tuỳ 2 checkbox trên portal SInvoice
 ("Cho phép ngày lập hoá đơn khác ngày hiện tại", "Tự động đặt giá trị cho ngày
@@ -243,7 +243,7 @@ lập hoá đơn bằng ngày lập gần nhất"). Điểm chung của cả 4:
 - Không truyền `invoiceIssuedDate` → Viettel lấy ngày giờ hiện tại (GMT+7).
 - **Số hoá đơn sau phải có thời gian ≥ số hoá đơn trước** trong cùng ký hiệu.
 
-Hệ quả thực tế: nếu đặt `ZFIT_HDDT_DATE-DATE_SRC = 1` (posting date) và phát
+Hệ quả thực tế: nếu đặt `ZTB_HDDT_DATE-DATE_SRC = 1` (posting date) và phát
 hành chứng từ cũ sau chứng từ mới, Viettel sẽ báo *ngày lập không hợp lệ*.
 An toàn nhất khi phát hành theo lô là `DATE_SRC = 3` (ngày hệ thống), hoặc phát
 hành đúng thứ tự thời gian chứng từ.
