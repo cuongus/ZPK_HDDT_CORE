@@ -35,6 +35,9 @@ CLASS zcl_hddt_json DEFINITION
     METHODS constructor
       IMPORTING i_skip_initial TYPE abap_bool DEFAULT abap_true .
 
+    "! Khởi tạo ký tự CR/LF/TAB dùng khi escape chuỗi (phải PUBLIC)
+    CLASS-METHODS class_constructor .
+
     METHODS begin_object
       IMPORTING i_name        TYPE string OPTIONAL
       RETURNING VALUE(ro_self) TYPE REF TO zcl_hddt_json .
@@ -147,8 +150,6 @@ CLASS zcl_hddt_json DEFINITION
     CLASS-DATA gv_cr  TYPE c LENGTH 1 .
     CLASS-DATA gv_lf  TYPE c LENGTH 1 .
     CLASS-DATA gv_tab TYPE c LENGTH 1 .
-
-    CLASS-METHODS class_constructor .
 
     DATA mv_buffer       TYPE string .
     DATA mv_skip_initial TYPE abap_bool .
