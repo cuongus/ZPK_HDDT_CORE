@@ -89,6 +89,30 @@
     </item>
     <item>
      <ID>S</ID>
+     <KEY>S_CPUDT</KEY>
+     <ENTRY>Ngày nhập chứng từ</ENTRY>
+     <LENGTH>18</LENGTH>
+    </item>
+    <item>
+     <ID>S</ID>
+     <KEY>S_SEQ</KEY>
+     <ENTRY>Số hoá đơn điện tử</ENTRY>
+     <LENGTH>18</LENGTH>
+    </item>
+    <item>
+     <ID>S</ID>
+     <KEY>S_GOM</KEY>
+     <ENTRY>Số chứng từ gom</ENTRY>
+     <LENGTH>15</LENGTH>
+    </item>
+    <item>
+     <ID>S</ID>
+     <KEY>P_ITYP</KEY>
+     <ENTRY>Mẫu hoá đơn phát hành</ENTRY>
+     <LENGTH>21</LENGTH>
+    </item>
+    <item>
+     <ID>S</ID>
      <KEY>P_SRCT</KEY>
      <ENTRY>Loại nguồn dữ liệu</ENTRY>
      <LENGTH>18</LENGTH>
@@ -115,6 +139,12 @@
      <ID>S</ID>
      <KEY>P_TEST</KEY>
      <ENTRY>Test run (chỉ dựng payload)</ENTRY>
+     <LENGTH>27</LENGTH>
+    </item>
+    <item>
+     <ID>S</ID>
+     <KEY>P_AUTO</KEY>
+     <ENTRY>Phát hành tự động (chỉ job)</ENTRY>
      <LENGTH>27</LENGTH>
     </item>
    </TPOOL>

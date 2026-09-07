@@ -35,6 +35,13 @@ push GitHub `cuongus/ZPK_HDDT_CORE`.**
 | D15 | **Huỷ** HĐĐT yêu cầu chứng từ SAP đã đảo; **thay thế** yêu cầu chứng từ gốc đã đảo | Quy tắc kế toán của dự án tham chiếu (`ZCANCELINV` chỉ khi `xreversed`; `type_dc = 2` yêu cầu `stblg`) | `CANCEL_REQUIRES_REVERSAL = N` để tắt huỷ; thay thế không có công tắc |
 | D16 | Lớp nguồn là nơi **duy nhất** đọc bảng nghiệp vụ SAP → thêm `GET_DOC_STATE` vào `ZIF_HDDT_SOURCE` | Engine cần biết đảo/huỷ nhưng không được `SELECT bkpf/vbrk` | Lớp nguồn cloud cài bằng CDS released; `ty_request-src_info` mang thông tin sẵn để không SELECT lại |
 | D17 | `ZTB_HDDT_INV-REF_DOCNO` lưu **số chứng từ SAP** của HĐ gốc (+ `REF_GJAHR`), không lưu idkey | Cần đọc lại sổ/ trạng thái đảo của HĐ gốc | `adjust-org_docno/org_gjahr/org_src_type`; fallback idkey cho bản ghi cũ |
+| D19 | Luồng FS MAG v0.5 **nháp → phát hành trên chính bản nháp** (`CREATE_DRAFT` → `ISSUE_INVOICE`), `create-appr-inv` chỉ cho job tự động | FS 3.6 + 3.7.3 (issue-invoice); tránh xoá nháp tạo lại làm nhảy số | `ISSUE_INVOICE` action mới; adapter FPT không gửi `aun` cho CREATE_DRAFT |
+| D20 | Khôi phục khi lỗi (90/45): **tra cứu trước** rồi chọn API (1 → issue, 2 → apprs, 3 → đồng bộ, không có → về 00) | FS 3.6.10: tuyệt đối không tạo lại / cấp số lại HĐ đã cấp số | `ZCL_HDDT_SERVICE->ISSUE_INVOICE`, `DELETE_DRAFT`; heuristic `IS_NOT_FOUND` **[Unverified]** |
+| D21 | Ghi ngược chứng từ nguồn qua interface `ZIF_HDDT_WRITEBACK` + tham số `WRITEBACK_CLASS`; engine không SELECT/UPDATE BKPF | FS 3.6.3/3.6.5 yêu cầu XBLNR/XREF2_HD; giữ I8 (engine không biết bảng SAP) | `ZCL_HDDT_WRITEBACK_FI` dùng `FI_DOCUMENT_CHANGE`, chỉ ghi khi khác; XREF2_HD 12 ký tự → cắt (docs/10 §8) |
+| D22 | Log dùng chung của khách hàng qua `ZIF_HDDT_LOG_SINK` + `LOG_SINK_CLASS`; `ZTB_HDDT_LOG` thêm trường khớp `ZTB_INT_LOG` | Bảng `ZTB_INT_LOG` thuộc khung tích hợp MAG, không thuộc package | sink không được raise; lỗi sink bị nuốt |
+| D23 | `IDKEY` (sid/FKEY) = **Company code + Số chứng từ + Năm** | FS 3.7.1 | đổi I7; package chưa import nên không có dữ liệu cũ |
+| D24 | Gom hoá đơn không dùng number range object; cấp số bằng `SELECT MAX` + `ENQUEUE_E_TABLE` | package tự đủ qua abapGit | `ZCL_HDDT_GOM=>NEXT_NUMBER`; `ZTB_HDDT_GOM` + `INV-GOM_NO` |
+| D25 | Giữ bộ mã trạng thái package (00–90, thêm 45 CQT từ chối) thay cho mã FS 01–99 | Domain đã có, ALV đọc DD07T; bảng ánh xạ docs/10 §5 | đổi mã chỉ ở `ZDO_HDDT_STATUS` + `gc_status` nếu MAG bắt buộc |
 
 **Bối cảnh đã kiểm chứng (không suy đoán):**
 - Code cũ EEMC (Viettel) và VJC (FPT): cùng tên `ZFM_CREATE_E_INVOICES`, khác nội dung hoàn toàn; destination hardcode `'EINVOICES'` / `'EINVOICES_FPT'`.
@@ -81,7 +88,7 @@ ZCL_HDDT_SERVICE  ── cửa vào duy nhất, không raise
 | I4. Adapter `GET_ID( )` = `ZTB_HDDT_PROV-PROVIDER` | factory kiểm tra, raise nếu lệch |
 | I5. Mật khẩu không bao giờ đi vào `ZTB_HDDT_LOG` | `MASK_SECRETS` chạy trước `to_raw` trong `LOG_CALL` |
 | I6. Số trong JSON: `.` thập phân, `-` phía trước, không zero dẫn đầu | `FORMAT_NUMBER` dùng `NUMBER = RAW` |
-| I7. `IDKEY` ổn định giữa các lần thử lại | `fill_defaults`: `bukrs+gjahr+src_docno` nếu caller không truyền |
+| I7. `IDKEY` ổn định giữa các lần thử lại | `fill_defaults`: `bukrs+src_docno+gjahr` (FS 3.7.1) nếu caller không truyền |
 | I8. Engine không SELECT bảng nghiệp vụ SAP (BKPF/BSEG/VBRK/BUT000…) — chỉ lớp nguồn | `grep -rliE "FROM (bkpf|bseg|bset|vbrk|vbrp|but000|kna1)" src/engine` → chỉ `zcl_hddt_src_*` |
 | I9. Hằng số nghiệp vụ **riêng của khách hàng** (mã thuế, tài khoản, loại điều kiện, text ID Z) không nằm trong code; mặc định trong code chỉ được là giá trị chuẩn SAP (`VATRU`, `GRUN`, `MWAS`) | `grep -rnE "(3331|ZPR0|ZMST|ZBT|FS0001|ZI03|ZC0[45])" src/engine \| grep -vE '^[^:]+:[0-9]+:\s*[*"]'` → 0 dòng lệnh (comment nhắc dự án tham chiếu được phép; seed chỉ trong `ZPG_HDDT_SETUP`) |
 
@@ -313,6 +320,7 @@ Bảng API tách qua `ZIF_HDDT_PLATFORM`:
 | Cao | Viettel bất đồng bộ: `invoiceNo` rỗng → phải `SEARCH_INVOICE` sau 30–90s | job quét `STATUS=20` chưa có |
 | Trung | Bản cloud: `ZCL_HDDT_PLAT_CLOUD`, `ZCL_HDDT_HTTP_CLOUD`, tách `ZCL_MANAGE_VIETTEL_EINVOICES` trên CASLA thành adapter | cần cookie `Casla_Dev` (080) để ghi |
 | Trung | Đối chiếu bảng cấu hình mới với 9 BO cấu hình CASLA (`ZJP_R_HD_*`) | tránh 2 bộ cấu hình song song |
+| Cao | FS MAG docs/10 §8: XREF2_HD 12 ký tự, `aun` cho adjust/replace, URL prod issue-invoice, response "không tìm thấy", màn hình sửa dòng gom | cần MAG / FPT xác nhận trước khi test |
 | Trung | Nguồn MM, hoá đơn **gom** (`ZGOM_INV`, `ztb_e_gomh/goml/map_gom`), **phiếu xuất kho** (`get_pxk` MKPF/MSEG), ghi ngược `BKPF` (`XREF1_HD/XBLNR/XREF2_HD`) | chưa port từ dự án tham chiếu — docs/09 §7 |
 | Trung | **[Unverified]** trên hệ thật: `BSEC-BANKS/BANKL/BANKN/INTAD`, `ACDOCA-BUZEI = BSEG-BUZEI` với CT billing, `PRCD_ELEMENTS-KINAK`, `KONP-LOEVM_KO`, `INTERFACES … ABSTRACT METHODS` + `REDEFINITION` ở lớp con | activate lần đầu sẽ lộ |
 | Thấp | Nguồn SD: GJAHR = năm dương lịch FKDAT — lệch với công ty có năm tài chính khác | dùng `T009` nếu cần |
@@ -345,6 +353,8 @@ Bảng API tách qua `ZIF_HDDT_PLATFORM`:
 - [ ] Không SELECT bảng cấu hình ngoài `ZCL_HDDT_CONFIG`.
 - [ ] Không để `EXECUTE` raise ra ngoài.
 - [ ] Không log gì trước khi qua `MASK_SECRETS`.
+- [ ] Nghiệp vụ mới -> thêm nhánh `CHECK_ACTION` (bảng điều kiện trạng thái) và `DERIVE_STATUS`; UI không tự kiểm trạng thái.
+- [ ] Không SELECT/UPDATE bảng nghiệp vụ SAP trong service: ghi ngược qua `ZIF_HDDT_WRITEBACK`.
 - [ ] ABAP SQL: `WHERE/ORDER BY` trước `INTO`/`UP TO`; điều kiện tuỳ chọn qua RANGE.
 
 **Trước khi release**
@@ -359,6 +369,7 @@ Bảng API tách qua `ZIF_HDDT_PLATFORM`:
 | 1 | 28/08/2026 | Build ban đầu 141 file; tự soát khi viết | 4 lỗi sửa ngay (§11) |
 | 2 | 28/08/2026 | Đối chiếu tài liệu Viettel v2.44 (162 trang) + FPT v2.4.7; phát hiện `ZPK_HDDT_CORE` tồn tại trên CASLA; tách tầng dùng chung | 4 lỗi Viettel + 1 sự cố script; tầng chung cloud-clean |
 | 3 | 28/08/2026 | Log tích hợp xstring + che secret + màn hình log; rà lại toàn bộ cú pháp SQL strict mode, API phân tầng, method thừa | 1 lỗi bảo mật nghiêm trọng, 5 lỗi cú pháp/logic; tạo tài liệu này |
+| 6 | 07/09/2026 | Đối chiếu FS MAG_SAP_2026_PM_FS_Tich hop HDDT v0.5 (docs/10): `ISSUE_INVOICE`, `apprs` riêng, `adjtype/ref` (API 3.2), trạng thái 45, `CHECK_ACTION` theo bảng FS, khôi phục theo tra cứu, gắn HĐ gốc + loại ĐC, validate trường bắt buộc, ghi ngược BKPF, email BCS, gom/gỡ gom, phát hành tự động (job), sửa ngày/giờ/tên hàng, phân quyền theo nút, log khớp ZTB_INT_LOG; 6 DE + 1 bảng + 33 message mới | D19–D25; 9 điểm chờ MAG xác nhận (docs/10 §8) |
 | 5 | 03/09/2026 | Rà + đổi tên toàn bộ theo chuẩn Private Cloud 03.09.2026 (§15): ~100 object, gộp include, 270 text có dấu, 415 field-symbol `<FS_>`, 223+ tham số scalar `I_/E_/C_/R_`, biến GUI toàn cục | 0 tên cũ còn lại trong `src`/`tools`; regenerate DDIC/meta; cấu trúc class/FORM kiểm bằng script |
 | 4 | 03/09/2026 | Port tầng đọc nguồn FI/Billing từ dự án private cloud (`zhddt.docx` + `ZFG_E_INVOICES` EEMC): `SRC_BASE` mới, `SRC_FI` viết lại, `SRC_SD` mới, `CHECK_ACTION` trong engine, `GET_DOC_STATE`, popup HĐ gốc, 13 PARM + 4 MAP_TYPE mới; tự rà cú pháp | 8 điểm sửa (§11 lượt 4); D12–D17; I8–I9; docs/09 |
 

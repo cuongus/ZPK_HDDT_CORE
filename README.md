@@ -135,7 +135,7 @@ Chi tiết + phân quyền + STRUST: [docs/06-cai-dat.md](docs/06-cai-dat.md)
 | `ZTB_HDDT_ITEM` | Chi tiết hàng hoá đã phát hành |
 | `ZTB_HDDT_LOG` | Log request/response từng lần gọi API — payload lưu dạng **xstring** (byte-exact), secret được che lúc ghi |
 
-Mô tả trường: [docs/02-cau-hinh.md](docs/02-cau-hinh.md) · Log tích hợp: [docs/08-log-tich-hop.md](docs/08-log-tich-hop.md) · Tầng đọc nguồn FI/SD và kiểm tra nghiệp vụ: [docs/09-nguon-du-lieu.md](docs/09-nguon-du-lieu.md)
+Mô tả trường: [docs/02-cau-hinh.md](docs/02-cau-hinh.md) · Log tích hợp: [docs/08-log-tich-hop.md](docs/08-log-tich-hop.md) · Tầng đọc nguồn FI/SD và kiểm tra nghiệp vụ: [docs/09-nguon-du-lieu.md](docs/09-nguon-du-lieu.md) · Đối chiếu FS MAG v0.5: [docs/10-doi-chieu-fs-mag.md](docs/10-doi-chieu-fs-mag.md)
 
 > **Đọc trước khi sửa code:** [Code_Review.md](Code_Review.md) — decision log, bất biến
 > kiến trúc, logic từng bước pipeline, phân tầng classic/cloud, kết quả các lượt
@@ -188,8 +188,9 @@ danh sách. Xem thêm `execute_many( )`.
 | Adapter **VNPT/Vinaphone** | **Chưa có tài liệu API** trong bộ tài liệu được cung cấp. Adapter kế thừa `ZCL_HDDT_PROV_TEMPLATE`: dán mẫu payload vào `ZTB_HDDT_TPL` là chạy, không phải viết ABAP |
 | Lớp đọc dữ liệu nguồn FI | Port từ dự án HĐĐT private cloud đang chạy (BKPF/BSEG/BSET, FI sinh từ billing SD qua ACDOCA/VBRP, khách lẻ BSEC, BP/CVI, chốt thuế theo BSET) — xem `docs/09`. Hằng số của dự án cũ đã thành MAP/PARM; seed trong SETUP là **ví dụ**, cần rà theo hệ thống của bạn |
 | Lớp đọc billing SD chưa có FI | `ZCL_HDDT_SRC_SD` (VBRK/VBRP/PRCD_ELEMENTS); cần cấu hình MAP `BILLTYPE` |
-| Kiểm tra nghiệp vụ theo trạng thái | Trong engine (`CHECK_ACTION`): không phát hành lại, không phát hành CT đã đảo, huỷ phải đảo trước, điều chỉnh/thay thế kiểm HĐ gốc |
-| Nguồn MM / hoá đơn gom / phiếu xuất kho / ghi ngược BKPF | Chưa cài đặt — điểm mở rộng đã có (`ZIF_HDDT_SOURCE` + `ZTB_HDDT_SRC`); xem `docs/09 §7` |
+| Kiểm tra nghiệp vụ theo trạng thái | Trong engine (`CHECK_ACTION`) theo bảng điều kiện của FS MAG v0.5 (docs/10 §3): nháp / phát hành / huỷ nháp / điều chỉnh / gom |
+| Luồng FS MAG v0.5 | Tích hợp HĐ (nháp) → Phát hành HĐ (issue-invoice trên chính bản nháp) → Cập nhật HĐ; khôi phục khi lỗi bằng tra cứu; HĐ Điều chỉnh gắn HĐ gốc; Send Email (BCS); Gom / Huỷ Gom; phát hành tự động bằng job; ghi ngược BKPF-XBLNR/XREF2_HD — 9 điểm chờ MAG xác nhận ở docs/10 §8 |
+| Nguồn MM / phiếu xuất kho | Chưa cài đặt — điểm mở rộng đã có (`ZIF_HDDT_SOURCE` + `ZTB_HDDT_SRC`); xem `docs/09 §7` |
 | Chương trình reorg bảng log | **Chưa có.** `ZTB_HDDT_LOG` lớn nhanh (~1 GB / 100.000 hoá đơn / năm) — 3 hướng xử lý ở [docs/08 §8](docs/08-log-tich-hop.md) |
 | Job lấy lại số hoá đơn (Viettel bất đồng bộ) | **Chưa cài.** Viettel có thể trả `invoiceNo` rỗng; sau 30–90 giây phải gọi `SEARCH_INVOICE` để lấy số. Core đã đặt trạng thái `20 – Chờ cấp số`; cần job nền quét `ZTB_HDDT_INV` theo trạng thái này |
 

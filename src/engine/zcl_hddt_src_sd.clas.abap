@@ -133,6 +133,7 @@ CLASS zcl_hddt_src_sd IMPLEMENTATION.
       WHERE bukrs  = @is_selection-bukrs
         AND fkdat BETWEEN @lv_from AND @lv_to
         AND fkdat IN @is_selection-r_budat
+        AND erdat IN @is_selection-r_cpudt
         AND vbeln IN @is_selection-r_docno
         AND vbeln IN @is_selection-r_vbeln
         AND fkart IN @lr_fkart
@@ -173,6 +174,10 @@ CLASS zcl_hddt_src_sd IMPLEMENTATION.
       IF keep_document( i_reversed  = xsdbool( <fs_vbrk>-fksto = 'X' )
                         is_reg       = ls_reg
                         is_selection = is_selection ) = abap_false.
+        DELETE lt_vbrk.
+        CONTINUE.
+      ENDIF.
+      IF is_selection-r_seq IS NOT INITIAL AND ls_reg-seq NOT IN is_selection-r_seq.
         DELETE lt_vbrk.
       ENDIF.
     ENDLOOP.
@@ -228,6 +233,13 @@ CLASS zcl_hddt_src_sd IMPLEMENTATION.
                                 i_use_cond = lv_use_cond
                                 i_gjahr    = is_selection-gjahr ).
       IF ls_req-src_docno IS NOT INITIAL.
+        ls_req-invoice-header-inv_type = is_selection-inv_type.
+        apply_registry_edits(
+          EXPORTING is_reg     = registry_of( i_bukrs    = ls_req-bukrs
+                                              i_gjahr    = ls_req-gjahr
+                                              i_src_type = gc_src_type
+                                              i_docno    = ls_req-src_docno )
+          CHANGING  cs_request = ls_req ).
         APPEND ls_req TO rt_request.
       ENDIF.
     ENDLOOP.

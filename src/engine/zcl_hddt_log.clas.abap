@@ -105,6 +105,37 @@ CLASS zcl_hddt_log DEFINITION
       IMPORTING is_request TYPE zif_hddt_types=>ty_request
                 i_status  TYPE zde_hddt_status .
 
+    "! FS MAG: đánh dấu chứng từ thành viên thuộc hoá đơn gom (trống = gỡ)
+    METHODS set_gom_no
+      IMPORTING is_request TYPE zif_hddt_types=>ty_request
+                i_gom_no   TYPE zde_hddt_docno .
+
+    "! FS MAG: người dùng sửa ngày/giờ phát hành, tên hàng trước khi gửi
+    METHODS save_edit
+      IMPORTING is_request  TYPE zif_hddt_types=>ty_request
+                i_inv_date  TYPE dats
+                i_inv_time  TYPE uzeit
+                i_item_text TYPE string .
+
+    "! FS MAG 3.6.4: gắn (hoặc gỡ khi docno trống) hoá đơn gốc cho chứng từ
+    METHODS attach_original
+      IMPORTING is_request    TYPE zif_hddt_types=>ty_request
+                i_org_docno   TYPE zde_hddt_docno
+                i_org_gjahr   TYPE gjahr
+                i_org_srctype TYPE zde_hddt_srctype
+                i_adj_type    TYPE zde_hddt_adjtype
+                i_adj_dir     TYPE zde_hddt_adjdir .
+
+    METHODS set_mail_status
+      IMPORTING is_request TYPE zif_hddt_types=>ty_request
+                i_status   TYPE zde_hddt_mailst .
+
+    "! Đưa chứng từ về 'chưa tích hợp' (huỷ nháp thành công / NCC không
+    "! còn hoá đơn): xoá số, ký hiệu, link, trạng thái NCC.
+    METHODS reset_registry
+      IMPORTING is_request TYPE zif_hddt_types=>ty_request
+                i_message  TYPE string OPTIONAL .
+
     CLASS-METHODS read_invoice
       IMPORTING i_bukrs      TYPE bukrs
                 i_gjahr      TYPE gjahr
@@ -138,6 +169,21 @@ CLASS zcl_hddt_log DEFINITION
     METHODS to_raw
       IMPORTING i_text        TYPE string
       RETURNING VALUE(r_data) TYPE xstring .
+
+    "! Đọc dòng sổ, tạo dòng tối thiểu nếu chưa có
+    METHODS ensure_row
+      IMPORTING is_request    TYPE zif_hddt_types=>ty_request
+      RETURNING VALUE(rs_inv) TYPE ztb_hddt_inv .
+
+    METHODS object_type_of
+      IMPORTING i_action      TYPE zde_hddt_action
+                is_request    TYPE zif_hddt_types=>ty_request
+      RETURNING VALUE(r_type) TYPE zde_hddt_objtype .
+
+    METHODS call_sink
+      IMPORTING is_log     TYPE ztb_hddt_log
+                is_request TYPE zif_hddt_types=>ty_request
+                is_result  TYPE zif_hddt_types=>ty_result .
 
     METHODS keep_payload
       IMPORTING i_provider    TYPE zde_hddt_prov
@@ -301,6 +347,20 @@ CLASS zcl_hddt_log IMPLEMENTATION.
     ls_log-created_by  = sy-uname.
     GET TIME STAMP FIELD ls_log-created_at.
 
+    " FS MAG: các trường khớp bảng log dùng chung ZTB_INT_LOG
+    ls_log-direction   = 'O'.
+    ls_log-object_type = object_type_of( i_action = i_action is_request = is_request ).
+    ls_log-api_version = zcl_hddt_config=>get_instance( )->get_param(
+                           i_key = zif_hddt_types=>gc_parm-api_version
+                           i_provider = i_provider i_bukrs = is_request-bukrs ).
+    ls_log-success     = is_result-success.
+    IF is_result-success = abap_false.
+      ls_log-error_code = is_result-prov_status.
+    ENDIF.
+    ls_log-hostname    = sy-host.
+    ls_log-has_req     = xsdbool( is_call-req_body IS NOT INITIAL ).
+    ls_log-has_res     = xsdbool( is_call-res_body IS NOT INITIAL ).
+
     IF keep_payload( i_provider = i_provider
                      i_bukrs    = is_request-bukrs ) = abap_true.
 
@@ -327,7 +387,10 @@ CLASS zcl_hddt_log IMPLEMENTATION.
     IF sy-subrc <> 0.
       " Không được để lỗi ghi log làm hỏng nghiệp vụ phát hành
       CLEAR r_log_id.
+      RETURN.
     ENDIF.
+
+    call_sink( is_log = ls_log is_request = is_request is_result = is_result ).
 
   ENDMETHOD.
 
@@ -447,6 +510,13 @@ CLASS zcl_hddt_log IMPLEMENTATION.
     ls_inv-status      = is_result-status.
     ls_inv-prov_status = is_result-prov_status.
     ls_inv-message     = is_result-message.
+    IF is_result-tax_status IS NOT INITIAL.
+      ls_inv-tax_status = is_result-tax_status.
+    ENDIF.
+    IF is_request-invoice-adjust-org_docno IS NOT INITIAL.
+      ls_inv-ref_srctype = is_request-invoice-adjust-org_src_type.
+      ls_inv-adj_dir     = is_request-invoice-adjust-adj_direction.
+    ENDIF.
 
     IF is_result-status = zif_hddt_types=>gc_status-cancelled.
       ls_inv-cancel_date = sy-datum.
@@ -525,6 +595,154 @@ CLASS zcl_hddt_log IMPLEMENTATION.
         AND gjahr     = @lv_gjahr
         AND src_type  = @lv_type
         AND src_docno = @ls_adj-org_docno.
+
+  ENDMETHOD.
+
+
+  METHOD ensure_row.
+
+    SELECT SINGLE * FROM ztb_hddt_inv
+      INTO @rs_inv
+      WHERE bukrs     = @is_request-bukrs
+        AND gjahr     = @is_request-gjahr
+        AND src_type  = @is_request-src_type
+        AND src_docno = @is_request-src_docno.
+    IF sy-subrc = 0.
+      RETURN.
+    ENDIF.
+
+    CLEAR rs_inv.
+    rs_inv-bukrs      = is_request-bukrs.
+    rs_inv-gjahr      = is_request-gjahr.
+    rs_inv-src_type   = is_request-src_type.
+    rs_inv-src_docno  = is_request-src_docno.
+    rs_inv-status     = zif_hddt_types=>gc_status-not_sent.
+    rs_inv-buyer_code = is_request-invoice-buyer-code.
+    rs_inv-buyer_name = is_request-invoice-buyer-legal_name.
+    rs_inv-waers      = is_request-invoice-header-currency.
+    rs_inv-inv_date   = is_request-invoice-header-inv_date.
+    rs_inv-inv_time   = is_request-invoice-header-inv_time.
+    rs_inv-created_by = sy-uname.
+    GET TIME STAMP FIELD rs_inv-created_at.
+
+  ENDMETHOD.
+
+
+  METHOD set_gom_no.
+
+    DATA(ls_inv) = ensure_row( is_request ).
+    ls_inv-gom_no     = i_gom_no.
+    ls_inv-changed_by = sy-uname.
+    GET TIME STAMP FIELD ls_inv-changed_at.
+    MODIFY ztb_hddt_inv FROM ls_inv.
+
+  ENDMETHOD.
+
+
+  METHOD save_edit.
+
+    DATA(ls_inv) = ensure_row( is_request ).
+    IF i_inv_date IS NOT INITIAL.
+      ls_inv-inv_date = i_inv_date.
+    ENDIF.
+    IF i_inv_time IS NOT INITIAL.
+      ls_inv-inv_time = i_inv_time.
+    ENDIF.
+    ls_inv-item_text  = i_item_text.
+    ls_inv-changed_by = sy-uname.
+    GET TIME STAMP FIELD ls_inv-changed_at.
+    MODIFY ztb_hddt_inv FROM ls_inv.
+
+  ENDMETHOD.
+
+
+  METHOD attach_original.
+
+    DATA(ls_inv) = ensure_row( is_request ).
+    ls_inv-ref_docno   = i_org_docno.
+    ls_inv-ref_gjahr   = COND #( WHEN i_org_docno IS INITIAL THEN space ELSE i_org_gjahr ).
+    ls_inv-ref_srctype = COND #( WHEN i_org_docno IS INITIAL THEN space ELSE i_org_srctype ).
+    ls_inv-adj_type    = COND #( WHEN i_org_docno IS INITIAL THEN space ELSE i_adj_type ).
+    ls_inv-adj_dir     = COND #( WHEN i_org_docno IS INITIAL THEN space ELSE i_adj_dir ).
+    ls_inv-changed_by  = sy-uname.
+    GET TIME STAMP FIELD ls_inv-changed_at.
+    MODIFY ztb_hddt_inv FROM ls_inv.
+
+  ENDMETHOD.
+
+
+  METHOD set_mail_status.
+
+    DATA(ls_inv) = ensure_row( is_request ).
+    ls_inv-mail_status = i_status.
+    ls_inv-mail_date   = sy-datum.
+    ls_inv-changed_by  = sy-uname.
+    GET TIME STAMP FIELD ls_inv-changed_at.
+    MODIFY ztb_hddt_inv FROM ls_inv.
+
+  ENDMETHOD.
+
+
+  METHOD reset_registry.
+
+    DATA(ls_inv) = ensure_row( is_request ).
+    CLEAR: ls_inv-template, ls_inv-serial, ls_inv-seq, ls_inv-issue_date,
+           ls_inv-cancel_date, ls_inv-mscqt, ls_inv-sec_code, ls_inv-inv_link,
+           ls_inv-prov_status, ls_inv-tax_status, ls_inv-mail_status, ls_inv-mail_date.
+    ls_inv-status     = zif_hddt_types=>gc_status-not_sent.
+    ls_inv-message    = i_message.
+    ls_inv-changed_by = sy-uname.
+    GET TIME STAMP FIELD ls_inv-changed_at.
+    MODIFY ztb_hddt_inv FROM ls_inv.
+
+  ENDMETHOD.
+
+
+  METHOD object_type_of.
+
+    CASE i_action.
+      WHEN zif_hddt_types=>gc_action-create_draft
+        OR zif_hddt_types=>gc_action-preview_draft
+        OR zif_hddt_types=>gc_action-delete_invoice.
+        r_type = 'DRAFT'.
+      WHEN zif_hddt_types=>gc_action-adjust_invoice.
+        r_type = 'ADJUST'.
+      WHEN zif_hddt_types=>gc_action-replace_invoice.
+        r_type = 'REPLACE'.
+      WHEN zif_hddt_types=>gc_action-search_invoice
+        OR zif_hddt_types=>gc_action-get_file.
+        r_type = 'SEARCH'.
+      WHEN zif_hddt_types=>gc_action-cancel_invoice
+        OR zif_hddt_types=>gc_action-wrong_notice.
+        r_type = 'CANCEL'.
+      WHEN OTHERS.
+        r_type = 'INVOICE'.
+    ENDCASE.
+    IF is_request-src_type = 'GOM'.
+      r_type = |{ r_type }_GOM|.
+    ENDIF.
+
+  ENDMETHOD.
+
+
+  METHOD call_sink.
+
+    " Lớp sink của khách hàng (vd ánh xạ sang ZTB_INT_LOG của MAG).
+    " Lỗi ở sink không được làm hỏng nghiệp vụ -> bắt hết.
+    DATA(lv_class) = zcl_hddt_config=>get_instance( )->get_param(
+                       i_key = zif_hddt_types=>gc_parm-log_sink_class
+                       i_bukrs = is_request-bukrs ).
+    CONDENSE lv_class.
+    IF lv_class IS INITIAL.
+      RETURN.
+    ENDIF.
+    TRY.
+        DATA(lo_sink) = CAST zif_hddt_log_sink(
+                          zcl_hddt_factory=>create_object( CONV #( lv_class ) ) ).
+        lo_sink->write( is_log = is_log is_request = is_request is_result = is_result ).
+      CATCH cx_root.
+        " bỏ qua có chủ ý
+    ENDTRY.
 
   ENDMETHOD.
 

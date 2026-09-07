@@ -53,6 +53,12 @@
     </item>
     <item>
      <ID>S</ID>
+     <KEY>P_MAG</KEY>
+     <ENTRY>Tham số riêng FS MAG v0.5</ENTRY>
+     <LENGTH>25</LENGTH>
+    </item>
+    <item>
+     <ID>S</ID>
      <KEY>P_OVWRT</KEY>
      <ENTRY>Ghi đè bản ghi đã tồn tại</ENTRY>
      <LENGTH>25</LENGTH>

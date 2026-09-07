@@ -78,6 +78,12 @@ CLASS zcl_hddt_src_base DEFINITION
     "!   - đã đảo/huỷ: chỉ khi đã phát hành HĐĐT (để huỷ) hoặc người
     "!     dùng yêu cầu lấy cả chứng từ đã đảo
     "!   - lọc theo range trạng thái
+    "! FS MAG: áp giá trị người dùng đã sửa trên màn hình (ngày/giờ phát
+    "! hành, tên hàng) và giờ mặc định INV_TIME_DEFAULT vào request.
+    METHODS apply_registry_edits
+      IMPORTING is_reg     TYPE ztb_hddt_inv
+      CHANGING  cs_request TYPE zif_hddt_types=>ty_request .
+
     METHODS keep_document
       IMPORTING i_reversed     TYPE abap_bool
                 is_reg          TYPE ztb_hddt_inv
@@ -315,6 +321,41 @@ CLASS zcl_hddt_src_base IMPLEMENTATION.
   ENDMETHOD.
 
 
+  METHOD apply_registry_edits.
+
+    " Giờ phát hành mặc định (FS: 08:00:00) khi người dùng chưa sửa
+    IF is_reg-inv_time IS NOT INITIAL AND is_reg-status = zif_hddt_types=>gc_status-not_sent.
+      cs_request-invoice-header-inv_time = is_reg-inv_time.
+    ELSE.
+      DATA(lv_def) = param( i_key = zif_hddt_types=>gc_parm-inv_time_default
+                            i_bukrs = cs_request-bukrs ).
+      CONDENSE lv_def NO-GAPS.
+      IF strlen( lv_def ) = 6 AND lv_def CO '0123456789'.
+        cs_request-invoice-header-inv_time = lv_def.
+      ENDIF.
+    ENDIF.
+
+    " Ngày phát hành người dùng sửa (chỉ khi chưa tích hợp)
+    IF is_reg-inv_date IS NOT INITIAL AND is_reg-status = zif_hddt_types=>gc_status-not_sent
+       AND is_reg-changed_by IS NOT INITIAL.
+      cs_request-invoice-header-inv_date = is_reg-inv_date.
+    ENDIF.
+
+    " Tên hàng nhập tay: ưu tiên 1 theo FS -> ghi đè mọi dòng hàng
+    IF is_reg-item_text IS NOT INITIAL.
+      LOOP AT cs_request-invoice-items ASSIGNING FIELD-SYMBOL(<fs_it>)
+           WHERE item_type <> '3'.
+        <fs_it>-item_name = is_reg-item_text.
+      ENDLOOP.
+    ENDIF.
+
+    IF is_reg-gom_no IS NOT INITIAL.
+      APPEND VALUE #( name = 'GOM_NO' value = |{ is_reg-gom_no }| ) TO cs_request-params.
+    ENDIF.
+
+  ENDMETHOD.
+
+
   METHOD keep_document.
 
     r_keep = abap_true.
@@ -496,7 +537,14 @@ CLASS zcl_hddt_src_base IMPLEMENTATION.
 
 *---- Tên -------------------------------------------------------------*
     IF ls_but000-type = '1'.               " cá nhân
-      cs_buyer-legal_name = |{ ls_but000-name_first } { ls_but000-name_last }|.
+      " FS MAG: NAME_LAST + NAME_FIRST; tham số BUYER_PERSON_NAME = FIRST_LAST
+      " để đổi thứ tự
+      IF param( i_key = zif_hddt_types=>gc_parm-buyer_person_nm
+                i_bukrs = i_bukrs i_default = `LAST_FIRST` ) = 'FIRST_LAST'.
+        cs_buyer-legal_name = |{ ls_but000-name_first } { ls_but000-name_last }|.
+      ELSE.
+        cs_buyer-legal_name = |{ ls_but000-name_last } { ls_but000-name_first }|.
+      ENDIF.
     ELSE.
       " Thứ tự trường tên theo cấu hình (dự án tham chiếu dùng
       " NAME_ORG2..4 và fallback NAME_ORG1 vì ORG1 chứa tên viết tắt).

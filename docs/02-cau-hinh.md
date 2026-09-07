@@ -104,7 +104,8 @@ dòng `INV_TYPE` rỗng. Dòng ngoài khoảng hiệu lực bị bỏ qua.
 | `SRC_TYPE` | `FI` / `SD` / `MM` / `GOM` / `CUST` |
 | `CLASSNAME` | Lớp implement `ZIF_HDDT_SOURCE` |
 
-Mặc định: `('', 'FI') → ZCL_HDDT_SRC_FI` (chứng từ FI, kể cả FI sinh từ
+Mặc định: `('', 'GOM') → ZCL_HDDT_SRC_GOM` (hoá đơn gom nhiều chứng từ, docs/10 §3) và
+`('', 'FI') → ZCL_HDDT_SRC_FI` (chứng từ FI, kể cả FI sinh từ
 billing SD) và `('', 'SD') → ZCL_HDDT_SRC_SD` (billing SD **chưa** có chứng từ
 FI). Cả hai kế thừa `ZCL_HDDT_SRC_BASE`. Logic chi tiết: [09-nguon-du-lieu.md](09-nguon-du-lieu.md).
 
@@ -148,6 +149,17 @@ Nhờ vậy đặt được giá trị chung rồi ghi đè cho một công ty.
 | `TAX_COND_TYPE` | Loại điều kiện thuế đầu ra tra `A003/KONP` khi thiếu BSET (`MWAS`) |
 | `STATUS_CHECK` | `N` = tắt kiểm tra nghiệp vụ theo trạng thái trong engine |
 | `CANCEL_REQUIRES_REVERSAL` | `N` = cho huỷ HĐĐT khi chứng từ SAP chưa đảo (mặc định bắt buộc đảo) |
+| `WRITEBACK_CLASS` | Lớp `ZIF_HDDT_WRITEBACK` ghi ngược chứng từ nguồn sau khi có số HĐ; MAG: `ZCL_HDDT_WRITEBACK_FI` (BKPF-XBLNR / XREF2_HD). Trống = không ghi |
+| `LOG_SINK_CLASS` | Lớp `ZIF_HDDT_LOG_SINK` đẩy log sang bảng dùng chung của khách hàng (MAG: `ZTB_INT_LOG`) |
+| `AUTO_APPROVE_AFTER_REPLACE` | `X` = gọi ký duyệt (`APPROVE_INVOICE`) ngay sau `REPLACE_INVOICE` (FPT để HĐ thay thế ở chờ duyệt) |
+| `TAX_SOURCE` | `BSET` (mặc định) hoặc `GLACCT` = tiền thuế từ dòng BSEG có tài khoản trong MAP `TAXACCT` |
+| `BUYER_PERSON_NAME` | `LAST_FIRST` (mặc định, FS MAG) / `FIRST_LAST` — thứ tự tên BP cá nhân |
+| `INV_TIME_DEFAULT` | Giờ phát hành mặc định `HHMMSS` khi người dùng chưa sửa (`080000`) |
+| `VALIDATE_REQUEST` | `N` = bỏ kiểm tra trường bắt buộc trước khi gọi API |
+| `MAIL_ALLOWED_STATUS` | Trạng thái được gửi email, cách nhau dấu phẩy (`20,50`) |
+| `MAIL_SENDER` / `MAIL_SUBJECT_DRAFT` / `MAIL_SUBJECT_FINAL` / `MAIL_BODY_DRAFT` / `MAIL_BODY_FINAL` | Người gửi và mẫu email; placeholder `{SERIAL} {SEQ} {BUYER} {DOCNO} {DATE} {COMPANY}`, `\n` xuống dòng |
+| `AUTH_OBJECT` | Authorization object riêng (field `BUKRS`, `ACTVT`) kiểm theo nút; trống = không kiểm |
+| `API_VERSION` | Phiên bản tài liệu API của NCC (theo `PROVIDER`); FPT `3.2` → thẻ `adjtype`/`ref` |
 
 ---
 

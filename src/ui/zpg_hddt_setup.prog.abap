@@ -53,6 +53,9 @@ SELECTION-SCREEN BEGIN OF BLOCK b1 WITH FRAME TITLE TEXT-b01.
   PARAMETERS p_prov1 AS CHECKBOX DEFAULT 'X'.
   PARAMETERS p_prov2 AS CHECKBOX DEFAULT 'X'.
   PARAMETERS p_prov3 AS CHECKBOX.
+  " Tham số riêng theo FS MAG v0.5 (docs/10) — ghi ngược BKPF, tên BP,
+  " thuế từ TK 3331*, nhà cung cấp FPT
+  PARAMETERS p_mag   AS CHECKBOX.
 SELECTION-SCREEN END OF BLOCK b1.
 
 SELECTION-SCREEN BEGIN OF BLOCK b2 WITH FRAME TITLE TEXT-b02.
@@ -72,6 +75,7 @@ CLASS lcl_setup DEFINITION FINAL CREATE PUBLIC.
     METHODS seed_viettel.
     METHODS seed_fpt.
     METHODS seed_vnpt.
+    METHODS seed_mag.
 
     METHODS put_prov IMPORTING is_row TYPE ztb_hddt_prov.
     METHODS put_conn IMPORTING is_row TYPE ztb_hddt_conn.
@@ -109,6 +113,7 @@ CLASS lcl_setup IMPLEMENTATION.
     IF p_prov1 = abap_true. seed_viettel( ). ENDIF.
     IF p_prov2 = abap_true. seed_fpt( ).     ENDIF.
     IF p_prov3 = abap_true. seed_vnpt( ).    ENDIF.
+    IF p_mag   = abap_true. seed_mag( ).     ENDIF.
 
     IF p_test = abap_true.
       ROLLBACK WORK.
@@ -150,6 +155,12 @@ CLASS lcl_setup IMPLEMENTATION.
                       src_type  = 'FI'
                       classname = 'ZCL_HDDT_SRC_FI'
                       descr     = 'Doc chung tu FI BKPF/BSEG/BSET (ke ca FI tu billing SD)'
+                      xactive   = abap_true ) ).
+    " Hoá đơn gom nhiều chứng từ (FS MAG 3.6.7)
+    put_src( VALUE #( bukrs     = space
+                      src_type  = 'GOM'
+                      classname = 'ZCL_HDDT_SRC_GOM'
+                      descr     = 'Hoa don gom nhieu chung tu FI'
                       xactive   = abap_true ) ).
     " Billing SD chưa sinh chứng từ FI (VBRK/VBRP)
     put_src( VALUE #( bukrs     = space
@@ -231,6 +242,35 @@ CLASS lcl_setup IMPLEMENTATION.
     put_parm( VALUE #( parm_key = zif_hddt_types=>gc_parm-cancel_req_rev
                        parm_val = 'X'
                        descr    = 'Phai dao chung tu SAP truoc khi huy HDDT (N = tat)' ) ).
+
+    " --- FS MAG v0.5 (docs/10) ---
+    put_parm( VALUE #( parm_key = zif_hddt_types=>gc_parm-writeback_class
+                       parm_val = ''
+                       descr    = 'Lop ghi nguoc chung tu: ZCL_HDDT_WRITEBACK_FI (trong = khong ghi)' ) ).
+    put_parm( VALUE #( parm_key = zif_hddt_types=>gc_parm-log_sink_class
+                       parm_val = ''
+                       descr    = 'Lop day log sang bang dung chung (ZIF_HDDT_LOG_SINK)' ) ).
+    put_parm( VALUE #( parm_key = zif_hddt_types=>gc_parm-tax_source
+                       parm_val = 'BSET'
+                       descr    = 'BSET = so thue; GLACCT = dong TK thue (MAP TAXACCT)' ) ).
+    put_parm( VALUE #( parm_key = zif_hddt_types=>gc_parm-buyer_person_nm
+                       parm_val = 'LAST_FIRST'
+                       descr    = 'Thu tu ten ca nhan: LAST_FIRST / FIRST_LAST' ) ).
+    put_parm( VALUE #( parm_key = zif_hddt_types=>gc_parm-inv_time_default
+                       parm_val = '080000'
+                       descr    = 'Gio phat hanh mac dinh (FS: 08:00:00)' ) ).
+    put_parm( VALUE #( parm_key = zif_hddt_types=>gc_parm-mail_allowed
+                       parm_val = '20,50'
+                       descr    = 'Trang thai duoc gui email: 20 nhap, 50 CQT cap ma' ) ).
+    put_parm( VALUE #( parm_key = zif_hddt_types=>gc_parm-mail_sender
+                       parm_val = ''
+                       descr    = 'Email nguoi gui (trong = user dang nhap)' ) ).
+    put_parm( VALUE #( parm_key = zif_hddt_types=>gc_parm-auth_object
+                       parm_val = ''
+                       descr    = 'Authorization object rieng (field BUKRS, ACTVT); trong = khong kiem' ) ).
+    put_parm( VALUE #( parm_key = zif_hddt_types=>gc_parm-validate_req
+                       parm_val = 'X'
+                       descr    = 'Kiem tra truong bat buoc truoc khi goi API (N = tat)' ) ).
 
     " Mã thuế đầu ra được phát hành HĐĐT (mẫu CP) — như dự án tham chiếu
     put_map( VALUE #( map_type  = zif_hddt_types=>gc_map_type-tax_code
@@ -473,6 +513,15 @@ CLASS lcl_setup IMPLEMENTATION.
                   i_path     = '/search-invoice'
                   i_descr    = 'Tra cuu - tham so trong header (3.9)' ) ).
     put_act( act( i_provider = gc_fpt
+                  i_action   = zif_hddt_types=>gc_action-get_file
+                  i_method   = 'GET'
+                  i_path     = '/search-invoice'
+                  i_descr    = 'Lay file PDF/XML (search-invoice type=pdf)' ) ).
+    put_act( act( i_provider = gc_fpt
+                  i_action   = zif_hddt_types=>gc_action-issue_invoice
+                  i_path     = '/issue-invoice'
+                  i_descr    = 'Cap so + ky duyet ban nhap (FS MAG 3.7.3)' ) ).
+    put_act( act( i_provider = gc_fpt
                   i_action   = zif_hddt_types=>gc_action-wrong_notice
                   i_path     = '/create-wno-list'
                   i_descr    = 'Tao thong bao sai sot (muc 3.20)' ) ).
@@ -487,6 +536,12 @@ CLASS lcl_setup IMPLEMENTATION.
     put_parm( VALUE #( provider = gc_fpt parm_key = 'FPT_USER_IN_BODY'
                        parm_val = 'X'
                        descr    = 'Gui user/password trong payload' ) ).
+    put_parm( VALUE #( provider = gc_fpt parm_key = zif_hddt_types=>gc_parm-api_version
+                       parm_val = '3.2'
+                       descr    = 'Tai lieu API FPT: 3.2 (ND70) -> adjtype/ref; 2.4.7 -> adj/ud' ) ).
+    put_parm( VALUE #( provider = gc_fpt parm_key = zif_hddt_types=>gc_parm-auto_appr_repl
+                       parm_val = 'X'
+                       descr    = 'Ky duyet (apprs) ngay sau replace-invoice (FS 3.7.7)' ) ).
 
     " Placeholder giu cho FPT; anh xa trang thai o duoi
     " Trạng thái hoá đơn của FPT (Phụ lục I) -> trạng thái SAP
@@ -680,6 +735,43 @@ CLASS lcl_setup IMPLEMENTATION.
                     keyinfo = i_key
                     action  = i_action
                     info    = i_info ) TO gt_log.
+
+  ENDMETHOD.
+
+
+*---------------------------------------------------------------------*
+* Tham số riêng theo FS MAG_SAP_2026_PM_FS_Tich hop HDDT v0.5
+* (nhà cung cấp FPT eInvoice, hoá đơn có mã CQT)
+*---------------------------------------------------------------------*
+  METHOD seed_mag.
+
+    put_parm( VALUE #( parm_key = zif_hddt_types=>gc_parm-active_provider
+                       parm_val = gc_fpt
+                       descr    = 'MAG: nha cung cap FPT eInvoice' ) ).
+    " FS 3.6.3/3.6.5: ghi "Mau + Ky hieu # So" vao BKPF-XBLNR, HD goc vao XREF2_HD
+    put_parm( VALUE #( parm_key = zif_hddt_types=>gc_parm-writeback_class
+                       parm_val = 'ZCL_HDDT_WRITEBACK_FI'
+                       descr    = 'MAG: ghi nguoc BKPF-XBLNR / XREF2_HD' ) ).
+    " FS 3.5 Ten don vi: NAME_ORG2+3+4, khong co thi NAME_ORG1
+    put_parm( VALUE #( parm_key = zif_hddt_types=>gc_parm-buyer_name_flds
+                       parm_val = 'NAME_ORG2,NAME_ORG3,NAME_ORG4'
+                       descr    = 'MAG: ten to chuc = ORG2+ORG3+ORG4, fallback ORG1' ) ).
+    put_parm( VALUE #( parm_key = zif_hddt_types=>gc_parm-buyer_person_nm
+                       parm_val = 'LAST_FIRST'
+                       descr    = 'MAG: ten ca nhan = NAME_LAST + NAME_FIRST' ) ).
+    " FS 3.5 Tien thue = tong dong BSEG co HKONT 3331*
+    put_parm( VALUE #( parm_key = zif_hddt_types=>gc_parm-tax_source
+                       parm_val = 'GLACCT'
+                       descr    = 'MAG: tien thue tu dong TK 3331* (MAP TAXACCT)' ) ).
+    put_parm( VALUE #( parm_key = zif_hddt_types=>gc_parm-inv_time_default
+                       parm_val = '080000'
+                       descr    = 'MAG: gio phat hanh mac dinh 08:00:00' ) ).
+    put_parm( VALUE #( parm_key = zif_hddt_types=>gc_parm-mail_subj_draft
+                       parm_val = '[MẪU HOÁ ĐƠN NHÁP - chưa có giá trị pháp lý] Chứng từ {DOCNO} - {COMPANY}'
+                       descr    = 'MAG: tieu de email hoa don nhap' ) ).
+    put_parm( VALUE #( parm_key = zif_hddt_types=>gc_parm-mail_subj_final
+                       parm_val = 'Hoá đơn điện tử {SERIAL} {SEQ} - {COMPANY}'
+                       descr    = 'MAG: tieu de email hoa don chinh thuc' ) ).
 
   ENDMETHOD.
 

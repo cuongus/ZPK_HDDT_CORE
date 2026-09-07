@@ -28,6 +28,9 @@
 * Version   Ngày          Người sửa                Transport   Mô tả
 *=====================================================================
 * 1.0       28/08/2026    cuongus - CuongUS        abapGit     Tạo mới
+* 1.1       07/09/2026    cuongus - CuongUS        abapGit     FS MAG v0.5:
+*                         issue-invoice, apprs riêng, aun theo action,
+*                         adjtype/ref (API v3.2), status_received 9
 *=====================================================================
 CLASS zcl_hddt_prov_fpt DEFINITION
   PUBLIC
@@ -71,6 +74,23 @@ CLASS zcl_hddt_prov_fpt DEFINITION
                 is_cred           TYPE ztb_hddt_cred
       RETURNING VALUE(r_payload) TYPE string
       RAISING   zcx_hddt_error .
+
+    "! issue-invoice (tài liệu bổ sung FPT, FS MAG 3.7.3): cấp số + ký duyệt
+    "! trên chính bản nháp — chỉ truyền stax + sid
+    METHODS build_issue
+      IMPORTING is_request        TYPE zif_hddt_types=>ty_request
+                is_cred           TYPE ztb_hddt_cred
+      RETURNING VALUE(r_payload) TYPE string .
+
+    "! apprs (FS MAG 3.7.5): ký duyệt hoá đơn đã cấp số (status 2)
+    METHODS build_approve
+      IMPORTING is_request        TYPE zif_hddt_types=>ty_request
+                is_cred           TYPE ztb_hddt_cred
+      RETURNING VALUE(r_payload) TYPE string .
+
+    METHODS api_v3
+      IMPORTING i_bukrs      TYPE bukrs
+      RETURNING VALUE(r_v3) TYPE abap_bool .
 
     METHODS build_delete
       IMPORTING is_request        TYPE zif_hddt_types=>ty_request
@@ -125,7 +145,8 @@ CLASS zcl_hddt_prov_fpt IMPLEMENTATION.
 
     " §3.9 search-invoice là GET và tham số tra cứu được đặt trong
     " HTTP HEADER, không phải query string.
-    IF is_request-action <> zif_hddt_types=>gc_action-search_invoice.
+    IF is_request-action <> zif_hddt_types=>gc_action-search_invoice
+       AND is_request-action <> zif_hddt_types=>gc_action-get_file.
       RETURN.
     ENDIF.
 
@@ -166,11 +187,16 @@ CLASS zcl_hddt_prov_fpt IMPLEMENTATION.
         OR zif_hddt_types=>gc_action-create_draft
         OR zif_hddt_types=>gc_action-update_invoice
         OR zif_hddt_types=>gc_action-adjust_invoice
-        OR zif_hddt_types=>gc_action-replace_invoice
-        OR zif_hddt_types=>gc_action-approve_invoice.
+        OR zif_hddt_types=>gc_action-replace_invoice.
         r_payload = build_invoice( is_request = is_request
                                     i_action  = i_action
                                     is_cred    = is_cred ).
+
+      WHEN zif_hddt_types=>gc_action-issue_invoice.
+        r_payload = build_issue( is_request = is_request is_cred = is_cred ).
+
+      WHEN zif_hddt_types=>gc_action-approve_invoice.
+        r_payload = build_approve( is_request = is_request is_cred = is_cred ).
 
       WHEN zif_hddt_types=>gc_action-cancel_invoice.
         r_payload = build_cancel( is_request = is_request
@@ -180,8 +206,9 @@ CLASS zcl_hddt_prov_fpt IMPLEMENTATION.
         r_payload = build_delete( is_request = is_request
                                    is_cred    = is_cred ).
 
-      WHEN zif_hddt_types=>gc_action-search_invoice.
-        " GET — tham số nằm trong header, body rỗng
+      WHEN zif_hddt_types=>gc_action-search_invoice
+        OR zif_hddt_types=>gc_action-get_file.
+        " GET — tham số nằm trong header, body rỗng (get_file = type pdf/xml)
         CLEAR r_payload.
 
       WHEN OTHERS.
@@ -250,10 +277,24 @@ CLASS zcl_hddt_prov_fpt IMPLEMENTATION.
       )->add_string( i_name = `serial` i_value = ls_hdr-serial
       )->add_string( i_name = `seq`    i_value = ls_hdr-seq ).
 
-    " Cách cấp số hoá đơn (§3.1: aun rỗng = lưu nháp)
-    DATA(lv_aun) = lo_cfg->get_param( gc_parm-aun ).
-    IF lv_aun IS NOT INITIAL.
-      lo->add_string( i_name = `aun` i_value = lv_aun i_force = abap_true ).
+    " Cách cấp số hoá đơn (§3.1: aun rỗng = lưu nháp). FS MAG: hoá đơn
+    " NHÁP (create-invoice) KHÔNG truyền aun; create-appr-inv / điều
+    " chỉnh / thay thế truyền aun = 2 (FPT tự cấp số).
+    IF i_action <> zif_hddt_types=>gc_action-create_draft
+       AND i_action <> zif_hddt_types=>gc_action-update_invoice.
+      DATA(lv_aun) = lo_cfg->get_param( i_key = gc_parm-aun i_bukrs = is_request-bukrs ).
+      IF lv_aun IS NOT INITIAL.
+        lo->add_string( i_name = `aun` i_value = lv_aun i_force = abap_true ).
+      ENDIF.
+    ENDIF.
+    " notsendmail / sendfile (FS 3.7.4) do caller truyền qua params
+    DATA(lv_nsm) = zcl_hddt_json=>get_value( it_values = is_request-params i_path = `notsendmail` ).
+    IF lv_nsm IS NOT INITIAL.
+      lo->add_string( i_name = `notsendmail` i_value = lv_nsm i_force = abap_true ).
+    ENDIF.
+    DATA(lv_sf) = zcl_hddt_json=>get_value( it_values = is_request-params i_path = `sendfile` ).
+    IF lv_sf IS NOT INITIAL.
+      lo->add_string( i_name = `sendfile` i_value = lv_sf i_force = abap_true ).
     ENDIF.
 
     " type_ref = 1 : hoá đơn theo NĐ123/2020 (TT78)
@@ -358,7 +399,37 @@ CLASS zcl_hddt_prov_fpt IMPLEMENTATION.
     lo->end_array( ).
 
 *---- thông tin điều chỉnh / thay thế ---------------------------------*
-    IF lv_is_adjust = abap_true.
+    IF lv_is_adjust = abap_true AND api_v3( is_request-bukrs ) = abap_true.
+      " FPT eInvoice NĐ70 v3.2 (FS MAG 3.7.6/3.7.7): adjtype 2 tăng, 3 giảm,
+      " 4 thông tin; ref = bộ mẫu-ký hiệu-số-ngày của hoá đơn gốc.
+      IF ls_adj-adj_type = zif_hddt_types=>gc_adj_type-adjust.
+        DATA(lv_adjtype) = COND string(
+          WHEN ls_adj-fs_code IS NOT INITIAL THEN |{ ls_adj-fs_code }|
+          WHEN ls_adj-adj_direction = '1'   THEN `2`
+          WHEN ls_adj-adj_direction = '0'   THEN `3`
+          ELSE `4` ).
+        lo->add_string( i_name = `adjtype` i_value = lv_adjtype i_force = abap_true ).
+      ENDIF.
+      DATA(lv_rform) = |{ ls_adj-org_serial }|.
+      DATA(lv_rserial) = lv_rform.
+      " Ký hiệu FPT gồm mẫu số ở đầu (1C25MAG): rform = ký tự đầu
+      IF strlen( lv_rform ) > 1.
+        lv_rform   = lv_rform(1).
+        lv_rserial = lv_rserial+1.
+      ENDIF.
+      lo->begin_object( `ref`
+        )->add_string( i_name = `rform`   i_value = lv_rform   i_force = abap_true
+        )->add_string( i_name = `rserial` i_value = lv_rserial i_force = abap_true
+        )->add_string( i_name = `rseq`    i_value = |{ ls_adj-org_seq }| i_force = abap_true
+        )->add_string( i_name = `ridt`    i_value = fmt_datetime( i_date = ls_adj-org_inv_date
+                                                                  i_time = ls_hdr-inv_time )
+                       i_force = abap_true
+        )->end_object( ).
+      DATA(lv_class) = zcl_hddt_json=>get_value( it_values = is_request-params i_path = `class` ).
+      IF lv_class IS NOT INITIAL.
+        lo->add_string( i_name = `class` i_value = lv_class i_force = abap_true ).
+      ENDIF.
+    ELSEIF lv_is_adjust = abap_true.
       lo->begin_object( `adj`
         )->add_string( i_name  = `seq`
                        i_value = |1-{ ls_adj-org_serial }-{ ls_adj-org_seq }|
@@ -472,6 +543,80 @@ CLASS zcl_hddt_prov_fpt IMPLEMENTATION.
   ENDMETHOD.
 
 
+  METHOD api_v3.
+
+    " Tham số API_VERSION (theo NCC/công ty): '3.2' = tài liệu NĐ70 v3.2
+    DATA(lv_ver) = get_config( )->get_param( i_key      = zif_hddt_types=>gc_parm-api_version
+                                             i_provider = gc_provider
+                                             i_bukrs    = i_bukrs ).
+    CONDENSE lv_ver NO-GAPS.
+    r_v3 = xsdbool( lv_ver IS NOT INITIAL AND lv_ver(1) >= '3' ).
+
+  ENDMETHOD.
+
+
+  METHOD build_issue.
+
+    " { lang, user?, inv: { stax, sid } } — không truyền lại nội dung hoá đơn
+    DATA(lv_lang) = get_config( )->get_param( gc_parm-lang ).
+    IF lv_lang IS INITIAL.
+      lv_lang = 'vi'.
+    ENDIF.
+
+    DATA(lo) = NEW zcl_hddt_json( ).
+    lo->begin_object( ).
+    lo->add_string( i_name = `lang` i_value = lv_lang i_force = abap_true ).
+    add_user_node( io_json = lo is_cred = is_cred ).
+    lo->begin_object( `inv`
+      )->add_string( i_name = `stax` i_value = is_cred-taxcode i_force = abap_true
+      )->add_string( i_name = `sid`  i_value = is_request-invoice-header-idkey
+                     i_force = abap_true
+      )->end_object( ).
+    lo->end_object( ).
+
+    r_payload = lo->get_json( ).
+
+  ENDMETHOD.
+
+
+  METHOD build_approve.
+
+    " { lang, user?, inv: { stax, sid | form+serial+seq, notsendmail, sendfile } }
+    DATA(lv_lang) = get_config( )->get_param( gc_parm-lang ).
+    IF lv_lang IS INITIAL.
+      lv_lang = 'vi'.
+    ENDIF.
+    DATA(ls_hdr) = is_request-invoice-header.
+
+    DATA(lo) = NEW zcl_hddt_json( ).
+    lo->begin_object( ).
+    lo->add_string( i_name = `lang` i_value = lv_lang i_force = abap_true ).
+    add_user_node( io_json = lo is_cred = is_cred ).
+    lo->begin_object( `inv` ).
+    lo->add_string( i_name = `stax` i_value = is_cred-taxcode i_force = abap_true ).
+    IF ls_hdr-idkey IS NOT INITIAL.
+      lo->add_string( i_name = `sid` i_value = ls_hdr-idkey i_force = abap_true ).
+    ELSE.
+      lo->add_string( i_name = `form`   i_value = ls_hdr-template i_force = abap_true
+        )->add_string( i_name = `serial` i_value = ls_hdr-serial   i_force = abap_true
+        )->add_string( i_name = `seq`    i_value = ls_hdr-seq      i_force = abap_true ).
+    ENDIF.
+    DATA(lv_nsm) = zcl_hddt_json=>get_value( it_values = is_request-params i_path = `notsendmail` ).
+    IF lv_nsm IS NOT INITIAL.
+      lo->add_string( i_name = `notsendmail` i_value = lv_nsm i_force = abap_true ).
+    ENDIF.
+    DATA(lv_sf) = zcl_hddt_json=>get_value( it_values = is_request-params i_path = `sendfile` ).
+    IF lv_sf IS NOT INITIAL.
+      lo->add_string( i_name = `sendfile` i_value = lv_sf i_force = abap_true ).
+    ENDIF.
+    lo->end_object( ).
+    lo->end_object( ).
+
+    r_payload = lo->get_json( ).
+
+  ENDMETHOD.
+
+
   METHOD build_delete.
 
     " §3.10.3 del-invoice : { user, sid, stax }
@@ -511,6 +656,17 @@ CLASS zcl_hddt_prov_fpt IMPLEMENTATION.
   METHOD zif_hddt_provider~parse_response.
 
     DATA(lv_ok_http) = xsdbool( i_http_code >= 200 AND i_http_code < 300 ).
+
+    " Lấy file (type = pdf/xml): body là nội dung file, engine gán từ body_x
+    IF i_action = zif_hddt_types=>gc_action-get_file AND lv_ok_http = abap_true.
+      DATA(lv_ftype) = zcl_hddt_json=>get_value( it_values = is_request-params i_path = `type` ).
+      cs_result-success   = abap_true.
+      cs_result-msgty     = 'S'.
+      cs_result-file_name = |{ is_request-invoice-header-serial }{ is_request-invoice-header-seq }.| &&
+                            |{ COND string( WHEN lv_ftype IS INITIAL THEN `pdf` ELSE lv_ftype ) }|.
+      cs_result-message   = 'Đã lấy file hoá đơn'.
+      RETURN.
+    ENDIF.
 
     IF i_body IS INITIAL.
       cs_result-success = lv_ok_http.
@@ -606,8 +762,16 @@ CLASS zcl_hddt_prov_fpt IMPLEMENTATION.
         cs_result-status = zif_hddt_types=>gc_status-coded.
         cs_result-mscqt  = zcl_hddt_json=>get_value_by_name(
                              it_values = lt_val i_name = `ic` ).
+        IF cs_result-mscqt IS INITIAL.
+          cs_result-mscqt = zcl_hddt_json=>get_value_by_name(
+                              it_values = lt_val i_name = `ma_cqthu` ).
+        ENDIF.
+      ELSEIF lv_recv = '9'.
+        " FS MAG 3.8: CQT kiểm tra không hợp lệ -> trạng thái 10 (ở đây 45)
+        cs_result-status = zif_hddt_types=>gc_status-rejected.
       ENDIF.
     ENDIF.
+    cs_result-tax_status = lv_recv.
 
     IF lv_msg IS NOT INITIAL.
       cs_result-message = lv_msg.

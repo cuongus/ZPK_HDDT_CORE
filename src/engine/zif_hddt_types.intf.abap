@@ -11,6 +11,9 @@
 * Version   Ngày          Người sửa                Transport   Mô tả
 *=====================================================================
 * 1.0       28/08/2026    cuongus - CuongUS        abapGit     Tạo mới
+* 1.2       07/09/2026    cuongus - CuongUS        abapGit     FS MAG v0.5:
+*                         ISSUE_INVOICE, trạng thái 45, tax_status,
+*                         fs_code, tham số writeback/mail/log sink
 *=====================================================================
 INTERFACE zif_hddt_types
   PUBLIC .
@@ -37,6 +40,7 @@ INTERFACE zif_hddt_types
   TYPES ty_r_blart TYPE RANGE OF blart.
   TYPES ty_r_status TYPE RANGE OF zde_hddt_status.
   TYPES ty_r_usnam  TYPE RANGE OF syuname.
+  TYPES ty_r_seq    TYPE RANGE OF zde_hddt_seq.
 
 *---------------------------------------------------------------------*
 * 2. Thông tin người bán
@@ -159,6 +163,8 @@ INTERFACE zif_hddt_types
            org_src_type  TYPE zde_hddt_srctype,
            org_docno     TYPE zde_hddt_docno,
            org_gjahr     TYPE gjahr,
+           " Mã loại điều chỉnh theo FS (2 tăng, 3 giảm, 4 thông tin, 5 thay thế)
+           fs_code       TYPE c LENGTH 1,
            " Số & ngày biên bản thoả thuận điều chỉnh
            doc_ref_no    TYPE string,
            doc_ref_date  TYPE dats,
@@ -251,6 +257,8 @@ INTERFACE zif_hddt_types
            success       TYPE abap_bool,
            status        TYPE zde_hddt_status,
            prov_status   TYPE zde_hddt_rccode,
+           " Trạng thái xử lý của Cơ quan thuế (FPT status_received)
+           tax_status    TYPE zde_hddt_rccode,
            msgty         TYPE symsgty,
            message       TYPE zde_hddt_msg,
            idkey         TYPE zde_hddt_idkey,
@@ -293,6 +301,9 @@ INTERFACE zif_hddt_types
                send_mail       TYPE zde_hddt_action VALUE 'SEND_MAIL',
                get_templates   TYPE zde_hddt_action VALUE 'GET_TEMPLATES',
                wrong_notice    TYPE zde_hddt_action VALUE 'WRONG_NOTICE',
+               " Phát hành chính bản nháp đã tạo: cấp số + ký duyệt trên cùng
+               " sid (FPT issue-invoice). Khác CREATE_INVOICE (tạo mới + cấp số).
+               issue_invoice   TYPE zde_hddt_action VALUE 'ISSUE_INVOICE',
              END OF gc_action.
 
   CONSTANTS: BEGIN OF gc_status,
@@ -301,6 +312,8 @@ INTERFACE zif_hddt_types
                wait_seq   TYPE zde_hddt_status VALUE '20',
                wait_appr  TYPE zde_hddt_status VALUE '30',
                issued     TYPE zde_hddt_status VALUE '40',
+               " CQT kiểm tra không hợp lệ / từ chối (FPT status_received = 9)
+               rejected   TYPE zde_hddt_status VALUE '45',
                coded      TYPE zde_hddt_status VALUE '50',
                adjusted   TYPE zde_hddt_status VALUE '60',
                replaced   TYPE zde_hddt_status VALUE '70',
@@ -368,6 +381,22 @@ INTERFACE zif_hddt_types
                " --- kiểm tra nghiệp vụ theo trạng thái trong engine
                status_check     TYPE zde_hddt_parmkey VALUE 'STATUS_CHECK',
                cancel_req_rev   TYPE zde_hddt_parmkey VALUE 'CANCEL_REQUIRES_REVERSAL',
+               " --- FS MAG v0.5 (docs/10)
+               writeback_class  TYPE zde_hddt_parmkey VALUE 'WRITEBACK_CLASS',
+               log_sink_class   TYPE zde_hddt_parmkey VALUE 'LOG_SINK_CLASS',
+               auto_appr_repl   TYPE zde_hddt_parmkey VALUE 'AUTO_APPROVE_AFTER_REPLACE',
+               tax_source       TYPE zde_hddt_parmkey VALUE 'TAX_SOURCE',
+               buyer_person_nm  TYPE zde_hddt_parmkey VALUE 'BUYER_PERSON_NAME',
+               inv_time_default TYPE zde_hddt_parmkey VALUE 'INV_TIME_DEFAULT',
+               mail_allowed     TYPE zde_hddt_parmkey VALUE 'MAIL_ALLOWED_STATUS',
+               mail_sender      TYPE zde_hddt_parmkey VALUE 'MAIL_SENDER',
+               mail_subj_draft  TYPE zde_hddt_parmkey VALUE 'MAIL_SUBJECT_DRAFT',
+               mail_subj_final  TYPE zde_hddt_parmkey VALUE 'MAIL_SUBJECT_FINAL',
+               mail_body_draft  TYPE zde_hddt_parmkey VALUE 'MAIL_BODY_DRAFT',
+               mail_body_final  TYPE zde_hddt_parmkey VALUE 'MAIL_BODY_FINAL',
+               auth_object      TYPE zde_hddt_parmkey VALUE 'AUTH_OBJECT',
+               api_version      TYPE zde_hddt_parmkey VALUE 'API_VERSION',
+               validate_req     TYPE zde_hddt_parmkey VALUE 'VALIDATE_REQUEST',
              END OF gc_parm.
 
   " Placeholder được engine thay thế trong ZTB_HDDT_ACT-API_PATH

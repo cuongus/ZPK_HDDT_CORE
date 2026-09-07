@@ -34,6 +34,13 @@ CLASS zcl_hddt_factory DEFINITION
       RETURNING VALUE(ro_source) TYPE REF TO zif_hddt_source
       RAISING   zcx_hddt_error .
 
+    "! Tạo object theo tên lớp cấu hình (writeback, log sink...) — caller
+    "! tự cast sang interface cần dùng.
+    CLASS-METHODS create_object
+      IMPORTING i_class          TYPE zde_hddt_class
+      RETURNING VALUE(ro_object) TYPE REF TO object
+      RAISING   zcx_hddt_error .
+
     CLASS-METHODS reset .
 
   PROTECTED SECTION.
@@ -135,6 +142,13 @@ CLASS zcl_hddt_factory IMPLEMENTATION.
 
     INSERT VALUE ty_cache( classname = lv_class
                            instance  = ro_object ) INTO TABLE mt_cache.
+
+  ENDMETHOD.
+
+
+  METHOD create_object.
+
+    ro_object = create_instance( i_class ).
 
   ENDMETHOD.
 

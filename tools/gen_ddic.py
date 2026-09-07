@@ -50,6 +50,7 @@ DOMAINS = [
         ("20", "Chờ cấp số"),
         ("30", "Chờ duyệt"),
         ("40", "Đã phát hành"),
+        ("45", "CQT từ chối (kiểm tra không hợp lệ)"),
         ("50", "Đã được CQT cấp mã"),
         ("60", "Đã điều chỉnh"),
         ("70", "Đã thay thế"),
@@ -176,6 +177,12 @@ DTELS = [
     ("ZDE_HDDT_CODEPAGE", ("CHAR", 20, 0), "Codepage", "Bảng mã", "Bảng mã của nội dung", "Codepage", "Bảng mã dùng khi ghi byte (vd UTF-8)"),
     ("ZDE_HDDT_ATTEMPT", ("NUMC", 3, 0), "Lần", "Lần gọi thứ", "Lần gọi thứ mấy", "Lần", "Số lần đã gọi cho cùng nghiệp vụ"),
     ("ZDE_HDDT_CALLER", ("CHAR", 40, 0), "Nguồn gọi", "Chương trình gọi", "Chương trình / job gọi", "Nguồn gọi", "Chương trình, transaction hoặc job đã gọi"),
+    ("ZDE_HDDT_ADJDIR", ("CHAR", 1, 0), "Hướng ĐC", "Hướng điều chỉnh", "Hướng điều chỉnh (1 tăng/0 giảm/2 TT)", "Hướng ĐC", "1 tang, 0 giam, 2 dieu chinh thong tin"),
+    ("ZDE_HDDT_MAILST", ("CHAR", 1, 0), "Email", "Trạng thái email", "Trạng thái gửi email hoá đơn", "Email", "S da gui, E loi, trong = chua gui"),
+    ("ZDE_HDDT_DIRECT", ("CHAR", 1, 0), "Chiều", "Chiều gọi API", "Chiều gọi API (O ra / I vào)", "Chiều", "O outbound SAP->NCC, I inbound"),
+    ("ZDE_HDDT_OBJTYPE", ("CHAR", 10, 0), "Đối tượng", "Loại đối tượng", "Loại đối tượng nghiệp vụ", "Đối tượng", "Loai doi tuong nghiep vu cua loi goi"),
+    ("ZDE_HDDT_APIVER", ("CHAR", 10, 0), "Phiên bản", "Phiên bản API", "Phiên bản tài liệu API", "Phiên bản", "Phien ban tai lieu API cua NCC"),
+    ("ZDE_HDDT_HOST", ("CHAR", 40, 0), "Máy chủ", "Máy chủ ứng dụng", "Application server thực thi", "Máy chủ", "Application server thuc thi loi goi"),
 ]
 
 for name, typ, s, m, lg, h, ddtext in DTELS:
@@ -301,8 +308,21 @@ TABLES = [
         F("WAERS", "WAERS"), F("EXRATE", "UKURS_CURR"),
         F("AMOUNT", "ZDE_HDDT_AMOUNT"), F("VAT_AMOUNT", "ZDE_HDDT_AMOUNT"),
         F("TOTAL", "ZDE_HDDT_AMOUNT"),
+        # --- FS MAG v0.5
+        F("ADJ_DIR", "ZDE_HDDT_ADJDIR"), F("REF_SRCTYPE", "ZDE_HDDT_SRCTYPE"),
+        F("TAX_STATUS", "ZDE_HDDT_RCCODE"), F("GOM_NO", "ZDE_HDDT_DOCNO"),
+        F("ITEM_TEXT", "ZDE_HDDT_NAME"),
+        F("MAIL_STATUS", "ZDE_HDDT_MAILST"), F("MAIL_DATE", "DATS"),
         F("CREATED_BY", "SYUNAME"), F("CREATED_AT", "TIMESTAMPL"),
         F("CHANGED_BY", "SYUNAME"), F("CHANGED_AT", "TIMESTAMPL"),
+    ]),
+    ("ZTB_HDDT_GOM", "A", "HDDT: Chung tu thanh vien cua hoa don gom", [
+        K("MANDT", "MANDT"), K("BUKRS", "BUKRS"), K("GJAHR", "GJAHR"),
+        K("GOM_NO", "ZDE_HDDT_DOCNO"),
+        K("SRC_TYPE", "ZDE_HDDT_SRCTYPE"), K("SRC_DOCNO", "ZDE_HDDT_DOCNO"),
+        F("XCANCEL", "XFELD"),
+        F("CREATED_BY", "SYUNAME"), F("CREATED_AT", "TIMESTAMPL"),
+        F("CANCEL_BY", "SYUNAME"), F("CANCEL_AT", "TIMESTAMPL"),
     ]),
     ("ZTB_HDDT_ITEM", "A", "HDDT: Chi tiet hang hoa da phat hanh", [
         K("MANDT", "MANDT"), K("BUKRS", "BUKRS"), K("GJAHR", "GJAHR"),
@@ -341,6 +361,11 @@ TABLES = [
         F("MASKED", "XFELD"),
         # --- truy vet nguon goi
         F("CALLER", "ZDE_HDDT_CALLER"), F("TCODE", "TCODE"),
+        # --- FS MAG v0.5: khop bang ZTB_INT_LOG
+        F("DIRECTION", "ZDE_HDDT_DIRECT"), F("OBJECT_TYPE", "ZDE_HDDT_OBJTYPE"),
+        F("API_VERSION", "ZDE_HDDT_APIVER"), F("ERROR_CODE", "ZDE_HDDT_RCCODE"),
+        F("SUCCESS", "XFELD"), F("HAS_REQ", "XFELD"), F("HAS_RES", "XFELD"),
+        F("HOSTNAME", "ZDE_HDDT_HOST"),
         F("CREATED_BY", "SYUNAME"), F("CREATED_AT", "TIMESTAMPL"),
         # --- noi dung nguyen ban tren duong truyen (byte-exact)
         F("REQ_HEADER", "ZDE_HDDT_RAW"), F("RES_HEADER", "ZDE_HDDT_RAW"),

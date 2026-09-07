@@ -72,6 +72,16 @@ cứu bằng SM30, nhưng đặt authorization group hạn chế hơn.
 > Nếu chưa sinh maintenance dialog, `ZFI002` báo lỗi
 > *"Bảng &1 chưa sinh Table Maintenance Generator"* — đúng thông điệp, không dump.
 
+### Object phân quyền theo chức năng (FS MAG 3.10)
+
+Tạo bằng SU21 (không đi qua abapGit): object `Z_FI_HDDT` (hoặc tên khác), field
+`BUKRS` và `ACTVT` với 01 (tạo/huỷ nháp), 02 (phát hành, điều chỉnh, gom), 03
+(xem, tra cứu, email, lấy file). Khai tên object vào tham số `AUTH_OBJECT`.
+
+### Gửi email
+
+`ZCL_HDDT_MAIL` dùng BCS → cần SCOT cấu hình SMTP và job `SOST`/`RSCONN01`.
+
 ## 4. Nạp cấu hình khởi tạo
 
 ```

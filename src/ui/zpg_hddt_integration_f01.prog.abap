@@ -1,17 +1,27 @@
 *=====================================================================
 * Tên/Mã     : ZPG_HDDT_INTEGRATION_F01
-* Mô tả chung: Lớp local điều khiển ALV (LCL_APP, gộp include _CL1 cũ)
-*              và form routine hỗ trợ màn hình cho ZPG_HDDT_INTEGRATION:
-*              hiển thị chuỗi dài (payload / log), lấy thông tin hoá
-*              đơn gốc khi điều chỉnh - thay thế - huỷ, và lưu file
-*              hoá đơn xuống máy trạm.
-* Tham Số    : Xem từng FORM
+* Mô tả chung: Lớp local điều khiển ALV (LCL_APP) và form routine của
+*              ZPG_HDDT_INTEGRATION theo FS MAG v0.5 mục 3.6:
+*                Tích hợp HĐ   -> ZCL_HDDT_SERVICE->CREATE_DRAFT
+*                Hủy HĐ nháp   -> DELETE_DRAFT (tra cứu trước khi lỗi)
+*                Phát hành HĐ  -> ISSUE_INVOICE (issue / apprs / đồng bộ)
+*                Cập nhật HĐ   -> SEARCH_INVOICE (+ ghi ngược BKPF)
+*                HĐ Điều chỉnh -> popup HĐ gốc + loại ĐC -> ATTACH_ORIGINAL
+*                Send Email    -> GET_INVOICE_FILE(pdf) + ZCL_HDDT_MAIL
+*                Gom HĐ / Huỷ Gom HĐ -> ZCL_HDDT_GOM
+*              Toàn bộ điều kiện trạng thái do engine kiểm (CHECK_ACTION)
+*              nên job nền và màn hình cùng một luật. Lớp này chỉ lo
+*              màn hình, popup, phân quyền theo chức năng.
+* Tham Số    : Xem từng method / FORM
 *=====================================================================
 * Version   Ngày          Người sửa                Transport   Mô tả
 *=====================================================================
 * 1.0       28/08/2026    cuongus - CuongUS        abapGit     Tạo mới
 * 1.1       03/09/2026    cuongus - CuongUS        abapGit     Popup chọn
 *                         hoá đơn gốc, truyền chứng từ gốc cho engine
+* 1.2       07/09/2026    cuongus - CuongUS        abapGit     FS MAG v0.5:
+*                         8 nút nghiệp vụ, email, gom, sửa ngày/giờ,
+*                         phát hành tự động, kiểm quyền theo chức năng
 *=====================================================================
 
 CLASS lcl_app DEFINITION FINAL CREATE PUBLIC.
@@ -19,6 +29,8 @@ CLASS lcl_app DEFINITION FINAL CREATE PUBLIC.
   PUBLIC SECTION.
 
     METHODS run.
+    "! FS 3.6.9: phát hành tự động bằng background job
+    METHODS run_auto.
 
     METHODS on_function
       FOR EVENT added_function OF cl_salv_events
@@ -34,18 +46,40 @@ CLASS lcl_app DEFINITION FINAL CREATE PUBLIC.
     DATA mo_service TYPE REF TO zcl_hddt_service.
 
     METHODS select_data.
+    METHODS reload.
     METHODS build_alv.
     METHODS add_buttons.
     METHODS set_columns.
+    METHODS fill_row_from_registry
+      IMPORTING is_reg TYPE ztb_hddt_inv
+      CHANGING  cs_alv TYPE gty_alv.
     METHODS refresh_row
-      IMPORTING i_index  TYPE i
+      IMPORTING i_index   TYPE i
                 is_result TYPE zif_hddt_types=>ty_result.
     METHODS get_selected
       RETURNING VALUE(rt_index) TYPE salv_t_row.
-    METHODS execute_action
-      IMPORTING i_action TYPE zde_hddt_action.
+    METHODS check_auth
+      IMPORTING i_actvt     TYPE activ_auth
+                i_function  TYPE string
+      RETURNING VALUE(r_ok) TYPE abap_bool.
+    METHODS confirm
+      IMPORTING i_title     TYPE string
+                i_question  TYPE string
+      RETURNING VALUE(r_ok) TYPE abap_bool.
+
+    METHODS do_draft.
+    METHODS do_delete_draft.
+    METHODS do_issue.
+    METHODS do_update.
+    METHODS do_adjust_ref.
+    METHODS do_mail.
+    METHODS do_gom.
+    METHODS do_ungom.
+    METHODS do_edit.
+    METHODS do_getfile.
     METHODS show_payload.
     METHODS show_log.
+
     METHODS map_light
       IMPORTING i_status      TYPE zde_hddt_status
                 i_msgty       TYPE symsgty
@@ -53,6 +87,9 @@ CLASS lcl_app DEFINITION FINAL CREATE PUBLIC.
     METHODS status_text
       IMPORTING i_status      TYPE zde_hddt_status
       RETURNING VALUE(r_text) TYPE c LENGTH 60.
+    METHODS adj_code_of
+      IMPORTING is_reg        TYPE ztb_hddt_inv
+      RETURNING VALUE(r_code) TYPE c LENGTH 1.
 
 ENDCLASS.
 
@@ -74,25 +111,91 @@ CLASS lcl_app IMPLEMENTATION.
   ENDMETHOD.
 
 
+  METHOD run_auto.
+
+    " FS 3.6.9: 01 -> create-appr-inv (CREATE_INVOICE); 02 -> issue-invoice;
+    " 04 -> tra cứu rồi gọi API phù hợp (ISSUE_INVOICE tự xử lý); còn lại
+    " bỏ qua và ghi log. Commit từng chứng từ (EXECUTE tự commit).
+    mo_service = zcl_hddt_service=>get_instance( ).
+    select_data( ).
+
+    DATA lv_ok   TYPE i.
+    DATA lv_err  TYPE i.
+    DATA lv_skip TYPE i.
+
+    WRITE: / 'Phát hành tự động HĐĐT -', p_bukrs, p_gjahr, sy-datum, sy-uzeit.
+    ULINE.
+
+    LOOP AT gt_request ASSIGNING FIELD-SYMBOL(<fs_req>).
+      DATA(lv_idx) = sy-tabix.
+      DATA(ls_reg) = zcl_hddt_log=>read_invoice( i_bukrs     = <fs_req>-bukrs
+                                                 i_gjahr     = <fs_req>-gjahr
+                                                 i_src_type  = <fs_req>-src_type
+                                                 i_src_docno = <fs_req>-src_docno ).
+      DATA(lv_status) = COND zde_hddt_status( WHEN ls_reg-status IS INITIAL
+                                              THEN zif_hddt_types=>gc_status-not_sent
+                                              ELSE ls_reg-status ).
+      DATA ls_result TYPE zif_hddt_types=>ty_result.
+      CLEAR ls_result.
+
+      CASE lv_status.
+        WHEN zif_hddt_types=>gc_status-not_sent.
+          IF <fs_req>-src_info-xreversed = abap_true OR <fs_req>-src_info-xcancel = abap_true.
+            lv_skip = lv_skip + 1.
+            WRITE: / <fs_req>-src_docno, 'bỏ qua: chứng từ đã đảo/huỷ'.
+            CONTINUE.
+          ENDIF.
+          ls_result = mo_service->create_invoice( is_request = <fs_req> ).
+        WHEN zif_hddt_types=>gc_status-wait_seq
+          OR zif_hddt_types=>gc_status-wait_appr
+          OR zif_hddt_types=>gc_status-error.
+          ls_result = mo_service->issue_invoice( is_request = <fs_req> ).
+        WHEN OTHERS.
+          lv_skip = lv_skip + 1.
+          WRITE: / <fs_req>-src_docno, 'bỏ qua: trạng thái', lv_status.
+          CONTINUE.
+      ENDCASE.
+
+      refresh_row( i_index = lv_idx is_result = ls_result ).
+      IF ls_result-success = abap_true.
+        lv_ok = lv_ok + 1.
+        WRITE: / <fs_req>-src_docno, 'OK  ', ls_result-status, ls_result-serial, ls_result-seq, ls_result-message.
+      ELSE.
+        lv_err = lv_err + 1.
+        WRITE: / <fs_req>-src_docno, 'LỖI ', ls_result-status, ls_result-message.
+      ENDIF.
+    ENDLOOP.
+
+    ULINE.
+    MESSAGE s043(zms_hddt) WITH lv_ok lv_err lv_skip.
+    WRITE: / |Thành công { lv_ok }, lỗi { lv_err }, bỏ qua { lv_skip }|.
+
+  ENDMETHOD.
+
+
   METHOD select_data.
 
     CLEAR: gt_alv, gt_request.
 
     TRY.
         DATA(lo_source) = zcl_hddt_factory=>get_source( i_bukrs    = p_bukrs
-                                                         i_src_type = p_srct ).
+                                                        i_src_type = p_srct ).
 
         DATA(ls_sel) = VALUE zif_hddt_source=>ty_selection(
-          bukrs    = p_bukrs
-          gjahr    = p_gjahr
+          bukrs     = p_bukrs
+          gjahr     = p_gjahr
           r_docno   = CORRESPONDING #( s_belnr[] )
           r_budat   = CORRESPONDING #( s_budat[] )
           r_bldat   = CORRESPONDING #( s_bldat[] )
+          r_cpudt   = CORRESPONDING #( s_cpudt[] )
           r_blart   = CORRESPONDING #( s_blart[] )
           r_vbeln   = CORRESPONDING #( s_vbeln[] )
           r_kunnr   = CORRESPONDING #( s_kunnr[] )
           r_usnam   = CORRESPONDING #( s_usnam[] )
+          r_seq     = CORRESPONDING #( s_seq[] )
+          r_gom     = CORRESPONDING #( s_gom[] )
           r_status  = CORRESPONDING #( s_stat[] )
+          inv_type  = p_ityp
           xreversed = p_rever ).
 
         gt_request = lo_source->select_documents( ls_sel ).
@@ -102,7 +205,7 @@ CLASS lcl_app IMPLEMENTATION.
         RETURN.
     ENDTRY.
 
-    " Ghép trạng thái đã lưu trong sổ đăng ký vào danh sách hiển thị
+    " Ghép sổ đăng ký vào danh sách hiển thị
     SELECT * FROM ztb_hddt_inv
       INTO TABLE @DATA(lt_reg)
       WHERE bukrs = @p_bukrs
@@ -123,6 +226,7 @@ CLASS lcl_app IMPLEMENTATION.
       <fs_alv>-bldat      = <fs_req>-src_info-bldat.
       <fs_alv>-awkey      = <fs_req>-src_info-awkey.
       <fs_alv>-inv_date   = <fs_req>-invoice-header-inv_date.
+      <fs_alv>-inv_time   = <fs_req>-invoice-header-inv_time.
       IF <fs_req>-src_info-xreversed = abap_true
          OR <fs_req>-src_info-xcancel = abap_true.
         <fs_alv>-reversed = icon_storno.
@@ -134,38 +238,94 @@ CLASS lcl_app IMPLEMENTATION.
       ENDIF.
       <fs_alv>-buyer_code = <fs_req>-invoice-buyer-code.
       <fs_alv>-buyer_name = <fs_req>-invoice-buyer-legal_name.
+      <fs_alv>-buyer_addr = <fs_req>-invoice-buyer-address.
       <fs_alv>-buyer_tax  = <fs_req>-invoice-buyer-tax_code.
+      <fs_alv>-buyer_mail = <fs_req>-invoice-buyer-email.
+      READ TABLE <fs_req>-invoice-payments INDEX 1 INTO DATA(ls_pay).
+      IF sy-subrc = 0.
+        <fs_alv>-paym = ls_pay-method_name.
+      ENDIF.
       <fs_alv>-waers      = <fs_req>-invoice-header-currency.
+      <fs_alv>-exch_rate  = <fs_req>-invoice-header-exch_rate.
       <fs_alv>-amount     = <fs_req>-invoice-summary-amount_wo_tax.
       <fs_alv>-vat_amount = <fs_req>-invoice-summary-tax_amount.
       <fs_alv>-total      = <fs_req>-invoice-summary-total.
       <fs_alv>-provider   = <fs_req>-provider.
       <fs_alv>-inv_type   = <fs_req>-invoice-header-inv_type.
+      <fs_alv>-status     = zif_hddt_types=>gc_status-not_sent.
 
-      TRY.
-          DATA(ls_reg) = lt_reg[ bukrs     = <fs_req>-bukrs
-                                 gjahr     = <fs_req>-gjahr
-                                 src_type  = <fs_req>-src_type
-                                 src_docno = <fs_req>-src_docno ].
-          <fs_alv>-provider   = ls_reg-provider.
-          <fs_alv>-template   = ls_reg-template.
-          <fs_alv>-serial     = ls_reg-serial.
-          <fs_alv>-seq        = ls_reg-seq.
-          <fs_alv>-issue_date = ls_reg-issue_date.
-          <fs_alv>-mscqt      = ls_reg-mscqt.
-          <fs_alv>-sec_code   = ls_reg-sec_code.
-          <fs_alv>-inv_link   = ls_reg-inv_link.
-          <fs_alv>-status     = ls_reg-status.
-          <fs_alv>-message    = ls_reg-message.
-          <fs_alv>-ref_docno  = ls_reg-ref_docno.
-        CATCH cx_sy_itab_line_not_found.
-          <fs_alv>-status = zif_hddt_types=>gc_status-not_sent.
-      ENDTRY.
+      READ TABLE lt_reg INTO DATA(ls_reg)
+           WITH KEY bukrs     = <fs_req>-bukrs
+                    gjahr     = <fs_req>-gjahr
+                    src_type  = <fs_req>-src_type
+                    src_docno = <fs_req>-src_docno.
+      IF sy-subrc = 0.
+        fill_row_from_registry( EXPORTING is_reg = ls_reg CHANGING cs_alv = <fs_alv> ).
+      ENDIF.
 
       <fs_alv>-status_txt = status_text( <fs_alv>-status ).
       <fs_alv>-light      = map_light( i_status = <fs_alv>-status
                                        i_msgty  = <fs_alv>-msgty ).
     ENDLOOP.
+
+  ENDMETHOD.
+
+
+  METHOD fill_row_from_registry.
+
+    IF is_reg-provider IS NOT INITIAL.
+      cs_alv-provider = is_reg-provider.
+    ENDIF.
+    cs_alv-template   = is_reg-template.
+    cs_alv-serial     = is_reg-serial.
+    cs_alv-seq        = is_reg-seq.
+    cs_alv-issue_date = is_reg-issue_date.
+    cs_alv-mscqt      = is_reg-mscqt.
+    cs_alv-sec_code   = is_reg-sec_code.
+    cs_alv-inv_link   = is_reg-inv_link.
+    IF is_reg-status IS NOT INITIAL.
+      cs_alv-status   = is_reg-status.
+    ENDIF.
+    cs_alv-tax_status = is_reg-tax_status.
+    cs_alv-message    = is_reg-message.
+    cs_alv-ref_docno  = is_reg-ref_docno.
+    cs_alv-ref_gjahr  = is_reg-ref_gjahr.
+    cs_alv-adj_code   = adj_code_of( is_reg ).
+    cs_alv-gom_no     = is_reg-gom_no.
+    cs_alv-item_text  = is_reg-item_text.
+    IF is_reg-inv_time IS NOT INITIAL AND is_reg-status = zif_hddt_types=>gc_status-not_sent.
+      cs_alv-inv_time = is_reg-inv_time.
+    ENDIF.
+    cs_alv-mail_light = SWITCH #( is_reg-mail_status
+                                  WHEN 'S' THEN icon_mail
+                                  WHEN 'E' THEN icon_message_error_small
+                                  ELSE space ).
+
+  ENDMETHOD.
+
+
+  METHOD adj_code_of.
+
+    IF is_reg-ref_docno IS INITIAL.
+      RETURN.
+    ENDIF.
+    IF is_reg-adj_type = zif_hddt_types=>gc_adj_type-replace.
+      r_code = '5'.
+    ELSE.
+      r_code = SWITCH #( is_reg-adj_dir WHEN '1' THEN '2'
+                                        WHEN '0' THEN '3'
+                                        ELSE '4' ).
+    ENDIF.
+
+  ENDMETHOD.
+
+
+  METHOD reload.
+
+    select_data( ).
+    IF mo_alv IS BOUND.
+      mo_alv->refresh( ).
+    ENDIF.
 
   ENDMETHOD.
 
@@ -203,48 +363,35 @@ CLASS lcl_app IMPLEMENTATION.
   METHOD add_buttons.
 
     DATA(lo_fn) = mo_alv->get_functions( ).
+    DATA(lv_pos) = if_salv_c_function_position=>right_of_salv_functions.
 
     TRY.
-        lo_fn->add_function( name     = gc_fcode-issue
-                             icon     = CONV #( icon_execute_object )
-                             text     = 'Phát hành'
-                             tooltip  = 'Phát hành hoá đơn điện tử'
-                             position = if_salv_c_function_position=>right_of_salv_functions ).
-        lo_fn->add_function( name     = gc_fcode-adjust
-                             icon     = CONV #( icon_change )
-                             text     = 'Điều chỉnh'
-                             tooltip  = 'Lập hoá đơn điều chỉnh'
-                             position = if_salv_c_function_position=>right_of_salv_functions ).
-        lo_fn->add_function( name     = gc_fcode-replace
-                             icon     = CONV #( icon_replace )
-                             text     = 'Thay thế'
-                             tooltip  = 'Lập hoá đơn thay thế'
-                             position = if_salv_c_function_position=>right_of_salv_functions ).
-        lo_fn->add_function( name     = gc_fcode-cancel
-                             icon     = CONV #( icon_delete )
-                             text     = 'Huỷ'
-                             tooltip  = 'Huỷ hoá đơn (thông báo sai sót)'
-                             position = if_salv_c_function_position=>right_of_salv_functions ).
-        lo_fn->add_function( name     = gc_fcode-search
-                             icon     = CONV #( icon_display )
-                             text     = 'Tra cứu'
-                             tooltip  = 'Tra cứu trạng thái trên hệ thống NCC'
-                             position = if_salv_c_function_position=>right_of_salv_functions ).
-        lo_fn->add_function( name     = gc_fcode-getfile
-                             icon     = CONV #( icon_pdf )
-                             text     = 'Lấy file'
-                             tooltip  = 'Tải file hoá đơn từ NCC'
-                             position = if_salv_c_function_position=>right_of_salv_functions ).
-        lo_fn->add_function( name     = gc_fcode-showjs
-                             icon     = CONV #( icon_xml_doc )
-                             text     = 'Xem payload'
-                             tooltip  = 'Xem payload sẽ gửi cho NCC'
-                             position = if_salv_c_function_position=>right_of_salv_functions ).
-        lo_fn->add_function( name     = gc_fcode-showlog
-                             icon     = CONV #( icon_protocol )
-                             text     = 'Log'
-                             tooltip  = 'Xem log gọi API'
-                             position = if_salv_c_function_position=>right_of_salv_functions ).
+        " Thứ tự 8 nút theo FS mục 3.4
+        lo_fn->add_function( name = gc_fcode-draft   icon = CONV #( icon_create )
+                             text = 'Tích hợp HĐ'   tooltip = 'Tạo hoá đơn nháp trên hệ thống HĐĐT (chờ cấp số)' position = lv_pos ).
+        lo_fn->add_function( name = gc_fcode-deldrf  icon = CONV #( icon_delete )
+                             text = 'Hủy HĐ nháp'   tooltip = 'Xoá hoá đơn nháp trên hệ thống HĐĐT, về trạng thái chưa tích hợp' position = lv_pos ).
+        lo_fn->add_function( name = gc_fcode-issue   icon = CONV #( icon_execute_object )
+                             text = 'Phát hành HĐ'  tooltip = 'Cấp số và ký duyệt trên chính bản nháp, gửi Cơ quan thuế' position = lv_pos ).
+        lo_fn->add_function( name = gc_fcode-update  icon = CONV #( icon_refresh )
+                             text = 'Cập nhật HĐ'   tooltip = 'Tra cứu và đồng bộ trạng thái hoá đơn / Cơ quan thuế về SAP' position = lv_pos ).
+        lo_fn->add_function( name = gc_fcode-adjref  icon = CONV #( icon_change )
+                             text = 'HĐ Điều chỉnh' tooltip = 'Gắn hoá đơn gốc và loại điều chỉnh / thay thế cho chứng từ' position = lv_pos ).
+        lo_fn->add_function( name = gc_fcode-mail    icon = CONV #( icon_mail )
+                             text = 'Send Email'    tooltip = 'Gửi email hoá đơn (PDF) cho khách hàng' position = lv_pos ).
+        lo_fn->add_function( name = gc_fcode-gom     icon = CONV #( icon_collapse )
+                             text = 'Gom HĐ'        tooltip = 'Gom các chứng từ đã chọn thành một hoá đơn' position = lv_pos ).
+        lo_fn->add_function( name = gc_fcode-ungom   icon = CONV #( icon_expand )
+                             text = 'Huỷ Gom HĐ'    tooltip = 'Gỡ toàn bộ chứng từ khỏi chứng từ gom' position = lv_pos ).
+        " Tiện ích
+        lo_fn->add_function( name = gc_fcode-edit    icon = CONV #( icon_edit_file )
+                             text = 'Sửa ngày/giờ/tên hàng' tooltip = 'Sửa ngày, giờ phát hành và tên hàng trước khi tích hợp' position = lv_pos ).
+        lo_fn->add_function( name = gc_fcode-getfile icon = CONV #( icon_pdf )
+                             text = 'Lấy file'      tooltip = 'Tải file PDF hoá đơn từ nhà cung cấp' position = lv_pos ).
+        lo_fn->add_function( name = gc_fcode-showjs  icon = CONV #( icon_xml_doc )
+                             text = 'Xem payload'   tooltip = 'Xem payload sẽ gửi cho nhà cung cấp (không gọi API)' position = lv_pos ).
+        lo_fn->add_function( name = gc_fcode-showlog icon = CONV #( icon_protocol )
+                             text = 'Log'           tooltip = 'Xem log gọi API của chứng từ' position = lv_pos ).
       CATCH cx_salv_wrong_call cx_salv_existing.
         " Nút đã tồn tại -> bỏ qua, không chặn hiển thị
     ENDTRY.
@@ -260,22 +407,44 @@ CLASS lcl_app IMPLEMENTATION.
     TRY.
         lo_cols->get_column( 'LIGHT' )->set_short_text( 'TT' ).
         lo_cols->get_column( 'LIGHT' )->set_medium_text( 'Trạng thái' ).
-        lo_cols->get_column( 'LIGHT' )->set_long_text( 'Trạng thái' ).
-        CAST cl_salv_column_table( lo_cols->get_column( 'LIGHT' )
-          )->set_icon( abap_true ).
-
-        lo_cols->get_column( 'SRC_DOCNO' )->set_medium_text( 'Số chứng từ' ).
+        lo_cols->get_column( 'LIGHT' )->set_long_text( 'Trạng thái HĐĐT' ).
+        CAST cl_salv_column_table( lo_cols->get_column( 'LIGHT' ) )->set_icon( abap_true ).
+        lo_cols->get_column( 'MAIL_LIGHT' )->set_short_text( 'Email' ).
+        lo_cols->get_column( 'MAIL_LIGHT' )->set_medium_text( 'Trạng thái email' ).
+        CAST cl_salv_column_table( lo_cols->get_column( 'MAIL_LIGHT' ) )->set_icon( abap_true ).
         lo_cols->get_column( 'REVERSED' )->set_short_text( 'Đảo' ).
         lo_cols->get_column( 'REVERSED' )->set_medium_text( 'Đã đảo/huỷ' ).
-        CAST cl_salv_column_table( lo_cols->get_column( 'REVERSED' )
-          )->set_icon( abap_true ).
+        CAST cl_salv_column_table( lo_cols->get_column( 'REVERSED' ) )->set_icon( abap_true ).
+
+        lo_cols->get_column( 'SRC_DOCNO' )->set_medium_text( 'Số chứng từ' ).
+        lo_cols->get_column( 'GOM_NO' )->set_medium_text( 'Số FI gom' ).
         lo_cols->get_column( 'AWKEY' )->set_medium_text( 'Billing SD' ).
-        lo_cols->get_column( 'INV_DATE' )->set_medium_text( 'Ngày lập HĐ' ).
-        lo_cols->get_column( 'REF_DOCNO' )->set_medium_text( 'CT hoá đơn gốc' ).
+        lo_cols->get_column( 'INV_DATE' )->set_medium_text( 'Ngày phát hành' ).
+        lo_cols->get_column( 'INV_TIME' )->set_medium_text( 'Giờ phát hành' ).
+        lo_cols->get_column( 'BUYER_NAME' )->set_medium_text( 'Tên đơn vị' ).
+        lo_cols->get_column( 'BUYER_ADDR' )->set_medium_text( 'Địa chỉ' ).
+        lo_cols->get_column( 'BUYER_TAX' )->set_medium_text( 'Mã số thuế' ).
+        lo_cols->get_column( 'BUYER_MAIL' )->set_medium_text( 'Email' ).
+        lo_cols->get_column( 'ITEM_TEXT' )->set_medium_text( 'Tên hàng (nhập tay)' ).
+        lo_cols->get_column( 'PAYM' )->set_medium_text( 'HT thanh toán' ).
+        lo_cols->get_column( 'EXCH_RATE' )->set_medium_text( 'Tỷ giá' ).
+        lo_cols->get_column( 'AMOUNT' )->set_medium_text( 'Thành tiền' ).
+        lo_cols->get_column( 'VAT_AMOUNT' )->set_medium_text( 'Tiền thuế' ).
+        lo_cols->get_column( 'TOTAL' )->set_medium_text( 'Tổng tiền' ).
         lo_cols->get_column( 'TAX_SUMM' )->set_medium_text( 'Thuế suất' ).
-        lo_cols->get_column( 'BUYER_NAME' )->set_medium_text( 'Người mua' ).
+        lo_cols->get_column( 'TEMPLATE' )->set_medium_text( 'Mẫu HĐ' ).
+        lo_cols->get_column( 'SERIAL' )->set_medium_text( 'Ký hiệu HĐ' ).
+        lo_cols->get_column( 'SEQ' )->set_medium_text( 'Số hoá đơn' ).
+        lo_cols->get_column( 'ISSUE_DATE' )->set_medium_text( 'Ngày tích hợp' ).
+        lo_cols->get_column( 'MSCQT' )->set_medium_text( 'Mã CQT' ).
+        lo_cols->get_column( 'SEC_CODE' )->set_medium_text( 'Mã tra cứu' ).
+        lo_cols->get_column( 'ADJ_CODE' )->set_short_text( 'Loại ĐC' ).
+        lo_cols->get_column( 'ADJ_CODE' )->set_medium_text( 'Loại điều chỉnh' ).
+        lo_cols->get_column( 'REF_DOCNO' )->set_medium_text( 'Số chứng từ gốc' ).
+        lo_cols->get_column( 'REF_GJAHR' )->set_medium_text( 'Năm chứng từ gốc' ).
         lo_cols->get_column( 'STATUS_TXT' )->set_medium_text( 'Diễn giải TT' ).
-        lo_cols->get_column( 'MESSAGE' )->set_medium_text( 'Thông điệp' ).
+        lo_cols->get_column( 'TAX_STATUS' )->set_medium_text( 'TT Cơ quan thuế' ).
+        lo_cols->get_column( 'MESSAGE' )->set_medium_text( 'Thông báo' ).
 
         lo_cols->get_column( 'LOG_ID' )->set_technical( abap_true ).
         lo_cols->get_column( 'MSGTY' )->set_technical( abap_true ).
@@ -296,25 +465,66 @@ CLASS lcl_app IMPLEMENTATION.
   ENDMETHOD.
 
 
+  METHOD check_auth.
+
+    " Object phân quyền riêng của chương trình (FS mục 3.10), khai trong
+    " tham số AUTH_OBJECT với field BUKRS + ACTVT; trống = không kiểm.
+    DATA(lv_obj) = zcl_hddt_config=>get_instance( )->get_param(
+                     i_key = zif_hddt_types=>gc_parm-auth_object i_bukrs = p_bukrs ).
+    CONDENSE lv_obj.
+    IF lv_obj IS INITIAL.
+      r_ok = abap_true.
+      RETURN.
+    ENDIF.
+    DATA lv_object TYPE xuobject.
+    lv_object = lv_obj.
+    AUTHORITY-CHECK OBJECT lv_object
+      ID 'BUKRS' FIELD p_bukrs
+      ID 'ACTVT' FIELD i_actvt.
+    r_ok = xsdbool( sy-subrc = 0 ).
+    IF r_ok = abap_false.
+      MESSAGE s032(zms_hddt) WITH i_function DISPLAY LIKE 'E'.
+    ENDIF.
+
+  ENDMETHOD.
+
+
+  METHOD confirm.
+
+    DATA lv_answer TYPE char1.
+    CALL FUNCTION 'POPUP_TO_CONFIRM'
+      EXPORTING
+        titlebar              = i_title
+        text_question         = i_question
+        text_button_1         = 'Thực hiện'
+        text_button_2         = 'Huỷ'
+        default_button        = '2'
+        display_cancel_button = abap_false
+      IMPORTING
+        answer                = lv_answer
+      EXCEPTIONS
+        text_not_found        = 1
+        OTHERS                = 2.
+    r_ok = xsdbool( sy-subrc = 0 AND lv_answer = '1' ).
+
+  ENDMETHOD.
+
+
   METHOD on_function.
 
     CASE e_salv_function.
-      WHEN gc_fcode-issue.
-        execute_action( zif_hddt_types=>gc_action-create_invoice ).
-      WHEN gc_fcode-adjust.
-        execute_action( zif_hddt_types=>gc_action-adjust_invoice ).
-      WHEN gc_fcode-replace.
-        execute_action( zif_hddt_types=>gc_action-replace_invoice ).
-      WHEN gc_fcode-cancel.
-        execute_action( zif_hddt_types=>gc_action-cancel_invoice ).
-      WHEN gc_fcode-search.
-        execute_action( zif_hddt_types=>gc_action-search_invoice ).
-      WHEN gc_fcode-getfile.
-        execute_action( zif_hddt_types=>gc_action-get_file ).
-      WHEN gc_fcode-showjs.
-        show_payload( ).
-      WHEN gc_fcode-showlog.
-        show_log( ).
+      WHEN gc_fcode-draft.    do_draft( ).
+      WHEN gc_fcode-deldrf.   do_delete_draft( ).
+      WHEN gc_fcode-issue.    do_issue( ).
+      WHEN gc_fcode-update.   do_update( ).
+      WHEN gc_fcode-adjref.   do_adjust_ref( ).
+      WHEN gc_fcode-mail.     do_mail( ).
+      WHEN gc_fcode-gom.      do_gom( ).
+      WHEN gc_fcode-ungom.    do_ungom( ).
+      WHEN gc_fcode-edit.     do_edit( ).
+      WHEN gc_fcode-getfile.  do_getfile( ).
+      WHEN gc_fcode-showjs.   show_payload( ).
+      WHEN gc_fcode-showlog.  show_log( ).
       WHEN OTHERS.
     ENDCASE.
 
@@ -345,69 +555,412 @@ CLASS lcl_app IMPLEMENTATION.
   ENDMETHOD.
 
 
-  METHOD execute_action.
+*---------------------------------------------------------------------*
+* Nút Tích hợp HĐ (FS 3.6.1) — tạo hoá đơn nháp
+*---------------------------------------------------------------------*
+  METHOD do_draft.
 
-    DATA(lt_rows) = get_selected( ).
-    IF lt_rows IS INITIAL.
-      MESSAGE s002(zms_hddt) DISPLAY LIKE 'W'.
+    IF check_auth( i_actvt = gc_actvt-create i_function = 'Tích hợp HĐ' ) = abap_false.
       RETURN.
     ENDIF.
-
-    " Nghiệp vụ ghi (phát hành/điều chỉnh/thay thế/huỷ) phải được xác
-    " nhận: đây là hành động không thể thu hồi phía cơ quan thuế.
-    IF p_test = abap_false
-       AND ( i_action = zif_hddt_types=>gc_action-create_invoice
-          OR i_action = zif_hddt_types=>gc_action-adjust_invoice
-          OR i_action = zif_hddt_types=>gc_action-replace_invoice
-          OR i_action = zif_hddt_types=>gc_action-cancel_invoice ).
-
-      DATA lv_answer TYPE char1.
-      CALL FUNCTION 'POPUP_TO_CONFIRM'
-        EXPORTING
-          titlebar              = 'Xác nhận gửi hoá đơn điện tử'
-          text_question         = |Thực hiện "{ i_action }" cho { lines( lt_rows ) }| &&
-                                  | chứng từ? Hành động này gửi dữ liệu lên cơ quan thuế| &&
-                                  | và KHÔNG thể thu hồi.|
-          text_button_1         = 'Thực hiện'
-          text_button_2         = 'Huỷ'
-          default_button        = '2'
-          display_cancel_button = abap_false
-        IMPORTING
-          answer                = lv_answer
-        EXCEPTIONS
-          text_not_found        = 1
-          OTHERS                = 2.
-      IF lv_answer <> '1'.
-        RETURN.
-      ENDIF.
+    DATA(lt_rows) = get_selected( ).
+    IF lt_rows IS INITIAL.
+      MESSAGE s013(zms_hddt) DISPLAY LIKE 'W'.
+      RETURN.
     ENDIF.
 
     LOOP AT lt_rows INTO DATA(lv_row).
       IF lv_row < 1 OR lv_row > lines( gt_request ).
         CONTINUE.
       ENDIF.
+      DATA(ls_result) = mo_service->create_draft( is_request = gt_request[ lv_row ]
+                                                  i_test_run = p_test ).
+      refresh_row( i_index = lv_row is_result = ls_result ).
+      IF p_test = abap_true AND ls_result-request_body IS NOT INITIAL.
+        " FS 3.3 STT 14: Test -> pop-up nội dung JSON sẽ gửi
+        PERFORM display_text USING |Payload (Test run) - { gt_request[ lv_row ]-src_docno }|
+                                   ls_result-request_body.
+      ENDIF.
+    ENDLOOP.
+    mo_alv->refresh( ).
 
+  ENDMETHOD.
+
+
+*---------------------------------------------------------------------*
+* Nút Hủy HĐ nháp (FS 3.6.2)
+*---------------------------------------------------------------------*
+  METHOD do_delete_draft.
+
+    IF check_auth( i_actvt = gc_actvt-create i_function = 'Hủy HĐ nháp' ) = abap_false.
+      RETURN.
+    ENDIF.
+    DATA(lt_rows) = get_selected( ).
+    IF lt_rows IS INITIAL.
+      MESSAGE 'Chọn chứng từ cần huỷ hoá đơn nháp' TYPE 'S' DISPLAY LIKE 'W'.
+      RETURN.
+    ENDIF.
+    IF confirm( i_title    = 'Huỷ hoá đơn nháp'
+                i_question = |Bạn có chắc chắn huỷ hoá đơn nháp của { lines( lt_rows ) } chứng từ đã chọn không?| ) = abap_false.
+      RETURN.
+    ENDIF.
+
+    LOOP AT lt_rows INTO DATA(lv_row).
+      IF lv_row < 1 OR lv_row > lines( gt_request ).
+        CONTINUE.
+      ENDIF.
+      DATA(ls_result) = mo_service->delete_draft( gt_request[ lv_row ] ).
+      refresh_row( i_index = lv_row is_result = ls_result ).
+    ENDLOOP.
+    mo_alv->refresh( ).
+
+  ENDMETHOD.
+
+
+*---------------------------------------------------------------------*
+* Nút Phát hành HĐ (FS 3.6.3 + 3.6.10)
+*---------------------------------------------------------------------*
+  METHOD do_issue.
+
+    IF check_auth( i_actvt = gc_actvt-change i_function = 'Phát hành HĐ' ) = abap_false.
+      RETURN.
+    ENDIF.
+    DATA(lt_rows) = get_selected( ).
+    IF lt_rows IS INITIAL.
+      MESSAGE 'Chọn chứng từ cần tích hợp' TYPE 'S' DISPLAY LIKE 'W'.
+      RETURN.
+    ENDIF.
+    IF p_test = abap_false
+       AND confirm( i_title    = 'Xác nhận phát hành hoá đơn điện tử'
+                    i_question = |Phát hành { lines( lt_rows ) } hoá đơn? Hành động này cấp số, ký duyệt| &&
+                                 | và gửi dữ liệu lên Cơ quan thuế - KHÔNG thể thu hồi.| ) = abap_false.
+      RETURN.
+    ENDIF.
+
+    LOOP AT lt_rows INTO DATA(lv_row).
+      IF lv_row < 1 OR lv_row > lines( gt_request ).
+        CONTINUE.
+      ENDIF.
+      DATA(ls_result) = mo_service->issue_invoice( is_request = gt_request[ lv_row ]
+                                                   i_test_run = p_test ).
+      refresh_row( i_index = lv_row is_result = ls_result ).
+      IF p_test = abap_true AND ls_result-request_body IS NOT INITIAL.
+        PERFORM display_text USING |Payload (Test run) - { gt_request[ lv_row ]-src_docno }|
+                                   ls_result-request_body.
+      ENDIF.
+    ENDLOOP.
+    mo_alv->refresh( ).
+
+  ENDMETHOD.
+
+
+*---------------------------------------------------------------------*
+* Nút Cập nhật HĐ (FS 3.6.5) — tra cứu, đồng bộ, ghi ngược BKPF
+*---------------------------------------------------------------------*
+  METHOD do_update.
+
+    IF check_auth( i_actvt = gc_actvt-display i_function = 'Cập nhật HĐ' ) = abap_false.
+      RETURN.
+    ENDIF.
+    DATA(lt_rows) = get_selected( ).
+    IF lt_rows IS INITIAL.
+      MESSAGE s041(zms_hddt) DISPLAY LIKE 'W'.
+      RETURN.
+    ENDIF.
+
+    LOOP AT lt_rows INTO DATA(lv_row).
+      IF lv_row < 1 OR lv_row > lines( gt_request ).
+        CONTINUE.
+      ENDIF.
       DATA(ls_req) = gt_request[ lv_row ].
-      ls_req-action = i_action.
+      APPEND VALUE #( name = `type` value = `json` ) TO ls_req-params.
+      DATA(ls_result) = mo_service->search_invoice( ls_req ).
+      IF ls_result-success = abap_true.
+        COMMIT WORK AND WAIT.        " search_invoice không tự commit
+      ENDIF.
+      refresh_row( i_index = lv_row is_result = ls_result ).
+    ENDLOOP.
+    mo_alv->refresh( ).
 
-      " Điều chỉnh / thay thế cần thông tin hoá đơn gốc từ sổ đăng ký
-      IF i_action = zif_hddt_types=>gc_action-adjust_invoice
-         OR i_action = zif_hddt_types=>gc_action-replace_invoice
-         OR i_action = zif_hddt_types=>gc_action-cancel_invoice.
-        PERFORM fill_original CHANGING ls_req.
+  ENDMETHOD.
+
+
+*---------------------------------------------------------------------*
+* Nút HĐ Điều chỉnh (FS 3.6.4) — gắn hoá đơn gốc + loại điều chỉnh
+*---------------------------------------------------------------------*
+  METHOD do_adjust_ref.
+
+    IF check_auth( i_actvt = gc_actvt-change i_function = 'HĐ Điều chỉnh' ) = abap_false.
+      RETURN.
+    ENDIF.
+    DATA(lt_rows) = get_selected( ).
+    IF lt_rows IS INITIAL.
+      MESSAGE 'Cần chọn chứng từ điều chỉnh' TYPE 'S' DISPLAY LIKE 'W'.
+      RETURN.
+    ENDIF.
+    IF lines( lt_rows ) > 1.
+      MESSAGE s019(zms_hddt) DISPLAY LIKE 'E'.
+      RETURN.
+    ENDIF.
+    DATA(lv_row) = lt_rows[ 1 ].
+    IF lv_row < 1 OR lv_row > lines( gt_request ).
+      RETURN.
+    ENDIF.
+    DATA(ls_req) = gt_request[ lv_row ].
+    IF ls_req-src_info-xreversed = abap_true OR ls_req-src_info-xcancel = abap_true.
+      MESSAGE 'Không thể điều chỉnh chứng từ đã huỷ' TYPE 'S' DISPLAY LIKE 'E'.
+      RETURN.
+    ENDIF.
+
+    DATA lv_docno TYPE zde_hddt_docno.
+    DATA lv_gjahr TYPE gjahr.
+    DATA lv_code  TYPE c LENGTH 1.
+    lv_docno = gt_alv[ lv_row ]-ref_docno.
+    lv_gjahr = COND #( WHEN gt_alv[ lv_row ]-ref_gjahr IS NOT INITIAL
+                       THEN gt_alv[ lv_row ]-ref_gjahr ELSE p_gjahr ).
+    lv_code  = gt_alv[ lv_row ]-adj_code.
+    DATA lv_ok TYPE abap_bool.
+    PERFORM popup_original CHANGING lv_docno lv_gjahr lv_code lv_ok.
+    IF lv_ok = abap_false.
+      RETURN.
+    ENDIF.
+
+    DATA(ls_result) = mo_service->attach_original( is_request  = ls_req
+                                                   i_org_docno = lv_docno
+                                                   i_org_gjahr = lv_gjahr
+                                                   i_fs_code   = lv_code ).
+    DATA(lv_like) = COND symsgty( WHEN ls_result-success = abap_true THEN 'S' ELSE 'E' ).
+    MESSAGE ls_result-message TYPE 'S' DISPLAY LIKE lv_like.
+    IF ls_result-success = abap_true.
+      reload( ).
+    ENDIF.
+
+  ENDMETHOD.
+
+
+*---------------------------------------------------------------------*
+* Nút Send Email (FS 3.6.6) — lấy PDF từ NCC rồi gửi cho khách hàng
+*---------------------------------------------------------------------*
+  METHOD do_mail.
+
+    IF check_auth( i_actvt = gc_actvt-display i_function = 'Send Email' ) = abap_false.
+      RETURN.
+    ENDIF.
+    DATA(lt_rows) = get_selected( ).
+    IF lt_rows IS INITIAL.
+      MESSAGE s002(zms_hddt) DISPLAY LIKE 'W'.
+      RETURN.
+    ENDIF.
+
+    DATA(lo_mail) = NEW zcl_hddt_mail( ).
+    DATA(lo_log)  = NEW zcl_hddt_log( ).
+
+    LOOP AT lt_rows INTO DATA(lv_row).
+      IF lv_row < 1 OR lv_row > lines( gt_request ).
+        CONTINUE.
+      ENDIF.
+      DATA(ls_req) = gt_request[ lv_row ].
+      DATA(ls_reg) = zcl_hddt_log=>read_invoice( i_bukrs     = ls_req-bukrs
+                                                 i_gjahr     = ls_req-gjahr
+                                                 i_src_type  = ls_req-src_type
+                                                 i_src_docno = ls_req-src_docno ).
+      DATA ls_result TYPE zif_hddt_types=>ty_result.
+      CLEAR ls_result.
+
+      IF lo_mail->is_allowed( i_bukrs = ls_req-bukrs i_status = ls_reg-status ) = abap_false.
+        ls_result-msgty   = 'E'.
+        ls_result-message = 'Hoá đơn chưa được Cơ quan thuế chấp nhận'.
+        refresh_row( i_index = lv_row is_result = ls_result ).
+        CONTINUE.
       ENDIF.
 
-      DATA(ls_result) = mo_service->execute( is_request  = ls_req
-                                             i_test_run = p_test ).
-      refresh_row( i_index  = lv_row
-                   is_result = ls_result ).
+      " Lấy file PDF từ NCC (search-invoice type = pdf)
+      APPEND VALUE #( name = `type` value = `pdf` ) TO ls_req-params.
+      ls_req-invoice-header-idkey = ls_reg-idkey.
+      DATA(ls_file) = mo_service->get_invoice_file( ls_req ).
+      IF ls_file-success = abap_false OR ls_file-file_content IS INITIAL.
+        ls_result-msgty   = 'E'.
+        ls_result-message = |Không lấy được file PDF: { ls_file-message }|.
+        lo_log->set_mail_status( is_request = ls_req i_status = 'E' ).
+        refresh_row( i_index = lv_row is_result = ls_result ).
+        CONTINUE.
+      ENDIF.
 
-      IF i_action = zif_hddt_types=>gc_action-get_file
-         AND ls_result-file_content IS NOT INITIAL.
+      ls_result = lo_mail->send_invoice( is_request  = ls_req
+                                         is_reg      = ls_reg
+                                         i_pdf       = ls_file-file_content
+                                         i_file_name = ls_file-file_name ).
+      lo_log->set_mail_status( is_request = ls_req
+                               i_status   = COND #( WHEN ls_result-success = abap_true THEN 'S' ELSE 'E' ) ).
+      COMMIT WORK AND WAIT.
+      refresh_row( i_index = lv_row is_result = ls_result ).
+      gt_alv[ lv_row ]-mail_light = COND #( WHEN ls_result-success = abap_true
+                                            THEN icon_mail ELSE icon_message_error_small ).
+    ENDLOOP.
+    mo_alv->refresh( ).
+
+  ENDMETHOD.
+
+
+*---------------------------------------------------------------------*
+* Nút Gom HĐ (FS 3.6.7)
+*---------------------------------------------------------------------*
+  METHOD do_gom.
+
+    IF check_auth( i_actvt = gc_actvt-change i_function = 'Gom HĐ' ) = abap_false.
+      RETURN.
+    ENDIF.
+    DATA(lt_rows) = get_selected( ).
+    IF lines( lt_rows ) < 2.
+      MESSAGE s024(zms_hddt) DISPLAY LIKE 'W'.
+      RETURN.
+    ENDIF.
+
+    DATA lt_req TYPE zif_hddt_types=>ty_t_request.
+    LOOP AT lt_rows INTO DATA(lv_row).
+      IF lv_row < 1 OR lv_row > lines( gt_request ).
+        CONTINUE.
+      ENDIF.
+      IF gt_alv[ lv_row ]-gom_no IS NOT INITIAL.
+        MESSAGE s025(zms_hddt) DISPLAY LIKE 'E'.
+        RETURN.
+      ENDIF.
+      APPEND gt_request[ lv_row ] TO lt_req.
+    ENDLOOP.
+
+    TRY.
+        DATA(lv_gom) = NEW zcl_hddt_gom( )->create( i_bukrs     = p_bukrs
+                                                    i_gjahr     = p_gjahr
+                                                    it_requests = lt_req ).
+        COMMIT WORK AND WAIT.
+        MESSAGE s028(zms_hddt) WITH lines( lt_req ) lv_gom.
+        reload( ).
+      CATCH zcx_hddt_error INTO DATA(lx).
+        ROLLBACK WORK.
+        MESSAGE lx->get_text_long( ) TYPE 'S' DISPLAY LIKE 'E'.
+    ENDTRY.
+
+  ENDMETHOD.
+
+
+*---------------------------------------------------------------------*
+* Nút Huỷ Gom HĐ (FS 3.6.8)
+*---------------------------------------------------------------------*
+  METHOD do_ungom.
+
+    IF check_auth( i_actvt = gc_actvt-change i_function = 'Huỷ Gom HĐ' ) = abap_false.
+      RETURN.
+    ENDIF.
+    DATA(lt_rows) = get_selected( ).
+    IF lt_rows IS INITIAL.
+      MESSAGE 'Chọn chứng từ gom cần gỡ' TYPE 'S' DISPLAY LIKE 'W'.
+      RETURN.
+    ENDIF.
+
+    DATA lt_gom TYPE SORTED TABLE OF zde_hddt_docno WITH UNIQUE KEY table_line.
+    LOOP AT lt_rows INTO DATA(lv_row).
+      IF lv_row < 1 OR lv_row > lines( gt_alv ).
+        CONTINUE.
+      ENDIF.
+      DATA(ls_alv) = gt_alv[ lv_row ].
+      DATA(lv_gom) = COND zde_hddt_docno( WHEN ls_alv-src_type = zcl_hddt_gom=>gc_src_type
+                                          THEN ls_alv-src_docno ELSE ls_alv-gom_no ).
+      IF lv_gom IS INITIAL.
+        MESSAGE s029(zms_hddt) DISPLAY LIKE 'E'.
+        RETURN.
+      ENDIF.
+      INSERT lv_gom INTO TABLE lt_gom.
+    ENDLOOP.
+
+    DATA(lo_gom) = NEW zcl_hddt_gom( ).
+    LOOP AT lt_gom INTO lv_gom.
+      TRY.
+          lo_gom->cancel( i_bukrs = p_bukrs i_gjahr = p_gjahr i_gom_no = lv_gom ).
+          COMMIT WORK AND WAIT.
+          MESSAGE s030(zms_hddt) WITH lv_gom.
+        CATCH zcx_hddt_error INTO DATA(lx).
+          ROLLBACK WORK.
+          MESSAGE lx->get_text_long( ) TYPE 'S' DISPLAY LIKE 'E'.
+      ENDTRY.
+    ENDLOOP.
+    reload( ).
+
+  ENDMETHOD.
+
+
+*---------------------------------------------------------------------*
+* Sửa ngày / giờ phát hành / tên hàng (FS 3.5: các cột "cho sửa")
+*---------------------------------------------------------------------*
+  METHOD do_edit.
+
+    IF check_auth( i_actvt = gc_actvt-change i_function = 'Sửa ngày/giờ/tên hàng' ) = abap_false.
+      RETURN.
+    ENDIF.
+    DATA(lt_rows) = get_selected( ).
+    IF lt_rows IS INITIAL.
+      MESSAGE s002(zms_hddt) DISPLAY LIKE 'W'.
+      RETURN.
+    ENDIF.
+
+    DATA(lv_first) = lt_rows[ 1 ].
+    DATA lv_date TYPE dats.
+    DATA lv_time TYPE uzeit.
+    DATA lv_text TYPE zde_hddt_name.
+    DATA lv_ok   TYPE abap_bool.
+    lv_date = gt_alv[ lv_first ]-inv_date.
+    lv_time = gt_alv[ lv_first ]-inv_time.
+    lv_text = gt_alv[ lv_first ]-item_text.
+    PERFORM popup_edit CHANGING lv_date lv_time lv_text lv_ok.
+    IF lv_ok = abap_false.
+      RETURN.
+    ENDIF.
+
+    DATA(lo_log) = NEW zcl_hddt_log( ).
+    DATA lv_cnt TYPE i.
+    LOOP AT lt_rows INTO DATA(lv_row).
+      IF lv_row < 1 OR lv_row > lines( gt_request ).
+        CONTINUE.
+      ENDIF.
+      IF gt_alv[ lv_row ]-status <> zif_hddt_types=>gc_status-not_sent
+         AND gt_alv[ lv_row ]-status <> zif_hddt_types=>gc_status-error.
+        CONTINUE.                      " đã có nháp/hoá đơn -> không sửa
+      ENDIF.
+      lo_log->save_edit( is_request  = gt_request[ lv_row ]
+                         i_inv_date  = lv_date
+                         i_inv_time  = lv_time
+                         i_item_text = CONV #( lv_text ) ).
+      lv_cnt = lv_cnt + 1.
+    ENDLOOP.
+    COMMIT WORK AND WAIT.
+    MESSAGE s034(zms_hddt) WITH lv_cnt.
+    reload( ).
+
+  ENDMETHOD.
+
+
+  METHOD do_getfile.
+
+    IF check_auth( i_actvt = gc_actvt-display i_function = 'Lấy file' ) = abap_false.
+      RETURN.
+    ENDIF.
+    DATA(lt_rows) = get_selected( ).
+    IF lt_rows IS INITIAL.
+      MESSAGE s002(zms_hddt) DISPLAY LIKE 'W'.
+      RETURN.
+    ENDIF.
+
+    LOOP AT lt_rows INTO DATA(lv_row).
+      IF lv_row < 1 OR lv_row > lines( gt_request ).
+        CONTINUE.
+      ENDIF.
+      DATA(ls_req) = gt_request[ lv_row ].
+      APPEND VALUE #( name = `type` value = `pdf` ) TO ls_req-params.
+      DATA(ls_result) = mo_service->get_invoice_file( ls_req ).
+      refresh_row( i_index = lv_row is_result = ls_result ).
+      IF ls_result-file_content IS NOT INITIAL.
         PERFORM save_file USING ls_result-file_name ls_result-file_content.
       ENDIF.
     ENDLOOP.
-
     mo_alv->refresh( ).
 
   ENDMETHOD.
@@ -430,6 +983,10 @@ CLASS lcl_app IMPLEMENTATION.
     IF is_result-status IS NOT INITIAL.
       <fs_alv>-status     = is_result-status.
       <fs_alv>-status_txt = status_text( is_result-status ).
+      IF is_result-status = zif_hddt_types=>gc_status-not_sent.
+        CLEAR: <fs_alv>-template, <fs_alv>-serial, <fs_alv>-seq, <fs_alv>-issue_date,
+               <fs_alv>-mscqt, <fs_alv>-sec_code, <fs_alv>-inv_link, <fs_alv>-tax_status.
+      ENDIF.
     ENDIF.
     IF is_result-template IS NOT INITIAL.
       <fs_alv>-template = is_result-template.
@@ -452,6 +1009,9 @@ CLASS lcl_app IMPLEMENTATION.
     IF is_result-inv_link IS NOT INITIAL.
       <fs_alv>-inv_link = is_result-inv_link.
     ENDIF.
+    IF is_result-tax_status IS NOT INITIAL.
+      <fs_alv>-tax_status = is_result-tax_status.
+    ENDIF.
 
     <fs_alv>-light = map_light( i_status = <fs_alv>-status
                                 i_msgty  = <fs_alv>-msgty ).
@@ -473,12 +1033,14 @@ CLASS lcl_app IMPLEMENTATION.
     ENDIF.
 
     DATA(ls_req) = gt_request[ lv_row ].
-    IF ls_req-action IS INITIAL.
-      ls_req-action = zif_hddt_types=>gc_action-create_invoice.
-    ENDIF.
+    " Payload theo bước tiếp theo của chứng từ: chưa tích hợp -> nháp;
+    " đã có nháp -> phát hành
+    ls_req-action = COND #( WHEN gt_alv[ lv_row ]-status = zif_hddt_types=>gc_status-wait_seq
+                            THEN zif_hddt_types=>gc_action-issue_invoice
+                            ELSE zif_hddt_types=>gc_action-create_draft ).
 
     " Test run => KHÔNG gọi API, chỉ dựng payload; mật khẩu được che
-    DATA(ls_result) = mo_service->execute( is_request  = ls_req
+    DATA(ls_result) = mo_service->execute( is_request = ls_req
                                            i_test_run = abap_true ).
 
     IF ls_result-request_body IS INITIAL.
@@ -507,27 +1069,28 @@ CLASS lcl_app IMPLEMENTATION.
 
     DATA(ls_alv) = gt_alv[ lv_row ].
 
-    SELECT log_id, created_at, action, http_code, http_reason,
-           duration_ms, message, req_body, res_body
+    SELECT log_id, created_at, action, http_code, http_reason, duration_ms, message
       FROM ztb_hddt_log
-      INTO TABLE @DATA(lt_log)
       WHERE bukrs     = @ls_alv-bukrs
         AND gjahr     = @ls_alv-gjahr
         AND src_type  = @ls_alv-src_type
         AND src_docno = @ls_alv-src_docno
-      ORDER BY created_at DESCENDING.
+      ORDER BY created_at DESCENDING
+      INTO TABLE @DATA(lt_log)
+      UP TO 1 ROWS.
     IF sy-subrc <> 0.
       MESSAGE s003(zms_hddt) DISPLAY LIKE 'W'.
       RETURN.
     ENDIF.
 
     DATA(ls_last) = lt_log[ 1 ].
+    DATA(ls_pay)  = zcl_hddt_log=>read_payload( ls_last-log_id ).
     DATA(lv_text) = |=== REQUEST ({ ls_last-action }, HTTP { ls_last-http_code }| &&
                     |, { ls_last-duration_ms } ms) ===| &&
-                    cl_abap_char_utilities=>newline && ls_last-req_body &&
+                    cl_abap_char_utilities=>newline && ls_pay-req_body &&
                     cl_abap_char_utilities=>newline &&
                     |=== RESPONSE ===| &&
-                    cl_abap_char_utilities=>newline && ls_last-res_body.
+                    cl_abap_char_utilities=>newline && ls_pay-res_body.
 
     PERFORM display_text USING 'Log gọi API' lv_text.
 
@@ -537,7 +1100,8 @@ CLASS lcl_app IMPLEMENTATION.
   METHOD map_light.
 
     IF i_msgty = 'E' OR i_msgty = 'A'
-       OR i_status = zif_hddt_types=>gc_status-error.
+       OR i_status = zif_hddt_types=>gc_status-error
+       OR i_status = zif_hddt_types=>gc_status-rejected.
       r_icon = icon_red_light.
       RETURN.
     ENDIF.
@@ -561,8 +1125,8 @@ CLASS lcl_app IMPLEMENTATION.
 
   METHOD status_text.
 
-    " Lấy đúng nhãn đã khai trong domain ZDO_HDDT_STATUS để text
-    " hiển thị luôn khớp với cấu hình, không hardcode ở đây.
+    " Lấy đúng nhãn đã khai trong domain ZDO_HDDT_STATUS để text hiển
+    " thị luôn khớp với cấu hình, không hardcode ở đây.
     SELECT SINGLE ddtext FROM dd07t
       INTO @r_text
       WHERE domname    = 'ZDO_HDDT_STATUS'
@@ -582,12 +1146,11 @@ CLASS lcl_app IMPLEMENTATION.
 
 ENDCLASS.
 
+
 *&---------------------------------------------------------------------*
 *& Form DISPLAY_TEXT
 *&---------------------------------------------------------------------*
-*& Hiển thị chuỗi dài trong ALV popup. Không dùng FM hiển thị chuỗi vì
-*& không có sẵn ở mọi release; cắt thành dòng 250 ký tự là cách chắc
-*& chắn chạy được trên mọi hệ SAP GUI.
+*& Hiển thị chuỗi dài trong ALV popup, cắt thành dòng 250 ký tự.
 *& --> I_TITLE  Tiêu đề popup
 *& --> I_TEXT   Nội dung
 *&---------------------------------------------------------------------*
@@ -638,98 +1201,33 @@ FORM display_text USING i_title TYPE clike
 ENDFORM.
 
 *&---------------------------------------------------------------------*
-*& Form FILL_ORIGINAL
+*& Form POPUP_ORIGINAL
 *&---------------------------------------------------------------------*
-*& Điền thông tin hoá đơn GỐC (ký hiệu / số / ngày phát hành) vào
-*& request khi lập hoá đơn điều chỉnh, thay thế hoặc huỷ.
-*& Nguồn: sổ đăng ký ZTB_HDDT_INV — trường REF_DOCNO của chứng từ hiện
-*& tại trỏ tới chứng từ gốc; nếu trống thì lấy chính chứng từ này.
-*& <-> CS_REQUEST
+*& FS 3.6.4: pop-up nhập Số chứng từ gốc, Năm chứng từ gốc, Loại điều
+*& chỉnh (2 tăng / 3 giảm / 4 thông tin / 5 thay thế). Để trống cả 3 để
+*& gỡ hoá đơn gốc. Điều kiện nghiệp vụ do engine kiểm (ATTACH_ORIGINAL).
+*& <-> C_DOCNO  C_GJAHR  C_CODE
+*& <-- C_OK     abap_true khi người dùng bấm Save
 *&---------------------------------------------------------------------*
-FORM fill_original CHANGING cs_request TYPE zif_hddt_types=>ty_request.
-
-  DATA(ls_self) = zcl_hddt_log=>read_invoice(
-                    i_bukrs     = cs_request-bukrs
-                    i_gjahr     = cs_request-gjahr
-                    i_src_type  = cs_request-src_type
-                    i_src_docno = cs_request-src_docno ).
-
-  DATA(ls_org) = ls_self.
-
-  " Điều chỉnh / thay thế mà sổ chưa biết chứng từ gốc -> hỏi người
-  " dùng (như popup TYPE_DC/BELNR/GJAHR của dự án tham chiếu). Huỷ thì
-  " chứng từ gốc là chính nó.
-  IF ls_self-ref_docno IS INITIAL
-     AND ( cs_request-action = zif_hddt_types=>gc_action-adjust_invoice
-        OR cs_request-action = zif_hddt_types=>gc_action-replace_invoice ).
-    PERFORM ask_original CHANGING ls_self-ref_docno ls_self-ref_gjahr.
-    IF ls_self-ref_docno IS INITIAL.
-      RETURN.                        " người dùng huỷ popup -> engine báo thiếu HĐ gốc
-    ENDIF.
-  ENDIF.
-
-  " Chứng từ điều chỉnh có tham chiếu tới chứng từ gốc khác
-  IF ls_self-ref_docno IS NOT INITIAL.
-    DATA(ls_ref) = zcl_hddt_log=>read_invoice(
-                     i_bukrs     = cs_request-bukrs
-                     i_gjahr     = COND #( WHEN ls_self-ref_gjahr IS NOT INITIAL
-                                            THEN ls_self-ref_gjahr
-                                            ELSE cs_request-gjahr )
-                     i_src_docno = ls_self-ref_docno ).
-    IF ls_ref-serial IS NOT INITIAL OR ls_ref-seq IS NOT INITIAL.
-      ls_org = ls_ref.
-    ENDIF.
-    " Chứng từ SAP của HĐ gốc -> engine kiểm tra trạng thái / đảo và
-    " đổi trạng thái HĐ gốc sau khi phát hành thành công
-    cs_request-invoice-adjust-org_docno    = ls_self-ref_docno.
-    cs_request-invoice-adjust-org_gjahr    = COND #( WHEN ls_self-ref_gjahr IS NOT INITIAL
-                                                     THEN ls_self-ref_gjahr
-                                                     ELSE cs_request-gjahr ).
-    cs_request-invoice-adjust-org_src_type = cs_request-src_type.
-  ENDIF.
-
-  cs_request-invoice-adjust-org_serial   = ls_org-serial.
-  cs_request-invoice-adjust-org_seq      = ls_org-seq.
-  cs_request-invoice-adjust-org_inv_date = COND #(
-    WHEN ls_org-issue_date IS NOT INITIAL THEN ls_org-issue_date
-    ELSE ls_org-inv_date ).
-  cs_request-invoice-adjust-org_idkey    = ls_org-idkey.
-
-  " Số / ngày hoá đơn của chính chứng từ này (dùng khi huỷ)
-  IF cs_request-invoice-header-serial IS INITIAL.
-    cs_request-invoice-header-serial = ls_self-serial.
-  ENDIF.
-  IF cs_request-invoice-header-seq IS INITIAL.
-    cs_request-invoice-header-seq = ls_self-seq.
-  ENDIF.
-  IF cs_request-invoice-header-template IS INITIAL.
-    cs_request-invoice-header-template = ls_self-template.
-  ENDIF.
-
-ENDFORM.
-
-*&---------------------------------------------------------------------*
-*& Form ASK_ORIGINAL
-*&---------------------------------------------------------------------*
-*& Hỏi số chứng từ / năm của hoá đơn GỐC khi lập HĐ điều chỉnh, thay
-*& thế (POPUP_GET_VALUES — như dự án tham chiếu). Chứng từ gốc phải đã
-*& có trong sổ đăng ký; các điều kiện nghiệp vụ còn lại do engine kiểm.
-*& <-> C_DOCNO  Số chứng từ gốc
-*& <-> C_GJAHR  Năm chứng từ gốc
-*&---------------------------------------------------------------------*
-FORM ask_original CHANGING c_docno TYPE zde_hddt_docno
-                           c_gjahr TYPE gjahr.
+FORM popup_original CHANGING c_docno TYPE zde_hddt_docno
+                             c_gjahr TYPE gjahr
+                             c_code  TYPE c
+                             c_ok    TYPE abap_bool.
 
   DATA lt_fields TYPE STANDARD TABLE OF sval WITH EMPTY KEY.
   DATA lv_rc     TYPE c LENGTH 1.
 
-  lt_fields = VALUE #( ( tabname = 'BKPF' fieldname = 'BELNR' fieldtext = 'Số chứng từ gốc' field_obl = 'X' )
-                       ( tabname = 'BKPF' fieldname = 'GJAHR' fieldtext = 'Năm chứng từ gốc' field_obl = 'X'
-                         value = p_gjahr ) ).
+  lt_fields = VALUE #(
+    ( tabname = 'BKPF'         fieldname = 'BELNR'   fieldtext = 'Số chứng từ gốc'
+      value = c_docno )
+    ( tabname = 'BKPF'         fieldname = 'GJAHR'   fieldtext = 'Năm chứng từ gốc'
+      value = c_gjahr )
+    ( tabname = 'ZTB_HDDT_INV' fieldname = 'ADJ_DIR' fieldtext = 'Loại ĐC: 2 tăng, 3 giảm, 4 thông tin, 5 thay thế'
+      value = c_code ) ).
 
   CALL FUNCTION 'POPUP_GET_VALUES'
     EXPORTING
-      popup_title     = 'Hoá đơn gốc cần điều chỉnh / thay thế'
+      popup_title     = 'Hoá đơn gốc cần điều chỉnh / thay thế (trống = gỡ)'
       start_column    = '10'
       start_row       = '5'
     IMPORTING
@@ -740,7 +1238,7 @@ FORM ask_original CHANGING c_docno TYPE zde_hddt_docno
       error_in_fields = 1
       OTHERS          = 2.
   IF sy-subrc <> 0 OR lv_rc = 'A'.
-    CLEAR: c_docno, c_gjahr.
+    c_ok = abap_false.
     RETURN.
   ENDIF.
 
@@ -751,13 +1249,67 @@ FORM ask_original CHANGING c_docno TYPE zde_hddt_docno
         " Chuyển về độ dài BELNR trước khi thêm số 0 đầu (ALPHA trên
         " SVAL-VALUE 132 ký tự sẽ đệm sai)
         lv_belnr = <fs_f>-value.
-        lv_belnr = |{ lv_belnr ALPHA = IN }|.
+        CONDENSE lv_belnr NO-GAPS.
+        IF lv_belnr IS NOT INITIAL.
+          lv_belnr = |{ lv_belnr ALPHA = IN }|.
+        ENDIF.
         c_docno = lv_belnr.
       WHEN 'GJAHR'.
         c_gjahr = <fs_f>-value.
+      WHEN 'ADJ_DIR'.
+        c_code = <fs_f>-value.
     ENDCASE.
   ENDLOOP.
   CONDENSE c_docno NO-GAPS.
+  c_ok = abap_true.
+
+ENDFORM.
+
+*&---------------------------------------------------------------------*
+*& Form POPUP_EDIT
+*&---------------------------------------------------------------------*
+*& FS 3.5: các cột "cho sửa" — ngày phát hành, giờ phát hành (mặc định
+*& 08:00:00) và tên hàng nhập tay (ưu tiên 1 khi dựng itemName).
+*& <-> C_DATE C_TIME C_TEXT   <-- C_OK
+*&---------------------------------------------------------------------*
+FORM popup_edit CHANGING c_date TYPE dats
+                         c_time TYPE uzeit
+                         c_text TYPE zde_hddt_name
+                         c_ok   TYPE abap_bool.
+
+  DATA lt_fields TYPE STANDARD TABLE OF sval WITH EMPTY KEY.
+  DATA lv_rc     TYPE c LENGTH 1.
+
+  lt_fields = VALUE #(
+    ( tabname = 'ZTB_HDDT_INV' fieldname = 'INV_DATE'  fieldtext = 'Ngày phát hành hoá đơn' value = c_date )
+    ( tabname = 'ZTB_HDDT_INV' fieldname = 'INV_TIME'  fieldtext = 'Giờ phát hành'          value = c_time )
+    ( tabname = 'ZTB_HDDT_INV' fieldname = 'ITEM_TEXT' fieldtext = 'Tên hàng (ưu tiên 1)'  value = c_text ) ).
+
+  CALL FUNCTION 'POPUP_GET_VALUES'
+    EXPORTING
+      popup_title     = 'Sửa ngày / giờ phát hành và tên hàng'
+      start_column    = '10'
+      start_row       = '5'
+    IMPORTING
+      returncode      = lv_rc
+    TABLES
+      fields          = lt_fields
+    EXCEPTIONS
+      error_in_fields = 1
+      OTHERS          = 2.
+  IF sy-subrc <> 0 OR lv_rc = 'A'.
+    c_ok = abap_false.
+    RETURN.
+  ENDIF.
+
+  LOOP AT lt_fields ASSIGNING FIELD-SYMBOL(<fs_f>).
+    CASE <fs_f>-fieldname.
+      WHEN 'INV_DATE'.  c_date = <fs_f>-value.
+      WHEN 'INV_TIME'.  c_time = <fs_f>-value.
+      WHEN 'ITEM_TEXT'. c_text = <fs_f>-value.
+    ENDCASE.
+  ENDLOOP.
+  c_ok = abap_true.
 
 ENDFORM.
 
@@ -774,14 +1326,13 @@ FORM save_file USING i_name    TYPE string
   DATA lt_bin TYPE STANDARD TABLE OF x255 WITH EMPTY KEY.
   DATA lv_len TYPE i.
 
-  " Giá trị trả về của cl_gui_frontend_services phải nằm ở biến TOÀN CỤC
-  " (gv_file_* trong _TOP) — quy ước chống SYSTEM_POINTER_PENDING
-  CLEAR: gv_file_name, gv_file_path, gv_file_full, gv_file_action.
-
   IF i_content IS INITIAL.
     RETURN.
   ENDIF.
 
+  " Giá trị trả về của cl_gui_frontend_services phải nằm ở biến TOÀN CỤC
+  " (gv_file_* trong _TOP) — quy ước chống SYSTEM_POINTER_PENDING
+  CLEAR: gv_file_name, gv_file_path, gv_file_full, gv_file_action.
   gv_file_name = COND #( WHEN i_name IS INITIAL THEN 'einvoice.pdf' ELSE i_name ).
 
   cl_gui_frontend_services=>file_save_dialog(

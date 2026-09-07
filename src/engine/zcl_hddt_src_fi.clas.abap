@@ -152,6 +152,13 @@ CLASS zcl_hddt_src_fi DEFINITION
                 it_vbrk_pay       TYPE ty_t_vbrk_pay
       RETURNING VALUE(rs_request) TYPE zif_hddt_types=>ty_request .
 
+    "! Bảng thuế từ dòng BSEG có tài khoản thuế GTGT (MAP TAXACCT) — FS MAG
+    METHODS taxes_from_taxacct
+      IMPORTING i_bukrs         TYPE bukrs
+                it_bseg         TYPE ty_t_bseg
+                it_rate         TYPE ty_t_mwskz_rate
+      RETURNING VALUE(rt_taxes) TYPE zif_hddt_types=>ty_t_tax .
+
     "! Bảng thuế của chứng từ từ BSET (đã gộp theo thuế suất, có dấu)
     METHODS taxes_from_bset
       IMPORTING i_bukrs        TYPE bukrs
@@ -204,6 +211,7 @@ CLASS zcl_hddt_src_fi IMPLEMENTATION.
         AND k~belnr      IN @is_selection-r_docno
         AND k~budat      IN @is_selection-r_budat
         AND k~bldat      IN @is_selection-r_bldat
+        AND k~cpudt      IN @is_selection-r_cpudt
         AND k~blart      IN @lr_blart
         AND k~usnam      IN @is_selection-r_usnam
         AND k~awkey      IN @is_selection-r_vbeln
@@ -233,6 +241,15 @@ CLASS zcl_hddt_src_fi IMPLEMENTATION.
       IF keep_document( i_reversed  = xsdbool( <fs_hdr>-xreversed = 'X' )
                         is_reg       = ls_reg
                         is_selection = is_selection ) = abap_false.
+        DELETE lt_hdr.
+        CONTINUE.
+      ENDIF.
+      " FS MAG: lọc theo số hoá đơn đã cấp / số chứng từ gom
+      IF is_selection-r_seq IS NOT INITIAL AND ls_reg-seq NOT IN is_selection-r_seq.
+        DELETE lt_hdr.
+        CONTINUE.
+      ENDIF.
+      IF is_selection-r_gom IS NOT INITIAL AND ls_reg-gom_no NOT IN is_selection-r_gom.
         DELETE lt_hdr.
       ENDIF.
     ENDLOOP.
@@ -308,6 +325,13 @@ CLASS zcl_hddt_src_fi IMPLEMENTATION.
                                 it_link     = lt_link
                                 it_vbrk_pay = lt_vbrk_pay ).
       IF ls_req-src_docno IS NOT INITIAL.
+        ls_req-invoice-header-inv_type = is_selection-inv_type.
+        apply_registry_edits(
+          EXPORTING is_reg     = registry_of( i_bukrs    = ls_req-bukrs
+                                              i_gjahr    = ls_req-gjahr
+                                              i_src_type = gc_src_type
+                                              i_docno    = ls_req-src_docno )
+          CHANGING  cs_request = ls_req ).
         APPEND ls_req TO rt_request.
       ENDIF.
     ENDLOOP.
@@ -523,13 +547,60 @@ CLASS zcl_hddt_src_fi IMPLEMENTATION.
     ENDLOOP.
 
 *---- Bảng thuế từ BSET và chốt tiền thuế từng dòng -------------------*
-    rs_request-invoice-taxes = taxes_from_bset( i_bukrs = is_hdr-bukrs
-                                                it_bset  = it_bset
-                                                it_rate  = lt_rate ).
+    " FS MAG mục 3.5: tiền thuế = tổng dòng BSEG có tài khoản 3331* (MAP
+    " TAXACCT). Mặc định vẫn dùng BSET (sổ thuế); tham số TAX_SOURCE =
+    " GLACCT hoặc chứng từ không có BSET -> tính từ dòng tài khoản thuế.
+    IF param( i_key = zif_hddt_types=>gc_parm-tax_source
+              i_bukrs = is_hdr-bukrs i_default = `BSET` ) = 'GLACCT'
+       OR it_bset IS INITIAL.
+      rs_request-invoice-taxes = taxes_from_taxacct( i_bukrs = is_hdr-bukrs
+                                                     it_bseg  = it_bseg
+                                                     it_rate  = lt_rate ).
+    ELSE.
+      rs_request-invoice-taxes = taxes_from_bset( i_bukrs = is_hdr-bukrs
+                                                  it_bset  = it_bset
+                                                  it_rate  = lt_rate ).
+    ENDIF.
     reconcile_tax( EXPORTING it_tax   = rs_request-invoice-taxes
                    CHANGING  ct_items = rs_request-invoice-items ).
 
     finalize_request( CHANGING cs_request = rs_request ).
+
+  ENDMETHOD.
+
+
+  METHOD taxes_from_taxacct.
+
+    FIELD-SYMBOLS <fs_tax> TYPE zif_hddt_types=>ty_tax.
+
+    LOOP AT it_bseg ASSIGNING FIELD-SYMBOL(<fs_line>)
+         WHERE koart = 'S' AND mwskz <> space.
+      IF in_map_list( i_map_type = zif_hddt_types=>gc_map_type-tax_acct
+                      i_value    = <fs_line>-hkont
+                      i_default  = abap_false ) = abap_false.
+        CONTINUE.
+      ENDIF.
+      DATA(lv_rate) = tax_rate_of( i_bukrs = i_bukrs
+                                   i_mwskz = <fs_line>-mwskz
+                                   it_rate = it_rate ).
+      DATA(lv_sign) = COND i( WHEN <fs_line>-shkzg = 'H' THEN 1 ELSE -1 ).
+
+      READ TABLE rt_taxes ASSIGNING <fs_tax> WITH KEY tax_rate = lv_rate.
+      IF sy-subrc <> 0.
+        APPEND INITIAL LINE TO rt_taxes ASSIGNING <fs_tax>.
+        <fs_tax>-tax_rate     = lv_rate.
+        <fs_tax>-tax_rate_txt = rate_text( lv_rate ).
+        <fs_tax>-is_increase  = abap_true.
+      ENDIF.
+      <fs_tax>-tax_amt   = <fs_tax>-tax_amt   + <fs_line>-wrbtr * lv_sign.
+      <fs_tax>-tax_amt_l = <fs_tax>-tax_amt_l + <fs_line>-dmbtr * lv_sign.
+    ENDLOOP.
+
+    " Tiền chưa thuế của từng thuế suất suy từ tiền thuế / thuế suất
+    LOOP AT rt_taxes ASSIGNING <fs_tax> WHERE tax_rate > 0.
+      <fs_tax>-taxable_amt   = <fs_tax>-tax_amt   * 100 / <fs_tax>-tax_rate.
+      <fs_tax>-taxable_amt_l = <fs_tax>-tax_amt_l * 100 / <fs_tax>-tax_rate.
+    ENDLOOP.
 
   ENDMETHOD.
 

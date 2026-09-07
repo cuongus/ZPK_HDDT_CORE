@@ -32,6 +32,12 @@ INTERFACE zif_hddt_source
            " Chứng từ tham chiếu SD (BKPF-AWKEY / VBRK-VBELN)
            r_vbeln   TYPE zif_hddt_types=>ty_r_docno,
            r_usnam   TYPE zif_hddt_types=>ty_r_usnam,
+           " FS MAG: ngày nhập chứng từ, số hoá đơn đã cấp, số chứng từ gom
+           r_cpudt   TYPE zif_hddt_types=>ty_r_date,
+           r_seq     TYPE zif_hddt_types=>ty_r_seq,
+           r_gom     TYPE zif_hddt_types=>ty_r_docno,
+           " Loại hoá đơn (01GTKT...) chọn trên màn hình -> header-inv_type
+           inv_type  TYPE zde_hddt_invtype,
            " abap_true = lấy cả chứng từ đã bị đảo / hoá đơn SD đã huỷ
            " (mặc định chỉ lấy khi đã phát hành HĐĐT để người dùng huỷ)
            xreversed TYPE abap_bool,
