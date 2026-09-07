@@ -89,7 +89,7 @@ ZCL_HDDT_SERVICE  ── cửa vào duy nhất, không raise
 | I5. Mật khẩu không bao giờ đi vào `ZTB_HDDT_LOG` | `MASK_SECRETS` chạy trước `to_raw` trong `LOG_CALL` |
 | I6. Số trong JSON: `.` thập phân, `-` phía trước, không zero dẫn đầu | `FORMAT_NUMBER` dùng `NUMBER = RAW` |
 | I7. `IDKEY` ổn định giữa các lần thử lại | `fill_defaults`: `bukrs+src_docno+gjahr` (FS 3.7.1) nếu caller không truyền |
-| I8. Engine không SELECT bảng nghiệp vụ SAP (BKPF/BSEG/VBRK/BUT000…) — chỉ lớp nguồn | `grep -rliE "FROM (bkpf|bseg|bset|vbrk|vbrp|but000|kna1)" src/engine` → chỉ `zcl_hddt_src_*` |
+| I8. Engine không SELECT bảng nghiệp vụ SAP (BKPF/BSEG/VBRK/BUT000…) — chỉ lớp nguồn | `grep -rliE "FROM (bkpf|bseg|bset|vbrk|vbrp|but000|kna1)" src/engine` → chỉ `zcl_hddt_src_*` và `zcl_hddt_writeback_fi` (lớp ghi ngược, tầng classic, cắm qua tham số) |
 | I9. Hằng số nghiệp vụ **riêng của khách hàng** (mã thuế, tài khoản, loại điều kiện, text ID Z) không nằm trong code; mặc định trong code chỉ được là giá trị chuẩn SAP (`VATRU`, `GRUN`, `MWAS`) | `grep -rnE "(3331|ZPR0|ZMST|ZBT|FS0001|ZI03|ZC0[45])" src/engine \| grep -vE '^[^:]+:[0-9]+:\s*[*"]'` → 0 dòng lệnh (comment nhắc dự án tham chiếu được phép; seed chỉ trong `ZPG_HDDT_SETUP`) |
 
 ---
