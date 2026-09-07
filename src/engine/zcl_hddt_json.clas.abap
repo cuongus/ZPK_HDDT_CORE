@@ -655,7 +655,7 @@ CLASS zcl_hddt_json IMPLEMENTATION.
       ENDIF.
 
       zcx_hddt_error=>raise_text(
-        |JSON không hợp lệ: chờ ',' hoặc '}' tại vị trí { mv_pos }.| ).
+        |JSON không hợp lệ: chờ ',' hoặc '\}' tại vị trí { mv_pos }.| ).
     ENDDO.
 
   ENDMETHOD.
