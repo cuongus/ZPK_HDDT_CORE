@@ -34,13 +34,13 @@ INTERFACE zif_hddt_platform
 *---------------------------------------------------------------------*
   " Cổ điển: CL_ABAP_CHAR_UTILITIES (không được phép trong ABAP Cloud)
   METHODS newline
-    RETURNING VALUE(r_char) TYPE c .
+    RETURNING VALUE(r_char) TYPE char1 .
 
   METHODS carriage_return
-    RETURNING VALUE(r_char) TYPE c .
+    RETURNING VALUE(r_char) TYPE char1 .
 
   METHODS tab
-    RETURNING VALUE(r_char) TYPE c .
+    RETURNING VALUE(r_char) TYPE char1 .
 
 *---------------------------------------------------------------------*
 * 2. Escape URL (dùng cho body application/x-www-form-urlencoded)

@@ -189,7 +189,7 @@ CLASS zcl_hddt_json DEFINITION
       RETURNING VALUE(r_value) TYPE string .
     METHODS skip_ws .
     METHODS cur
-      RETURNING VALUE(r_char) TYPE c .
+      RETURNING VALUE(r_char) TYPE char1 .
     METHODS add_result
       IMPORTING i_path  TYPE string
                 i_value TYPE string .
