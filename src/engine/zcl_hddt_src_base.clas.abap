@@ -416,7 +416,7 @@ CLASS zcl_hddt_src_base IMPLEMENTATION.
       rs_seller-phone = ls_adrc-tel_number.
     ENDIF.
 
-    SELECT smtp_addr FROM adr6
+    SELECT consnumber, smtp_addr FROM adr6
       WHERE addrnumber = @ls_t001-adrnr
       ORDER BY consnumber
       INTO TABLE @DATA(lt_adr6)
@@ -492,7 +492,7 @@ CLASS zcl_hddt_src_base IMPLEMENTATION.
 
 *---- (3) Số tham chiếu của khách hàng trên đơn bán (VBKD-BSTKD) ------*
     IF i_aubel IS NOT INITIAL.
-      SELECT bstkd FROM vbkd
+      SELECT posnr, bstkd FROM vbkd
         WHERE vbeln = @i_aubel
           AND bstkd <> @space
         ORDER BY posnr
@@ -591,7 +591,7 @@ CLASS zcl_hddt_src_base IMPLEMENTATION.
       ENDIF.
 
       " Email: nối tất cả địa chỉ bằng ';' (NCC gửi HĐ tới nhiều mail)
-      SELECT smtp_addr FROM adr6
+      SELECT consnumber, smtp_addr FROM adr6
         WHERE addrnumber = @lv_adrnr
         ORDER BY consnumber
         INTO TABLE @DATA(lt_adr6).
@@ -604,7 +604,7 @@ CLASS zcl_hddt_src_base IMPLEMENTATION.
                                  ELSE |{ cs_buyer-email };{ <fs_adr6>-smtp_addr }| ).
       ENDLOOP.
 
-      SELECT tel_number FROM adr2
+      SELECT consnumber, tel_number FROM adr2
         WHERE addrnumber = @lv_adrnr
         ORDER BY consnumber
         INTO TABLE @DATA(lt_adr2).
@@ -695,7 +695,7 @@ CLASS zcl_hddt_src_base IMPLEMENTATION.
                            |{ ls_adrc-str_suppl3 }, { ls_adrc-location }, { ls_adrc-city2 }, { ls_adrc-city1 }|.
         ls_kna1-land1 = ls_adrc-country.
       ENDIF.
-      SELECT smtp_addr FROM adr6
+      SELECT consnumber, smtp_addr FROM adr6
         WHERE addrnumber = @ls_kna1-adrnr
         ORDER BY consnumber
         INTO TABLE @DATA(lt_adr6)
@@ -781,15 +781,16 @@ CLASS zcl_hddt_src_base IMPLEMENTATION.
                             i_bukrs   = i_bukrs
                             i_default = `MWAS` ).
     SELECT SINGLE land1 FROM t001 WHERE bukrs = @i_bukrs INTO @DATA(lv_land1).
-    " ORDER BY chỉ nhận cột có trong danh sách SELECT -> lấy kèm DATBI
-    SELECT a~datbi AS datbi, k~kbetr AS kbetr
+    " A003 trên hệ này không có DATBI (một KNUMH cho mỗi khoá) nên
+    " sắp xếp theo KOPOS của KONP; ORDER BY chỉ nhận cột trong SELECT
+    SELECT k~kopos AS kopos, k~kbetr AS kbetr
       FROM a003 AS a INNER JOIN konp AS k ON k~knumh = a~knumh
       WHERE a~kappl = 'TX'
         AND a~kschl = @lv_kschl
         AND a~aland = @lv_land1
         AND a~mwskz = @i_mwskz
         AND k~loevm_ko = @space
-      ORDER BY datbi DESCENDING
+      ORDER BY kopos
       INTO TABLE @DATA(lt_konp)
       UP TO 1 ROWS.
     IF lt_konp IS NOT INITIAL.

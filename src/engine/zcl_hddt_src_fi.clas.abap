@@ -218,7 +218,7 @@ CLASS zcl_hddt_src_fi IMPLEMENTATION.
         AND k~xreversing  = @space
         AND s~koart       = 'D'
         AND s~kunnr      IN @is_selection-r_kunnr
-      ORDER BY k~belnr, s~buzei
+      ORDER BY belnr, cust_buzei
       INTO TABLE @lt_hdr.
     IF sy-subrc <> 0.
       RETURN.
@@ -360,7 +360,7 @@ CLASS zcl_hddt_src_fi IMPLEMENTATION.
     rs_state-stjah     = ls_bkpf-stjah.
     rs_state-waers     = ls_bkpf-waers.
 
-    SELECT kunnr FROM bseg
+    SELECT buzei, kunnr FROM bseg
       WHERE bukrs = @i_bukrs
         AND belnr = @lv_belnr
         AND gjahr = @i_gjahr

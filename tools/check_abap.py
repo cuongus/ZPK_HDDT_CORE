@@ -14,6 +14,7 @@ Soát các lỗi mà ADT / SE24 sẽ báo khi activate:
   J. ABAP Doc đứng trước khai báo chuỗi (ADT báo sai vị trí)
   K. DATA() suy ra P(8,0) từ biểu thức số học (mất phần thập phân)
   L. POSIX regex đã deprecated, phải dùng PCRE
+  M. ORDER BY dùng cột không có trong danh sách SELECT
 
 Chạy: python tools/check_abap.py
 """
@@ -301,6 +302,41 @@ def check_style(path):
 
 
 # ---------------------------------------------------------------------------
+# M. ORDER BY phải dùng tên cột có trong danh sách SELECT (không dùng alias
+#    bảng dạng k~belnr) — nếu không ADT báo Unknown column name
+# ---------------------------------------------------------------------------
+def check_select(path):
+    for ln, s in statements(io.open(path, encoding="utf-8").read()):
+        if first_word(s) != "SELECT" or " ORDER BY " not in s.upper():
+            continue
+        u = s.upper()
+        if "ORDER BY PRIMARY KEY" in u:
+            continue
+        head = s[6:u.find(" FROM ")] if " FROM " in u else ""
+        head = re.sub(r"^\s*(?:SINGLE|DISTINCT)\s+", "", head, flags=re.I)
+        if "*" in head or not head.strip():
+            continue
+        outs = set()
+        for col in head.split(","):
+            col = col.strip()
+            m = re.search(r"\bAS\s+(\w+)\s*$", col, re.I)
+            outs.add((m.group(1) if m else col.split("~")[-1]).lower())
+        tail = re.split(r"\bORDER BY\b", s, flags=re.I)[1]
+        tail = re.split(r"\b(?:INTO|UP TO)\b", tail, flags=re.I)[0]
+        for item in tail.split(","):
+            item = re.sub(r"\b(?:ASCENDING|DESCENDING)\b", "", item,
+                          flags=re.I).strip()
+            if not item:
+                continue
+            if "~" in item:
+                report("M", path, ln, "ORDER BY %s dùng alias bảng, phải dùng "
+                       "tên cột kết quả" % item)
+            elif item.lower() not in outs:
+                report("M", path, ln, "ORDER BY %s không có trong danh sách "
+                       "SELECT" % item)
+
+
+# ---------------------------------------------------------------------------
 # Chạy
 # ---------------------------------------------------------------------------
 for p in sorted(glob.glob("src/**/*.intf.abap", recursive=True)):
@@ -312,6 +348,7 @@ for p in sorted(glob.glob("src/**/*.clas.abap", recursive=True)):
 for p in sorted(glob.glob("src/**/*.abap", recursive=True)):
     check_template(p)
     check_style(p)
+    check_select(p)
 
 
 def ancestors(name):
@@ -406,6 +443,7 @@ KIND = {
     "J": "ABAP Doc sai vị trí (trước khai báo chuỗi)",
     "K": "DATA() suy ra P(8,0) từ biểu thức số học",
     "L": "POSIX regex deprecated (dùng PCRE)",
+    "M": "ORDER BY không khớp danh sách SELECT",
 }
 print("Đã đọc: %d interface, %d class" % (len(INTF), len(CLS)))
 for k in sorted(KIND):
