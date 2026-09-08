@@ -135,7 +135,7 @@ Chi tiết + phân quyền + STRUST: [docs/06-cai-dat.md](docs/06-cai-dat.md)
 | `ZTB_HDDT_ITEM` | Chi tiết hàng hoá đã phát hành |
 | `ZTB_HDDT_LOG` | Log request/response từng lần gọi API — payload lưu dạng **xstring** (byte-exact), secret được che lúc ghi |
 
-Mô tả trường: [docs/02-cau-hinh.md](docs/02-cau-hinh.md) · Log tích hợp: [docs/08-log-tich-hop.md](docs/08-log-tich-hop.md) · Tầng đọc nguồn FI/SD và kiểm tra nghiệp vụ: [docs/09-nguon-du-lieu.md](docs/09-nguon-du-lieu.md) · Đối chiếu FS MAG v0.5: [docs/10-doi-chieu-fs-mag.md](docs/10-doi-chieu-fs-mag.md)
+Hướng dẫn cấu hình từng bảng trên màn hình ZPG_HDDT_CONFIG: [docs/11-huong-dan-config.md](docs/11-huong-dan-config.md) · Mô tả trường: [docs/02-cau-hinh.md](docs/02-cau-hinh.md) · Log tích hợp: [docs/08-log-tich-hop.md](docs/08-log-tich-hop.md) · Tầng đọc nguồn FI/SD và kiểm tra nghiệp vụ: [docs/09-nguon-du-lieu.md](docs/09-nguon-du-lieu.md) · Đối chiếu FS MAG v0.5: [docs/10-doi-chieu-fs-mag.md](docs/10-doi-chieu-fs-mag.md)
 
 > **Đọc trước khi sửa code:** [Code_Review.md](Code_Review.md) — decision log, bất biến
 > kiến trúc, logic từng bước pipeline, phân tầng classic/cloud, kết quả các lượt
