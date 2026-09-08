@@ -53,7 +53,7 @@ CLASS zcl_hddt_service DEFINITION
                 i_test_run       TYPE abap_bool DEFAULT abap_false
       RETURNING VALUE(rt_result)  TYPE zif_hddt_types=>ty_t_result .
 
-*--- Tiện ích: chỉ khác nhau ở ACTION ---------------------------------*
+    "! ---- Tiện ích: chỉ khác nhau ở ACTION ----
     METHODS create_invoice
       IMPORTING is_request       TYPE zif_hddt_types=>ty_request
                 i_test_run      TYPE abap_bool DEFAULT abap_false
@@ -90,7 +90,7 @@ CLASS zcl_hddt_service DEFINITION
       IMPORTING is_request       TYPE zif_hddt_types=>ty_request
       RETURNING VALUE(rs_result) TYPE zif_hddt_types=>ty_result .
 
-*--- FS MAG v0.5 (docs/10) ---------------------------------------------*
+    "! ---- FS MAG v0.5 (docs/10) ----
     "! 3.6.1 Tích hợp HĐ: tạo hoá đơn NHÁP (chờ cấp số, chưa có số)
     METHODS create_draft
       IMPORTING is_request       TYPE zif_hddt_types=>ty_request

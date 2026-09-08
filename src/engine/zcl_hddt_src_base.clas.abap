@@ -37,7 +37,7 @@ CLASS zcl_hddt_src_base DEFINITION
 
   PROTECTED SECTION.
 
-    " Thuế suất theo mã thuế đọc từ bảng thuế của chứng từ
+    "! Thuế suất theo mã thuế đọc từ bảng thuế của chứng từ
     TYPES: BEGIN OF ty_mwskz_rate,
              mwskz TYPE mwskz,
              kbetr TYPE kbetr,
@@ -48,7 +48,7 @@ CLASS zcl_hddt_src_base DEFINITION
     TYPES ty_t_reg TYPE SORTED TABLE OF ztb_hddt_inv
                    WITH UNIQUE KEY bukrs gjahr src_type src_docno.
 
-    " Bản ghi sổ đăng ký của các chứng từ trong phạm vi chọn
+    "! Bản ghi sổ đăng ký của các chứng từ trong phạm vi chọn
     DATA mt_reg TYPE ty_t_reg .
 
     METHODS config
@@ -90,7 +90,7 @@ CLASS zcl_hddt_src_base DEFINITION
                 is_selection    TYPE zif_hddt_source=>ty_selection
       RETURNING VALUE(r_keep)  TYPE abap_bool .
 
-*---- Người bán / người mua -------------------------------------------*
+    "! ---- Người bán / người mua ----
     METHODS read_seller
       IMPORTING i_bukrs         TYPE bukrs
       RETURNING VALUE(rs_seller) TYPE zif_hddt_types=>ty_seller .
@@ -111,7 +111,7 @@ CLASS zcl_hddt_src_base DEFINITION
                 i_bukrs       TYPE bukrs OPTIONAL
       CHANGING  c_addr        TYPE string .
 
-*---- Thuế ------------------------------------------------------------*
+    "! ---- Thuế ----
     "! Thuế suất theo mã thuế: MAP TAXRATE -> bảng thuế chứng từ
     "! (KBETR/10) -> điều kiện thuế A003/KONP (loại điều kiện TAX_COND_TYPE)
     METHODS tax_rate_of
@@ -142,7 +142,7 @@ CLASS zcl_hddt_src_base DEFINITION
       IMPORTING it_items       TYPE zif_hddt_types=>ty_t_item
       RETURNING VALUE(r_text) TYPE string .
 
-*---- Dòng hàng -------------------------------------------------------*
+    "! ---- Dòng hàng ----
     METHODS unit_text
       IMPORTING i_meins       TYPE meins
       RETURNING VALUE(r_text) TYPE string .
@@ -168,7 +168,7 @@ CLASS zcl_hddt_src_base DEFINITION
                 i_name        TYPE tdobname
       RETURNING VALUE(r_text) TYPE string .
 
-*---- Header ----------------------------------------------------------*
+    "! ---- Header ----
     METHODS payment_of
       IMPORTING i_zlsch          TYPE dzlsch
                 i_bukrs          TYPE bukrs
@@ -189,7 +189,7 @@ CLASS zcl_hddt_src_base DEFINITION
     METHODS finalize_request
       CHANGING cs_request TYPE zif_hddt_types=>ty_request .
 
-*---- Ánh xạ danh sách ------------------------------------------------*
+    "! ---- Ánh xạ danh sách ----
     "! Giá trị có nằm trong danh sách MAP (hỗ trợ mẫu CP: O*, **)?
     "! Danh sách trống => R_ALLOWED = I_DEFAULT.
     METHODS in_map_list

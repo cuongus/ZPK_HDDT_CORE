@@ -54,7 +54,7 @@ CLASS zcl_hddt_src_fi DEFINITION
 
   PROTECTED SECTION.
 
-    " Header chứng từ + dòng khách hàng (kết quả JOIN BKPF-BSEG)
+    "! Header chứng từ + dòng khách hàng (kết quả JOIN BKPF-BSEG)
     TYPES: BEGIN OF ty_hdr,
              bukrs      TYPE bkpf-bukrs,
              belnr      TYPE bkpf-belnr,
@@ -115,7 +115,7 @@ CLASS zcl_hddt_src_fi DEFINITION
            END OF ty_bset.
     TYPES ty_t_bset TYPE STANDARD TABLE OF ty_bset WITH EMPTY KEY.
 
-    " Dòng billing SD tham chiếu (khi BKPF-AWTYP = 'VBRK')
+    "! Dòng billing SD tham chiếu (khi BKPF-AWTYP = 'VBRK')
     TYPES: BEGIN OF ty_vbrp,
              vbeln TYPE vbrp-vbeln,
              posnr TYPE vbrp-posnr,
@@ -128,7 +128,7 @@ CLASS zcl_hddt_src_fi DEFINITION
            END OF ty_vbrp.
     TYPES ty_t_vbrp TYPE SORTED TABLE OF ty_vbrp WITH UNIQUE KEY vbeln posnr.
 
-    " Nối dòng kế toán với dòng billing (ACDOCA-AWREF/AWITEM)
+    "! Nối dòng kế toán với dòng billing (ACDOCA-AWREF/AWITEM)
     TYPES: BEGIN OF ty_link,
              belnr  TYPE acdoca-belnr,
              buzei  TYPE acdoca-buzei,

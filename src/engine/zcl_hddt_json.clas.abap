@@ -27,9 +27,7 @@ CLASS zcl_hddt_json DEFINITION
 
     TYPES ty_t_kv TYPE zif_hddt_types=>ty_t_kv .
 
-*---------------------------------------------------------------------*
-* WRITER
-*---------------------------------------------------------------------*
+    "! ---- WRITER ----
     "! Bỏ qua thẻ có giá trị rỗng (mặc định bật). Nhiều nhà cung cấp
     "! báo lỗi validate khi nhận "" ở thẻ không bắt buộc.
     METHODS constructor
@@ -96,9 +94,7 @@ CLASS zcl_hddt_json DEFINITION
     METHODS get_json
       RETURNING VALUE(r_json) TYPE string .
 
-*---------------------------------------------------------------------*
-* PARSER
-*---------------------------------------------------------------------*
+    "! ---- PARSER ----
     "! Trả về bảng phẳng path -> value.
     "! Ví dụ: {"inv":{"seq":"11"},"tax":[{"vrt":"10"}]} cho ra
     "!   inv/seq      = 11
@@ -163,7 +159,7 @@ CLASS zcl_hddt_json DEFINITION
     METHODS write_name
       IMPORTING i_name TYPE string .
 
-    " ---- trạng thái parser ----
+    "! ---- trạng thái parser ----
     DATA mv_src    TYPE string .
     DATA mv_pos    TYPE i .
     DATA mv_len    TYPE i .
