@@ -35,8 +35,19 @@ import os
 import re
 import sys
 
-os.chdir(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+# Thư mục gốc repo: tham số dòng lệnh, hoặc thư mục cha của tools/
+ROOT = sys.argv[1] if len(sys.argv) > 1 else os.path.dirname(
+    os.path.dirname(os.path.abspath(__file__)))
+os.chdir(ROOT)
+
+# Thư mục chứa source ABAP và file định nghĩa DDIC (nếu có)
+SRC = "src" if os.path.isdir("src") else "."
+GEN_DDIC = os.path.join("tools", "gen_ddic.py")
 FIND = []
+
+
+def sources(pattern):
+    return sorted(glob.glob(os.path.join(SRC, "**", pattern), recursive=True))
 
 
 def report(kind, path, line, text):
@@ -397,7 +408,9 @@ def check_iref(path):
 # O. Code dùng field không có trong định nghĩa bảng (tools/gen_ddic.py)
 # ---------------------------------------------------------------------------
 def ddic_tables():
-    g = io.open("tools/gen_ddic.py", encoding="utf-8").read()
+    if not os.path.isfile(GEN_DDIC):
+        return {}                      # repo khac: bo qua nhom O
+    g = io.open(GEN_DDIC, encoding="utf-8").read()
     ns = {"K": lambda n, r: (n, r, True), "F": lambda n, r: (n, r, False)}
     tabs = eval(re.search(r"TABLES = (\[.*?\n\])", g, re.S).group(1), ns)
     return {t.upper(): {f[0].lower() for f in fields} for t, _, _, fields in tabs}
@@ -487,7 +500,9 @@ NUM_STD = {"gjahr", "monat", "poper", "buzei", "posnr", "kopos", "i", "int1",
 
 
 def numeric_types():
-    g = io.open("tools/gen_ddic.py", encoding="utf-8").read()
+    if not os.path.isfile(GEN_DDIC):
+        return set(NUM_STD)            # repo khac: chi dung kieu chuan
+    g = io.open(GEN_DDIC, encoding="utf-8").read()
     dom = {}
     for m in re.finditer(r'\(\s*"(ZDO_\w+)"\s*,\s*"(\w+)"', g):
         dom[m.group(1)] = m.group(2).upper()
@@ -649,15 +664,15 @@ def check_ui(path):
 # ---------------------------------------------------------------------------
 # Chạy
 # ---------------------------------------------------------------------------
-for p in sorted(glob.glob("src/**/*.intf.abap", recursive=True)):
+for p in sources("*.intf.abap"):
     read_intf(p)
-for p in sorted(glob.glob("src/**/*.intf.abap", recursive=True)):
+for p in sources("*.intf.abap"):
     read_intf(p)                                   # lượt 2: interface lồng nhau
-for p in sorted(glob.glob("src/**/*.abap", recursive=True)):
+for p in sources("*.abap"):
     read_params(p)
-for p in sorted(glob.glob("src/**/*.clas.abap", recursive=True)):
+for p in sources("*.clas.abap"):
     read_class(p)
-for p in sorted(glob.glob("src/**/*.abap", recursive=True)):
+for p in sources("*.abap"):
     check_template(p)
     check_style(p)
     check_select(p)
@@ -722,7 +737,7 @@ for name, info in CLS.items():
                        % (name, m, intf))
 
 # H. hằng số / kiểu của interface
-for p in sorted(glob.glob("src/**/*.abap", recursive=True)):
+for p in sources("*.abap"):
     for i, line in enumerate(io.open(p, encoding="utf-8"), 1):
         if line.lstrip().startswith(("*", '"')):
             continue
@@ -737,7 +752,7 @@ for p in sorted(glob.glob("src/**/*.abap", recursive=True)):
             report("H", p, i, "%s=>%s không tìm thấy trong interface" % (intf, ref))
 
 # I. gọi method tĩnh của class trong package
-for p in sorted(glob.glob("src/**/*.abap", recursive=True)):
+for p in sources("*.abap"):
     for i, line in enumerate(io.open(p, encoding="utf-8"), 1):
         if line.lstrip().startswith(("*", '"')):
             continue
