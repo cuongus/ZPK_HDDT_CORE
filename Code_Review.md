@@ -419,6 +419,8 @@ của ADT, nguyên nhân và cách sửa đã áp dụng vào `src/` (repo khôn
 | 8 | `For the result of a computation with type P, the type P(8,0) is used here implicitly` (cảnh báo, nhưng sai kết quả) | `ZCL_HDDT_SRC_BASE~line_tax` | `DATA(lv_tax) = i_amount * i_rate / 100` suy ra P(8,0) nên thuế bị làm tròn về số nguyên trước khi `round( dec = 2 )` | khai báo `DATA lv_tax TYPE decfloat34` rồi mới gán |
 | 9 | `The regex standard POSIX is deprecated` (cảnh báo) | `ZCL_HDDT_SRC_BASE` 719/720, `ZCL_HDDT_LOG` 4 chỗ, `ZCL_HDDT_HTTP` 1 chỗ | dùng `REGEX` / `regex =` | đổi sang `PCRE` / `pcre =`; các mẫu hiện có tương thích PCRE |
 | 10 | `Redundant conversion for type AWREF` (cảnh báo) | `ZCL_HDDT_WRITEBACK_FI` 187 | `CONV awref( i_belnr )` trong khi BELNR_D và AWREF cùng CHAR10 | gán trực tiếp `i_awref = i_belnr`; giữ `CONV aworg( )` vì nguồn là string |
+| 11 | `Unknown column name` ở mọi câu `ORDER BY` dùng cột không có trong `SELECT` | `ZCL_HDDT_SRC_BASE` (ADR6 ×3, ADR2, VBKD, A003/KONP), `ZCL_HDDT_SRC_FI` (BKPF-BSEG, BSEG) | ABAP SQL chỉ cho `ORDER BY` theo tên cột của tập kết quả; không nhận cột chỉ có trong bảng nguồn, cũng không nhận tiền tố bảng dạng `k~belnr` | thêm cột sắp xếp vào danh sách SELECT (`consnumber`, `posnr`, `buzei`), dùng tên cột kết quả (`belnr`, `cust_buzei`) |
+| 12 | Cột `DATBI` không có trong `A003` trên hệ MAG S25 | `ZCL_HDDT_SRC_BASE~tax_rate_of` | khoá A003 ở hệ này chỉ gồm KAPPL / KSCHL / ALAND / MWSKZ + KNUMH, không có khoảng hiệu lực, nên không thể sắp xếp theo DATBI như dự án tham chiếu | mỗi khoá A003 chỉ có một KNUMH, nên sắp xếp theo `KOPOS` của KONP cho xác định; nếu cần kiểm tra hiệu lực thì phải join thêm KONH (DATAB/DATBI) |
 
 Quy tắc rút ra cho phần DEFINITION của class:
 
@@ -428,6 +430,7 @@ Quy tắc rút ra cho phần DEFINITION của class:
 - `CLASS_CONSTRUCTOR` bắt buộc PUBLIC; RETURNING phải có kiểu đầy đủ (`char1`, `string`, `abap_bool`…).
 - Bảng có field `STRG` / `RSTR`: cột `Init` trong SE11 phải để trống, xem bảng trên.
 - Trong string template, `{` `}` phải escape thành `\{` `\}` nếu muốn in ra chữ.
+- `ORDER BY` chỉ dùng tên cột có trong danh sách `SELECT`, không dùng tiền tố bảng.
 
 Phần INTERFACE (`ZIF_*`) giữ nguyên comment banner vì các interface đã lưu được trên S25;
 nếu về sau gặp cùng lỗi #4 thì áp dụng đúng cách sửa trên.
