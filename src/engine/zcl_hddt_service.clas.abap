@@ -1224,7 +1224,7 @@ CLASS zcl_hddt_service IMPLEMENTATION.
     IF i_org_docno IS INITIAL.
       mo_log->attach_original( is_request    = is_request
                                i_org_docno   = space
-                               i_org_gjahr   = space
+                               i_org_gjahr   = '0000'
                                i_org_srctype = space
                                i_adj_type    = space
                                i_adj_dir     = space ).
