@@ -432,6 +432,7 @@ của ADT, nguyên nhân và cách sửa đã áp dụng vào `src/` (repo khôn
 | 21 | `"…" is not an admissible value for type "C(20)"` (cảnh báo, text bị cắt) | `ZPG_HDDT_INTEGRATION_F01` dòng 1225, 1284 (bản trên hệ) | `SVAL-FIELDTEXT` chỉ dài 20 ký tự; hai nhãn pop-up dài 48 và 22 ký tự | rút còn `Loại ĐC (2/3/4/5)` và `Ngày phát hành`; ý nghĩa mã điều chỉnh tra bằng F4 trên domain |
 | 22 | `There is already an attribute called "GC_PROVIDER"` | `ZCL_HDDT_PROV_VNPT` dòng 36 | lớp này kế thừa `ZCL_HDDT_PROV_TEMPLATE`, mà lớp cha đã khai `CONSTANTS gc_provider VALUE 'TEMPLATE'`; lớp con không được khai lại tên đã có ở lớp cha. `ZCL_HDDT_PROV_FPT` và `ZCL_HDDT_PROV_VIETTEL` không bị vì kế thừa trực tiếp `ZCL_HDDT_PROV_BASE` (không có hằng số này) | đổi tên hằng số trong lớp con thành `GC_PROV_VNPT`, `get_id` trả về hằng số mới |
 | 23 | `Data type STRING in field TPL_BODY is not supported` (SE54 / Table Maintenance Generator) | `ZTB_HDDT_TPL`, và sẽ gặp tương tự ở `ZTB_HDDT_TOK` (TOKEN) và `ZTB_HDDT_LOG` (4 field RAWSTRING) | TMG không sinh được màn hình bảo trì cho bảng có field STRING / RAWSTRING. Hạn chế của công cụ, không phải lỗi bảng | chỉ sinh TMG cho 11 bảng còn lại. `ZTB_HDDT_TPL` bảo trì bằng chức năng nạp file JSON mới thêm vào `ZPG_HDDT_CONFIG` (method `MAINTAIN_TPL`); `_TOK` và `_LOG` chỉ tra cứu bằng SE16N và `ZPG_HDDT_LOG` |
+| 24 | Dump `ITAB_NON_NUMERIC_COMPONENT` khi nhấn đôi bảng đã sinh TMG (`SAPLZFG_VM_HDDT`, `LSVIMF21` dòng 163) | `ZPG_HDDT_CONFIG~maintain` truyền `lt_excl` vào `VIEW_MAINTENANCE_CALL` | bảng khai `WITH EMPTY KEY` nên `COLLECT excl_cua_funct` trong code chuẩn không có field khoá nào, field `FUNCTION` kiểu C bị coi là field cộng dồn -> dump lúc chạy | đổi thành `WITH DEFAULT KEY`. Đã đổi luôn 6 bảng khác cũng truyền vào tham số `TABLES` của FM cổ điển (`READ_TEXT`, `POPUP_GET_VALUES` ×3, `SCMS_XSTRING_TO_BINARY` ×2) |
 
 Quy tắc rút ra cho phần DEFINITION của class:
 
@@ -451,6 +452,7 @@ Quy tắc rút ra cho phần DEFINITION của class:
 - `MESSAGE ... WITH` cũng chỉ nhận tên biến hoặc literal, không nhận `lines( )` hay string template.
 - Lớp con không được khai lại hằng số / kiểu / method đã có ở lớp cha; method chỉ được khai lại kèm `REDEFINITION`.
 - Bảng có field STRING / RAWSTRING không sinh được Table Maintenance Generator; phải có đường bảo trì khác.
+- Bảng nội bộ truyền vào tham số `TABLES` của function module cổ điển phải khai `WITH DEFAULT KEY`, không dùng `EMPTY KEY`.
 - Gọi method có `EXCEPTIONS` phải ghi rõ `EXPORTING`, không dùng dạng ngắn `( name = value )`.
 - `SVAL-FIELDTEXT` tối đa 20 ký tự.
 
