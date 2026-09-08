@@ -8,11 +8,18 @@
 *              Yêu cầu: mỗi bảng đã được sinh Table Maintenance
 *              Generator (SE11 -> Utilities -> Table Maintenance
 *              Generator). Xem docs/06-cai-dat.md §3.
+*              NGOẠI LỆ: ZTB_HDDT_TPL có field TPL_BODY kiểu STRING,
+*              SE54 báo "Data type STRING is not supported" nên KHÔNG
+*              sinh được TMG. Bảng này bảo trì bằng nạp file JSON từ
+*              máy trạm ngay trong chương trình (method MAINTAIN_TPL).
 * Tham Số    : Không có
 *=====================================================================
 * Version   Ngày          Người sửa                Transport   Mô tả
 *=====================================================================
 * 1.0       28/08/2026    cuongus - CuongUS        abapGit     Tạo mới
+* 1.1       08/09/2026    cuongus - CuongUS        abapGit     Bảo trì
+*                         ZTB_HDDT_TPL bằng nạp file JSON (SE54 không
+*                         sinh TMG cho field STRING)
 *=====================================================================
 REPORT zpg_hddt_config MESSAGE-ID zms_hddt.
 
@@ -26,6 +33,16 @@ TYPES: BEGIN OF ty_entry,
 
 DATA gt_entry TYPE STANDARD TABLE OF ty_entry WITH EMPTY KEY.
 
+*---------------------------------------------------------------------*
+* Biến toàn cục nhận giá trị từ CL_GUI_FRONTEND_SERVICES (quy ước:
+* không dùng biến cục bộ — bẫy SYSTEM_POINTER_PENDING)
+*---------------------------------------------------------------------*
+DATA gt_file_list TYPE filetable.
+DATA gt_file_bin  TYPE solix_tab.
+DATA gv_file_full TYPE string.
+DATA gv_file_rc   TYPE i.
+DATA gv_file_len  TYPE i.
+
 CLASS lcl_cfg DEFINITION FINAL CREATE PUBLIC.
   PUBLIC SECTION.
     METHODS run.
@@ -37,6 +54,10 @@ CLASS lcl_cfg DEFINITION FINAL CREATE PUBLIC.
     METHODS build_list.
     METHODS maintain
       IMPORTING i_tabname TYPE tabname.
+
+    "! ZTB_HDDT_TPL không sinh được Table Maintenance Generator vì có
+    "! field kiểu STRING; bảo trì bằng nạp mẫu payload từ file JSON.
+    METHODS maintain_tpl.
 ENDCLASS.
 
 
@@ -65,7 +86,7 @@ CLASS lcl_cfg IMPLEMENTATION.
       ( seq = '09' area = 'Ánh xạ trạng thái' tabname = 'ZTB_HDDT_STAT'
         descr = 'Mã trả về của NCC -> trạng thái trong SAP' )
       ( seq = '10' area = 'Mẫu payload'   tabname = 'ZTB_HDDT_TPL'
-        descr = 'Mẫu payload cho adapter dạng template (VNPT...)' )
+        descr = 'Mẫu payload adapter template - nạp từ file JSON' )
       ( seq = '11' area = 'Sổ hoá đơn'    tabname = 'ZTB_HDDT_INV'
         descr = 'Sổ đăng ký hoá đơn đã tích hợp (chỉ xem)' )
       ( seq = '12' area = 'Chi tiết HH'   tabname = 'ZTB_HDDT_ITEM'
@@ -115,6 +136,12 @@ CLASS lcl_cfg IMPLEMENTATION.
 
   METHOD maintain.
 
+    " SE54 không sinh TMG cho bảng có field STRING
+    IF i_tabname = 'ZTB_HDDT_TPL'.
+      maintain_tpl( ).
+      RETURN.
+    ENDIF.
+
     DATA lt_excl TYPE STANDARD TABLE OF vimexclfun WITH EMPTY KEY.
 
     CALL FUNCTION 'VIEW_MAINTENANCE_CALL'
@@ -153,6 +180,131 @@ CLASS lcl_cfg IMPLEMENTATION.
     ENDCASE.
 
   ENDMETHOD.
+
+  METHOD maintain_tpl.
+
+    DATA lt_fields TYPE STANDARD TABLE OF sval WITH EMPTY KEY.
+    DATA lv_rc     TYPE c LENGTH 1.
+
+    lt_fields = VALUE #(
+      ( tabname = 'ZTB_HDDT_TPL' fieldname = 'PROVIDER' fieldtext = 'Nhà cung cấp' )
+      ( tabname = 'ZTB_HDDT_TPL' fieldname = 'ACTION'   fieldtext = 'Mã nghiệp vụ' ) ).
+
+    CALL FUNCTION 'POPUP_GET_VALUES'
+      EXPORTING
+        popup_title     = 'Mẫu payload cần bảo trì'
+      IMPORTING
+        returncode      = lv_rc
+      TABLES
+        fields          = lt_fields
+      EXCEPTIONS
+        error_in_fields = 1
+        OTHERS          = 2.
+    IF sy-subrc <> 0 OR lv_rc = 'A'.
+      RETURN.
+    ENDIF.
+
+    DATA ls_tpl TYPE ztb_hddt_tpl.
+    ls_tpl-provider = lt_fields[ 1 ]-value.
+    ls_tpl-action   = lt_fields[ 2 ]-value.
+    TRANSLATE ls_tpl-provider TO UPPER CASE.
+    TRANSLATE ls_tpl-action   TO UPPER CASE.
+    IF ls_tpl-provider IS INITIAL OR ls_tpl-action IS INITIAL.
+      MESSAGE 'Phải nhập nhà cung cấp và mã nghiệp vụ.' TYPE 'S' DISPLAY LIKE 'E'.
+      RETURN.
+    ENDIF.
+
+    SELECT SINGLE tpl_body
+      FROM ztb_hddt_tpl
+      WHERE provider = @ls_tpl-provider
+        AND action   = @ls_tpl-action
+      INTO @DATA(lv_old).
+
+    DATA(lv_quest) = COND string(
+      WHEN sy-subrc = 0
+      THEN |Mẫu hiện có { strlen( lv_old ) } ký tự. Nạp lại từ file JSON?|
+      ELSE |Chưa có mẫu cho { ls_tpl-provider } / { ls_tpl-action }. Nạp từ file JSON?| ).
+
+    DATA lv_answer TYPE c LENGTH 1.
+    CALL FUNCTION 'POPUP_TO_CONFIRM'
+      EXPORTING
+        titlebar      = 'Bảo trì mẫu payload'
+        text_question = lv_quest
+      IMPORTING
+        answer        = lv_answer
+      EXCEPTIONS
+        OTHERS        = 1.
+    IF lv_answer <> '1'.
+      RETURN.
+    ENDIF.
+
+    CLEAR: gt_file_list, gt_file_bin, gv_file_full, gv_file_rc, gv_file_len.
+    cl_gui_frontend_services=>file_open_dialog(
+      EXPORTING
+        window_title   = 'Chọn file mẫu payload JSON'
+        file_filter    = 'JSON (*.json)|*.json|Tất cả (*.*)|*.*'
+        multiselection = abap_false
+      CHANGING
+        file_table     = gt_file_list
+        rc             = gv_file_rc
+      EXCEPTIONS
+        OTHERS         = 1 ).
+    IF sy-subrc <> 0 OR gv_file_rc < 1.
+      RETURN.
+    ENDIF.
+    gv_file_full = gt_file_list[ 1 ]-filename.
+
+    cl_gui_frontend_services=>gui_upload(
+      EXPORTING
+        filename   = gv_file_full
+        filetype   = 'BIN'
+      IMPORTING
+        filelength = gv_file_len
+      CHANGING
+        data_tab   = gt_file_bin
+      EXCEPTIONS
+        OTHERS     = 1 ).
+    IF sy-subrc <> 0 OR gv_file_len = 0.
+      MESSAGE 'Không đọc được file mẫu payload.' TYPE 'S' DISPLAY LIKE 'E'.
+      RETURN.
+    ENDIF.
+
+    DATA lv_xstr TYPE xstring.
+    CALL FUNCTION 'SCMS_BINARY_TO_XSTRING'
+      EXPORTING
+        input_length = gv_file_len
+      IMPORTING
+        buffer       = lv_xstr
+      TABLES
+        binary_tab   = gt_file_bin.
+
+    ls_tpl-tpl_body = zcl_hddt_platform=>get( )->xstring_to_string(
+                        i_data     = lv_xstr
+                        i_encoding = `UTF-8` ).
+    IF ls_tpl-tpl_body IS INITIAL.
+      MESSAGE 'File mẫu payload rỗng.' TYPE 'S' DISPLAY LIKE 'E'.
+      RETURN.
+    ENDIF.
+    ls_tpl-descr   = gv_file_full.
+    ls_tpl-xactive = abap_true.
+
+    MODIFY ztb_hddt_tpl FROM ls_tpl.
+    IF sy-subrc <> 0.
+      ROLLBACK WORK.
+      MESSAGE 'Không ghi được mẫu payload vào ZTB_HDDT_TPL.' TYPE 'S' DISPLAY LIKE 'E'.
+      RETURN.
+    ENDIF.
+    COMMIT WORK AND WAIT.
+    zcl_hddt_factory=>reset( ).
+
+    " Ghi trực tiếp nên KHÔNG vào transport: phải nạp lại trên từng hệ
+    DATA(lv_done) = |Đã nạp mẫu { ls_tpl-provider } / { ls_tpl-action } | &&
+                    |({ strlen( ls_tpl-tpl_body ) } ký tự). Bản ghi không vào | &&
+                    |transport, phải nạp lại trên hệ QAS / PRD.|.
+    MESSAGE lv_done TYPE 'S'.
+
+  ENDMETHOD.
+
 
 ENDCLASS.
 

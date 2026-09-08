@@ -96,7 +96,7 @@ Runbook đầy đủ (kể cả rollback): [docs/07-doi-nha-cung-cap.md](docs/07
 1. abapGit → New Online → https://github.com/cuongus/ZPK_HDDT_CORE.git
    Package: ZPK_HDDT_CORE   (tạo trước, gán transport layer)
 2. Pull → Activate all (DDIC trước, code sau)
-3. SE11: sinh Table Maintenance Generator cho 14 bảng ZTB_HDDT_*
+3. SE11: sinh Table Maintenance Generator cho 11 bảng ZTB_HDDT_* (trừ _TPL / _TOK / _LOG vì có field STRING — xem docs/06 §3)
 4. SE38 → ZPG_HDDT_SETUP → bỏ tick "Chi mo phong" → nạp cấu hình khởi tạo
 5. SM59: tạo RFC destination loại G cho nhà cung cấp
 6. ZFI002: khai ZTB_HDDT_CRED + ACTIVE_PROVIDER

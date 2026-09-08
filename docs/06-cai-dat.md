@@ -72,6 +72,19 @@ cứu bằng SM30, nhưng đặt authorization group hạn chế hơn.
 > Nếu chưa sinh maintenance dialog, `ZFI002` báo lỗi
 > *"Bảng &1 chưa sinh Table Maintenance Generator"* — đúng thông điệp, không dump.
 
+**Ngoại lệ — 3 bảng có field kiểu STRING / RAWSTRING không sinh được TMG.**
+SE54 báo `Data type STRING in field <tên> is not supported`. Đây là hạn chế của
+Table Maintenance Generator, không phải lỗi bảng.
+
+| Bảng | Field | Cách bảo trì / tra cứu thay thế |
+|---|---|---|
+| `ZTB_HDDT_TPL` | `TPL_BODY` (STRING) | nhấn đôi dòng "Mẫu payload" trong `ZFI002` → nhập nhà cung cấp + mã nghiệp vụ → nạp file JSON từ máy trạm |
+| `ZTB_HDDT_TOK` | `TOKEN` (STRING) | không cần bảo trì; tra cứu bằng SE16N, xoá dòng khi cần buộc đăng nhập lại |
+| `ZTB_HDDT_LOG` | `REQ_HEADER`, `RES_HEADER`, `REQ_BODY`, `RES_BODY` (RAWSTRING) | xem bằng `ZPG_HDDT_LOG`, không bảo trì tay |
+
+Vậy chỉ sinh TMG cho 11 bảng còn lại. Mẫu payload nạp trực tiếp vào bảng nên
+**không đi theo transport**, phải nạp lại trên từng hệ QAS và PRD.
+
 ### Object phân quyền theo chức năng (FS MAG 3.10)
 
 Tạo bằng SU21 (không đi qua abapGit): object `Z_FI_HDDT` (hoặc tên khác), field
