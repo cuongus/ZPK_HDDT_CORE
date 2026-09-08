@@ -17,6 +17,7 @@ Soát các lỗi mà ADT / SE24 sẽ báo khi activate:
   M. ORDER BY dùng cột không có trong danh sách SELECT
   N. Gọi method qua biến REF TO interface nhưng interface không có
   O. Dùng field không có trong định nghĩa bảng ở tools/gen_ddic.py
+  P. Truyền space / ' ' cho tham số kiểu số hoặc ngày
 
 Chạy: python tools/check_abap.py
 """
@@ -448,12 +449,63 @@ def check_ddic_use(path):
 
 
 # ---------------------------------------------------------------------------
+# P. Truyền literal ký tự (space, ' ') cho tham số kiểu số / ngày
+#    ADT: The literal "' '" is not type-compatible with the formal parameter
+# ---------------------------------------------------------------------------
+NUM_KIND = ("NUMC", "INT1", "INT2", "INT4", "INT8", "DEC", "CURR", "QUAN",
+            "FLTP", "DATS", "TIMS", "TIMESTAMP", "TIMESTAMPL")
+NUM_STD = {"gjahr", "monat", "poper", "buzei", "posnr", "kopos", "i", "int1",
+           "int2", "int4", "int8", "p", "f", "d", "t", "n", "dats", "tims",
+           "timestamp", "timestampl", "decfloat16", "decfloat34", "numc"}
+
+
+def numeric_types():
+    g = io.open("tools/gen_ddic.py", encoding="utf-8").read()
+    dom = {}
+    for m in re.finditer(r'\(\s*"(ZDO_\w+)"\s*,\s*"(\w+)"', g):
+        dom[m.group(1)] = m.group(2).upper()
+    out = set(NUM_STD)
+    for m in re.finditer(r'\(\s*"(ZDE_\w+)"\s*,\s*(?:"(ZDO_\w+)"|\(\s*"(\w+)")', g):
+        de, d, builtin = m.group(1), m.group(2), m.group(3)
+        kind = dom.get(d, "") if d else (builtin or "").upper()
+        if kind in NUM_KIND:
+            out.add(de.lower())
+    return out
+
+
+NUM_TYPE = numeric_types()
+PARAM_TYPE = {}
+
+
+def read_params(path):
+    text = io.open(path, encoding="utf-8").read()
+    for m in re.finditer(r"\b(i_\w+|e_\w+|c_\w+|is_\w+|it_\w+)\s+TYPE\s+"
+                         r"(?:REF TO\s+)?([\w~=>-]+)", text, re.I):
+        PARAM_TYPE.setdefault(m.group(1).lower(), set()).add(m.group(2).lower())
+
+
+def check_literal(path):
+    for i, line in enumerate(io.open(path, encoding="utf-8"), 1):
+        if line.lstrip().startswith(("*", '"')):
+            continue
+        for name in re.findall(r"\b(i_\w+|e_\w+|c_\w+)\s*=\s*(?:space|' ')\s*[).]*",
+                               line, re.I):
+            types = PARAM_TYPE.get(name.lower(), set())
+            bad = {t for t in types if t in NUM_TYPE}
+            if bad:
+                report("P", path, i, "%s = space nhưng tham số kiểu %s (số/ngày)"
+                       % (name, "/".join(sorted(bad))))
+
+
+# ---------------------------------------------------------------------------
 # Chạy
 # ---------------------------------------------------------------------------
 for p in sorted(glob.glob("src/**/*.intf.abap", recursive=True)):
     read_intf(p)
 for p in sorted(glob.glob("src/**/*.intf.abap", recursive=True)):
     read_intf(p)                                   # lượt 2: interface lồng nhau
+for p in sorted(glob.glob("src/**/*.abap", recursive=True)):
+    read_params(p)
 for p in sorted(glob.glob("src/**/*.clas.abap", recursive=True)):
     read_class(p)
 for p in sorted(glob.glob("src/**/*.abap", recursive=True)):
@@ -462,6 +514,7 @@ for p in sorted(glob.glob("src/**/*.abap", recursive=True)):
     check_select(p)
     check_iref(p)
     check_ddic_use(p)
+    check_literal(p)
 
 
 def ancestors(name):
@@ -559,6 +612,7 @@ KIND = {
     "M": "ORDER BY không khớp danh sách SELECT",
     "N": "Method không có trong interface được tham chiếu",
     "O": "Field không có trong định nghĩa bảng DDIC",
+    "P": "Literal ký tự truyền cho tham số kiểu số / ngày",
 }
 print("Đã đọc: %d interface, %d class" % (len(INTF), len(CLS)))
 for k in sorted(KIND):
