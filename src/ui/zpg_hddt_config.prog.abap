@@ -8,18 +8,23 @@
 *              Yêu cầu: mỗi bảng đã được sinh Table Maintenance
 *              Generator (SE11 -> Utilities -> Table Maintenance
 *              Generator). Xem docs/06-cai-dat.md §3.
-*              NGOẠI LỆ: ZTB_HDDT_TPL có field TPL_BODY kiểu STRING,
-*              SE54 báo "Data type STRING is not supported" nên KHÔNG
-*              sinh được TMG. Bảng này bảo trì bằng nạp file JSON từ
-*              máy trạm ngay trong chương trình (method MAINTAIN_TPL).
+*              NGOẠI LỆ: 3 bảng có field STRING / RAWSTRING nên SE54 báo
+*              "Data type STRING is not supported", KHÔNG sinh được TMG:
+*                - ZTB_HDDT_TPL : nạp mẫu payload từ file JSON
+*                                 (MAINTAIN_TPL)
+*                - ZTB_HDDT_TOK : xem bộ đệm + xoá để buộc đăng nhập lại
+*                                 (MAINTAIN_TOK)
+*                - ZTB_HDDT_LOG : mở chương trình ZPG_HDDT_LOG
+*                                 (MAINTAIN_LOG)
 * Tham Số    : Không có
 *=====================================================================
 * Version   Ngày          Người sửa                Transport   Mô tả
 *=====================================================================
 * 1.0       28/08/2026    cuongus - CuongUS        abapGit     Tạo mới
 * 1.1       08/09/2026    cuongus - CuongUS        abapGit     Bảo trì
-*                         ZTB_HDDT_TPL bằng nạp file JSON (SE54 không
-*                         sinh TMG cho field STRING)
+*                         ZTB_HDDT_TPL bằng nạp file JSON, ZTB_HDDT_TOK
+*                         và ZTB_HDDT_LOG bằng đường riêng (SE54 không
+*                         sinh TMG cho field STRING / RAWSTRING)
 *=====================================================================
 REPORT zpg_hddt_config MESSAGE-ID zms_hddt.
 
@@ -58,6 +63,12 @@ CLASS lcl_cfg DEFINITION FINAL CREATE PUBLIC.
     "! ZTB_HDDT_TPL không sinh được Table Maintenance Generator vì có
     "! field kiểu STRING; bảo trì bằng nạp mẫu payload từ file JSON.
     METHODS maintain_tpl.
+
+    "! ZTB_HDDT_TOK là bộ đệm token, chỉ xem và xoá khi cần đăng nhập lại.
+    METHODS maintain_tok.
+
+    "! ZTB_HDDT_LOG xem bằng chương trình log, không bảo trì tay.
+    METHODS maintain_log.
 ENDCLASS.
 
 
@@ -92,9 +103,9 @@ CLASS lcl_cfg IMPLEMENTATION.
       ( seq = '12' area = 'Chi tiết HH'   tabname = 'ZTB_HDDT_ITEM'
         descr = 'Chi tiết hàng hoá đã phát hành (chỉ xem)' )
       ( seq = '13' area = 'Log API'       tabname = 'ZTB_HDDT_LOG'
-        descr = 'Log request/response (chỉ xem)' )
+        descr = 'Log request/response - mở chương trình log' )
       ( seq = '14' area = 'Token'         tabname = 'ZTB_HDDT_TOK'
-        descr = 'Bộ đệm access token (chỉ xem / xoá khi cần)' ) ).
+        descr = 'Bộ đệm access token - xem và xoá khi cần' ) ).
 
   ENDMETHOD.
 
@@ -136,11 +147,20 @@ CLASS lcl_cfg IMPLEMENTATION.
 
   METHOD maintain.
 
-    " SE54 không sinh TMG cho bảng có field STRING
-    IF i_tabname = 'ZTB_HDDT_TPL'.
-      maintain_tpl( ).
-      RETURN.
-    ENDIF.
+    " SE54 không sinh TMG cho bảng có field STRING / RAWSTRING
+    CASE i_tabname.
+      WHEN 'ZTB_HDDT_TPL'.
+        maintain_tpl( ).
+        RETURN.
+      WHEN 'ZTB_HDDT_TOK'.
+        maintain_tok( ).
+        RETURN.
+      WHEN 'ZTB_HDDT_LOG'.
+        maintain_log( ).
+        RETURN.
+      WHEN OTHERS.
+        " bảng còn lại dùng Table Maintenance Generator
+    ENDCASE.
 
     " DEFAULT KEY: code chuẩn của view maintenance dùng COLLECT trên bảng
     " này; EMPTY KEY làm COLLECT dump ITAB_NON_NUMERIC_COMPONENT
@@ -304,6 +324,67 @@ CLASS lcl_cfg IMPLEMENTATION.
                     |({ strlen( ls_tpl-tpl_body ) } ký tự). Bản ghi không vào | &&
                     |transport, phải nạp lại trên hệ QAS / PRD.|.
     MESSAGE lv_done TYPE 'S'.
+
+  ENDMETHOD.
+
+
+  METHOD maintain_tok.
+
+    SELECT provider, connid, bukrs, apiuser, valid_to, created_at
+      FROM ztb_hddt_tok
+      ORDER BY provider, connid, bukrs, apiuser
+      INTO TABLE @DATA(lt_tok)
+      UP TO 200 ROWS.
+    IF lt_tok IS INITIAL.
+      MESSAGE 'Bộ đệm token đang rỗng.' TYPE 'S'.
+      RETURN.
+    ENDIF.
+
+    DATA lo_alv TYPE REF TO cl_salv_table.
+    TRY.
+        cl_salv_table=>factory( IMPORTING r_salv_table = lo_alv
+                                CHANGING  t_table      = lt_tok ).
+        lo_alv->set_screen_popup( start_column = 5
+                                  end_column   = 110
+                                  start_line   = 3
+                                  end_line     = 20 ).
+        lo_alv->get_columns( )->set_optimize( abap_true ).
+        lo_alv->display( ).
+      CATCH cx_salv_msg INTO DATA(lx_alv).
+        MESSAGE lx_alv->get_text( ) TYPE 'S' DISPLAY LIKE 'E'.
+        RETURN.
+    ENDTRY.
+
+    DATA(lv_quest) = |Xoá toàn bộ { lines( lt_tok ) } dòng bộ đệm token | &&
+                     |để buộc đăng nhập lại nhà cung cấp?|.
+    DATA lv_answer TYPE c LENGTH 1.
+    CALL FUNCTION 'POPUP_TO_CONFIRM'
+      EXPORTING
+        titlebar      = 'Bộ đệm access token'
+        text_question = lv_quest
+      IMPORTING
+        answer        = lv_answer
+      EXCEPTIONS
+        OTHERS        = 1.
+    IF lv_answer <> '1'.
+      RETURN.
+    ENDIF.
+
+    DELETE FROM ztb_hddt_tok.
+    IF sy-subrc <> 0.
+      ROLLBACK WORK.
+      MESSAGE 'Không xoá được bộ đệm token.' TYPE 'S' DISPLAY LIKE 'E'.
+      RETURN.
+    ENDIF.
+    COMMIT WORK AND WAIT.
+    MESSAGE 'Đã xoá bộ đệm token, lần gọi sau sẽ đăng nhập lại.' TYPE 'S'.
+
+  ENDMETHOD.
+
+
+  METHOD maintain_log.
+
+    SUBMIT zpg_hddt_log VIA SELECTION-SCREEN AND RETURN.
 
   ENDMETHOD.
 
