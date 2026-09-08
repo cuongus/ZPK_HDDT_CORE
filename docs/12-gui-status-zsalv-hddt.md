@@ -73,13 +73,44 @@ xảy ra, vì mã không khớp nhánh nào trong `on_function`.
 Nhãn nút giữ dưới 20 ký tự. Nút số 9 vì vậy rút còn `Sửa ngày/giờ`, ý nghĩa đầy
 đủ nằm ở tooltip.
 
-## 4. Phím tắt (không bắt buộc)
+## 6. Khi hết function key
+
+SE41 bắt mỗi nút trên **Application Toolbar** phải gắn một function key, mà hệ
+thường chỉ còn khoảng 10 phím trống. Cách xử lý:
+
+- **Mục trên Menu Bar không cần function key.** Tạo một menu tên `Hoá đơn` rồi
+  đưa đủ 12 mã vào đó. Sau đó chọn 6 đến 8 chức năng hay dùng nhất đưa lên
+  Application Toolbar với số phím còn lại: `ZDRAFT`, `ZISSUE`, `ZUPDATE`,
+  `ZADJREF`, `ZJSON`, `ZLOG`.
+- Không cần gắn phím "đẹp": `Shift+F1` đến `Shift+F8`, `Ctrl+F12` đều dùng được.
+  Tránh `F4`, `F9`, `Shift+F2`, `Shift+F10` vì SAP đã dành riêng.
+
+[Inference] Mục menu không đòi function key là hành vi quan sát được của SE41;
+nếu bản release của bạn vẫn hỏi phím thì dùng cách gộp nút ở mục 7.
+
+## 7. Có thể không tạo GUI status không
+
+Có, nhưng mỗi hướng đều đắt hơn việc tạo một status:
+
+| Hướng | Cần làm | Đánh giá |
+|---|---|---|
+| ALV trong container trên dynpro riêng | tạo dynpro SE51 + status cho dynpro, đổi `factory( r_container = ... )`; lúc đó `ADD_FUNCTION` chạy được | vẫn phải tạo screen object, không đỡ hơn |
+| Đổi sang `CL_GUI_ALV_GRID` + docking container | viết lại lớp hiển thị, thêm event `TOOLBAR` và `USER_COMMAND`, khoảng 150 dòng; không cần GUI status | mất các tiện ích SALV đang dùng, sửa nhiều |
+| Gộp 12 chức năng vào 1 nút | 1 mã chức năng duy nhất trên toolbar, bấm ra pop-up danh sách 12 việc để chọn | rẻ nhất về status, thêm một lần bấm cho mỗi việc |
+| Giữ GUI status | tạo 1 status, 12 mã, dùng menu cho phần thiếu phím | ít việc nhất, giữ nguyên code |
+
+Trước khi đổi hướng, hãy dán lại `ZIN_HDDT_INTEGRATION_F01` bản mới rồi chạy
+`ZFI001`: bản mới in ra **nguyên văn lý do** `ADD_FUNCTION` thất bại ở dòng
+thông báo. Nếu lý do không phải hạn chế của chế độ toàn màn hình thì có thể sửa
+code là xong, không cần GUI status.
+
+## 8. Phím tắt (không bắt buộc)
 
 Nếu muốn gán phím tắt, tránh các phím SAP đã dành riêng: `F4` trợ giúp giá trị,
 `F2` chọn, `F9` select, `Shift+F2` xoá, `Shift+F10` context menu, `F3` back,
 `F12` cancel. An toàn là dùng `Shift+F5` trở lên.
 
-## 5. Kiểm tra sau khi activate
+## 9. Kiểm tra sau khi activate
 
 1. Chạy `ZFI001`, chọn công ty và năm, Execute.
 2. Toolbar phải có 12 nút mới bên phải nhóm nút chuẩn.
