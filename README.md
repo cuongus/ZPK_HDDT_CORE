@@ -196,7 +196,7 @@ danh sách. Xem thêm `execute_many( )`.
 
 **Chưa được kích hoạt trên hệ SAP nào.** Package được viết ngoài hệ thống và
 đưa lên Git; lần import đầu tiên cần một lượt activate + sửa lỗi cú pháp còn sót.
-Xem [docs/06-cai-dat.md](docs/06-cai-dat.md) §5.
+Xem [docs/06-cai-dat.md](docs/06-cai-dat.md) §5. GUI status 12 nút: [docs/12-gui-status-zsalv-hddt.md](docs/12-gui-status-zsalv-hddt.md).
 
 ---
 
