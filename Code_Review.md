@@ -434,6 +434,7 @@ của ADT, nguyên nhân và cách sửa đã áp dụng vào `src/` (repo khôn
 | 23 | `Data type STRING in field TPL_BODY is not supported` (SE54 / Table Maintenance Generator) | `ZTB_HDDT_TPL`, và sẽ gặp tương tự ở `ZTB_HDDT_TOK` (TOKEN) và `ZTB_HDDT_LOG` (4 field RAWSTRING) | TMG không sinh được màn hình bảo trì cho bảng có field STRING / RAWSTRING. Hạn chế của công cụ, không phải lỗi bảng | chỉ sinh TMG cho 11 bảng còn lại. `ZTB_HDDT_TPL` bảo trì bằng chức năng nạp file JSON mới thêm vào `ZPG_HDDT_CONFIG` (method `MAINTAIN_TPL`); `_TOK` và `_LOG` chỉ tra cứu bằng SE16N và `ZPG_HDDT_LOG` |
 | 24 | Dump `ITAB_NON_NUMERIC_COMPONENT` khi nhấn đôi bảng đã sinh TMG (`SAPLZFG_VM_HDDT`, `LSVIMF21` dòng 163) | `ZPG_HDDT_CONFIG~maintain` truyền `lt_excl` vào `VIEW_MAINTENANCE_CALL` | bảng khai `WITH EMPTY KEY` nên `COLLECT excl_cua_funct` trong code chuẩn không có field khoá nào, field `FUNCTION` kiểu C bị coi là field cộng dồn -> dump lúc chạy | đổi thành `WITH DEFAULT KEY`. Đã đổi luôn 6 bảng khác cũng truyền vào tham số `TABLES` của FM cổ điển (`READ_TEXT`, `POPUP_GET_VALUES` ×3, `SCMS_XSTRING_TO_BINARY` ×2) |
 | 25 | `Data type STRING in field TOKEN is not supported` (SE54) | `ZTB_HDDT_TOK` | cùng hạn chế dòng 23: TMG không hỗ trợ field STRING | không sinh TMG cho bảng này. `ZPG_HDDT_CONFIG` nay có `MAINTAIN_TOK` (xem bộ đệm bằng ALV + hỏi xoá) và `MAINTAIN_LOG` (mở `ZPG_HDDT_LOG`), nên nhấn đôi hai dòng đó không còn báo thiếu TMG |
+| 26 | Chương trình chạy ra ALV nhưng **không có 12 nút nghiệp vụ**, chỉ có toolbar chuẩn | `ZPG_HDDT_INTEGRATION_F01~add_buttons` | `CL_SALV_TABLE` ở chế độ toàn màn hình không cho `ADD_FUNCTION`, ném `CX_SALV_WRONG_CALL`; code cũ `CATCH` rồi bỏ qua nên lỗi biến mất, ALV vẫn hiện và người dùng không biết vì sao thiếu nút | (1) không nuốt ngoại lệ nữa, bật cờ `MV_OWN_STATUS` và báo rõ lý do; (2) `SET_SCREEN_STATUS( pfstatus = 'ZSALV_HDDT' report = sy-repid set_functions = cl_salv_table=>c_functions_all )`; (3) tạo GUI status `ZSALV_HDDT` bằng SE41 copy `STANDARD_FULLSCREEN` của `SAPLSALV_METADATA_STATUS` rồi thêm 12 mã chức năng |
 
 Quy tắc rút ra cho phần DEFINITION của class:
 
@@ -454,6 +455,7 @@ Quy tắc rút ra cho phần DEFINITION của class:
 - Lớp con không được khai lại hằng số / kiểu / method đã có ở lớp cha; method chỉ được khai lại kèm `REDEFINITION`.
 - Bảng có field STRING / RAWSTRING không sinh được Table Maintenance Generator; phải có đường bảo trì khác.
 - Bảng nội bộ truyền vào tham số `TABLES` của function module cổ điển phải khai `WITH DEFAULT KEY`, không dùng `EMPTY KEY`.
+- Đừng `CATCH` rồi bỏ qua: nuốt ngoại lệ biến lỗi thành "thiếu tính năng" không dấu vết. Ít nhất phải báo message hoặc bật cờ xử lý thay thế.
 - Gọi method có `EXCEPTIONS` phải ghi rõ `EXPORTING`, không dùng dạng ngắn `( name = value )`.
 - `SVAL-FIELDTEXT` tối đa 20 ký tự.
 

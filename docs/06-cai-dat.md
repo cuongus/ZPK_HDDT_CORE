@@ -54,6 +54,23 @@ Bước 8 — Program + transaction
 Trong ADT/SE80 dùng **mass activation** (chọn tất cả object inactive → Activate)
 để hệ thống tự giải quyết thứ tự phụ thuộc vòng (interface ↔ exception class).
 
+### GUI status ZSALV_HDDT (bắt buộc để 12 nút nghiệp vụ hiện ra)
+
+`CL_SALV_TABLE` ở chế độ toàn màn hình KHÔNG cho thêm nút vào toolbar chuẩn:
+`ADD_FUNCTION` ném `CX_SALV_WRONG_CALL`. Toolbar phải lấy từ GUI status riêng.
+
+```
+SE41 → Program ZPG_HDDT_INTEGRATION → Status ZSALV_HDDT → Create
+  Copy status: program SAPLSALV_METADATA_STATUS, status STANDARD_FULLSCREEN
+  Application toolbar: thêm 12 mã chức năng
+    ZDRAFT ZDELDRF ZISSUE ZUPDATE ZADJREF ZMAIL
+    ZGOM ZUNGOM ZEDIT ZFILE ZJSON ZLOG
+  Activate
+```
+
+Thiếu status thì chương trình vẫn chạy, vẫn hiện ALV, nhưng chỉ có toolbar chuẩn
+và một cảnh báo nêu tên status cần tạo.
+
 ### Table Maintenance Generator (bắt buộc để `ZFI002` chạy)
 
 Với **từng bảng** `ZTB_HDDT_*`: SE11 → nhập tên bảng → Display →

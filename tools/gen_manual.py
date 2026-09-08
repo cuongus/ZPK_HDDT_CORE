@@ -102,7 +102,7 @@ w("\n---\n\n## 8. Transaction (SE93 — Program and selection screen, dynpro 100
 for t, p, text in TRANS:
     w(f"| `{t}` | `{p}` | {text} |\n")
 
-w("\n---\n\n## 9. Sau khi tạo\n\n1. Activate theo đúng thứ tự trên; sửa lỗi cú pháp nếu hệ thống báo (code chưa activate trên hệ nào — Code_Review §12).\n2. SE11: sinh Table Maintenance Generator cho các bảng cấu hình (delivery class C) để ZPG_HDDT_CONFIG / ZFI002 hoạt động.\n3. Chạy ZPG_HDDT_SETUP (tick Base + FPT + Tham số MAG) để nạp cấu hình mẫu, rồi rà lại theo hệ thống.\n4. SU21: tạo object phân quyền (field BUKRS, ACTVT) và khai vào tham số AUTH_OBJECT nếu cần; SCOT cho email.\n")
+w("\n---\n\n## 9. Sau khi tạo\n\n1. Activate theo đúng thứ tự trên; sửa lỗi cú pháp nếu hệ thống báo (code chưa activate trên hệ nào — Code_Review §12).\n2. SE41: tạo GUI status `ZSALV_HDDT` cho `ZPG_HDDT_INTEGRATION`. SALV toàn màn hình không cho thêm nút vào toolbar chuẩn nên 12 nút nghiệp vụ phải lấy từ status này: SE41 → Status → Copy status từ program `SAPLSALV_METADATA_STATUS` status `STANDARD_FULLSCREEN`, đổi tên thành `ZSALV_HDDT`, thêm 12 mã chức năng ZDRAFT ZDELDRF ZISSUE ZUPDATE ZADJREF ZMAIL ZGOM ZUNGOM ZEDIT ZFILE ZJSON ZLOG vào Application toolbar rồi activate.\n3. SE11: sinh Table Maintenance Generator cho 11 bảng cấu hình (trừ `_TPL`, `_TOK`, `_LOG` vì có field STRING) để ZPG_HDDT_CONFIG hoạt động.\n4. Chạy ZPG_HDDT_SETUP (tick Base + FPT + Tham số MAG) để nạp cấu hình mẫu, rồi rà lại theo hệ thống.\n5. SU21: tạo object phân quyền (field BUKRS, ACTVT) và khai vào tham số AUTH_OBJECT nếu cần; SCOT cho email.\n")
 
 os.makedirs("dist", exist_ok=True)
 out_path = "dist/ZPK_HDDT_CORE_source_all.md"

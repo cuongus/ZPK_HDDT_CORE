@@ -43,6 +43,8 @@ CLASS lcl_app DEFINITION FINAL CREATE PUBLIC.
   PRIVATE SECTION.
 
     DATA mo_alv     TYPE REF TO cl_salv_table.
+    "! abap_true = toolbar chuẩn không nhận thêm nút, phải dùng GUI status
+    DATA mv_own_status TYPE abap_bool.
     DATA mo_service TYPE REF TO zcl_hddt_service.
 
     METHODS select_data.
@@ -373,6 +375,13 @@ CLASS lcl_app IMPLEMENTATION.
 
     mo_alv->get_functions( )->set_all( abap_true ).
     add_buttons( ).
+    IF mv_own_status = abap_true.
+      " SALV toàn màn hình chặn ADD_FUNCTION -> lấy toolbar từ GUI status
+      " riêng của chương trình, tạo bằng SE41 (xem docs/06 §3)
+      mo_alv->set_screen_status( pfstatus      = gc_pfstatus
+                                 report        = sy-repid
+                                 set_functions = cl_salv_table=>c_functions_all ).
+    ENDIF.
     set_columns( ).
 
     mo_alv->get_selections( )->set_selection_mode(
@@ -423,8 +432,14 @@ CLASS lcl_app IMPLEMENTATION.
                              text = 'Xem payload'   tooltip = 'Xem payload sẽ gửi cho nhà cung cấp (không gọi API)' position = lv_pos ).
         lo_fn->add_function( name = gc_fcode-showlog icon = CONV #( icon_protocol )
                              text = 'Log'           tooltip = 'Xem log gọi API của chứng từ' position = lv_pos ).
-      CATCH cx_salv_wrong_call cx_salv_existing.
-        " Nút đã tồn tại -> bỏ qua, không chặn hiển thị
+      CATCH cx_salv_wrong_call cx_salv_existing INTO DATA(lx_fn).
+        " SALV toàn màn hình không cho thêm nút vào toolbar chuẩn. Không nuốt
+        " ngoại lệ: bật cờ để build_alv dùng GUI status riêng và cho người
+        " dùng biết lý do nếu status chưa được tạo.
+        mv_own_status = abap_true.
+        DATA(lv_fn_msg) = |{ lx_fn->get_text( ) } Toolbar lấy từ GUI status | &&
+                          |{ gc_pfstatus }, tạo bằng SE41 nếu chưa có.|.
+        MESSAGE lv_fn_msg TYPE 'S' DISPLAY LIKE 'W'.
     ENDTRY.
 
   ENDMETHOD.
