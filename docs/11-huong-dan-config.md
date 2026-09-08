@@ -117,7 +117,12 @@ theo công ty khi muốn dùng lớp đọc riêng.
 
 `ZTB_HDDT_INV` sổ đăng ký hoá đơn, `ZTB_HDDT_ITEM` chi tiết hàng hoá đã phát
 hành, `ZTB_HDDT_LOG` log request và response, `ZTB_HDDT_TOK` bộ đệm token.
-Engine tự ghi. Chỉ nên xoá dòng trong `ZTB_HDDT_TOK` khi cần buộc đăng nhập lại.
+Engine tự ghi.
+
+Hai bảng cuối có field kiểu STRING nên không sinh được Table Maintenance
+Generator. Nhấn đôi trên màn hình cấu hình vẫn dùng được: dòng "Log API" mở
+chương trình `ZPG_HDDT_LOG`, dòng "Token" hiện bộ đệm bằng ALV rồi hỏi có xoá
+để buộc đăng nhập lại nhà cung cấp hay không.
 
 ## 6. Tham số riêng theo FS MAG (tick p_mag)
 

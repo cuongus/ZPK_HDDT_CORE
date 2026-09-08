@@ -79,8 +79,8 @@ Table Maintenance Generator, không phải lỗi bảng.
 | Bảng | Field | Cách bảo trì / tra cứu thay thế |
 |---|---|---|
 | `ZTB_HDDT_TPL` | `TPL_BODY` (STRING) | nhấn đôi dòng "Mẫu payload" trong `ZFI002` → nhập nhà cung cấp + mã nghiệp vụ → nạp file JSON từ máy trạm |
-| `ZTB_HDDT_TOK` | `TOKEN` (STRING) | không cần bảo trì; tra cứu bằng SE16N, xoá dòng khi cần buộc đăng nhập lại |
-| `ZTB_HDDT_LOG` | `REQ_HEADER`, `RES_HEADER`, `REQ_BODY`, `RES_BODY` (RAWSTRING) | xem bằng `ZPG_HDDT_LOG`, không bảo trì tay |
+| `ZTB_HDDT_TOK` | `TOKEN` (STRING) | nhấn đôi dòng "Token" trong `ZFI002` → xem bộ đệm bằng ALV, hỏi xoá để buộc đăng nhập lại |
+| `ZTB_HDDT_LOG` | `REQ_HEADER`, `RES_HEADER`, `REQ_BODY`, `RES_BODY` (RAWSTRING) | nhấn đôi dòng "Log API" trong `ZFI002` → mở `ZPG_HDDT_LOG` |
 
 Vậy chỉ sinh TMG cho 11 bảng còn lại. Mẫu payload nạp trực tiếp vào bảng nên
 **không đi theo transport**, phải nạp lại trên từng hệ QAS và PRD.
