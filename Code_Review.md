@@ -401,3 +401,30 @@ Rà theo skill `fis-sap-private-cloud-naming` (tài liệu `QUY_UOC_DAT_TEN_SAP_
 | Mô tả TR `TEAM\\ACCOUNT\\mô tả` | | ghi vào docs/06 §10 cho lần import đầu | ✓ |
 
 Kiểm sau đổi: `grep -rniE "zfi(t|de|do|cx|c|if|r|e)_hddt|\bzfi_hddt" src tools` → 0; `grep -rhoE '\biv_|\brv_|<l[sv]_' src` → 0; số `METHOD` = `ENDMETHOD`, 1 `IMPLEMENTATION`, 2 `ENDCLASS` mỗi class; DE label và selection text trong giới hạn độ dài (script). Chưa activate trên hệ SAP — như mọi lượt trước.
+
+## 16. Lỗi gặp khi dán code vào Eclipse ADT (S25/100) — ĐÃ SỬA (lượt 7, 08/09/2026)
+
+Người dùng tạo tay từng object trên hệ MAG S25 client 100. Bảng dưới ghi đúng thông báo lỗi
+của ADT, nguyên nhân và cách sửa đã áp dụng vào `src/` (repo không ghi lên hệ SAP nào).
+
+| # | Thông báo ADT | Object / dòng | Nguyên nhân | Sửa |
+|---|---------------|---------------|-------------|-----|
+| 1 | `Invalid expression limiter '}' in string template` | `ZCL_HDDT_JSON` method `p_object` | `}` là dấu đóng biểu thức trong string template `\|...\|`, muốn in chữ phải escape | `'\}'` trong thông báo lỗi |
+| 2 | `"CLASS_CONSTRUCTOR" must always be PUBLIC` | `ZCL_HDDT_JSON` | `CLASS-METHODS class_constructor` khai báo ở PRIVATE SECTION | chuyển sang PUBLIC SECTION, ngay sau `constructor` |
+| 3 | `A RETURNING parameter must be fully typed` | `ZCL_HDDT_JSON~cur`, `ZIF_HDDT_PLATFORM` (`newline` / `carriage_return` / `tab`) | `TYPE c` không có độ dài là kiểu generic, RETURNING không nhận kiểu generic | `TYPE char1` |
+| 4 | `The class contains unknown comments which can't be stored` | `ZCL_HDDT_JSON`, `ZCL_HDDT_SERVICE`, `ZCL_HDDT_SRC_BASE`, `ZCL_HDDT_SRC_FI` | comment thường (`*----*` banner, `" chú thích`) trong phần DEFINITION không gắn được vào component nào | chuyển hết thành ABAP Doc `"!` liền trước khai báo; banner thành `"! ---- TIÊU ĐỀ ----` |
+
+Quy tắc rút ra cho phần DEFINITION của class:
+
+- Chỉ dùng `"!` (ABAP Doc) và phải nằm **liền ngay trước** khai báo, không chen dòng trống.
+- Không đặt banner `*---------*` hay comment `"` tự do giữa các khai báo.
+- Không dùng `<tag` trong `"!` vì ABAP Doc hiểu là thẻ HTML.
+- `CLASS_CONSTRUCTOR` bắt buộc PUBLIC; RETURNING phải có kiểu đầy đủ (`char1`, `string`, `abap_bool`…).
+- Trong string template, `{` `}` phải escape thành `\{` `\}` nếu muốn in ra chữ.
+
+Phần INTERFACE (`ZIF_*`) giữ nguyên comment banner vì các interface đã lưu được trên S25;
+nếu về sau gặp cùng lỗi #4 thì áp dụng đúng cách sửa trên.
+
+[Unverified] Nguyên nhân lỗi #4 là suy luận từ thông báo của ADT: trình biên tập class lưu
+comment theo từng component nên comment không gắn được component sẽ bị từ chối. Chưa
+kiểm chứng bằng tài liệu SAP.
