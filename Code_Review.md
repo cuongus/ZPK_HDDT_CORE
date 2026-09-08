@@ -424,6 +424,7 @@ của ADT, nguyên nhân và cách sửa đã áp dụng vào `src/` (repo khôn
 | 13 | `Method "GET_ID" is unknown or PROTECTED or PRIVATE` | `ZCL_HDDT_FACTORY~get_provider` dòng 94/96 | KHÔNG phải lỗi source: `ZIF_HDDT_PROVIDER` khai `get_id` là public. Khi tạo object mới, ADT sinh sẵn bản ACTIVE rỗng (`INTERFACE ... PUBLIC. ENDINTERFACE.`); mới Save mà chưa Activate thì syntax check của class vẫn đọc bản active rỗng nên không thấy method nào | Activate `ZIF_HDDT_TYPES` trước, rồi các interface còn lại, xong mới activate class. Không sửa gì trong source |
 | 14 | `The data object "LS_LOG" does not have a component called "RES_BODY"` + `The field "LS_DB-CODEPAGE" is unknown` + `Unknown column name "RES_BODY"` | `ZCL_HDDT_LOG` dòng 375, 377, 399, 415 | KHÔNG phải lỗi source: bảng `ZTB_HDDT_LOG` tạo tay trên hệ bị thiếu field. Đối chiếu `tools/gen_ddic.py` thì bảng phải có đủ 44 field, thiếu ít nhất `RES_BODY` (kiểu `ZDE_HDDT_RAW`) và `CODEPAGE` (kiểu `ZDE_HDDT_CODEPAGE`). Lỗi Init ở dòng 5 cũng chỉ liệt kê 3 field RSTR thay vì 4, đúng dấu hiệu thiếu `RES_BODY` từ đầu | SE11 thêm 2 field còn thiếu đúng thứ tự cuối bảng (`REQ_HEADER`, `RES_HEADER`, `REQ_BODY`, `RES_BODY`) và `CODEPAGE` ở vị trí 27, cột Init để trống, rồi activate lại. Không sửa gì trong source |
 | 15 | `The literal "' '" is not type-compatible with the formal parameter "I_ORG_GJAHR"` | `ZCL_HDDT_SERVICE~attach_original` dòng 1227 | truyền `space` (literal CHAR1) cho tham số kiểu `GJAHR` là NUMC(4); literal ký tự không tương thích kiểu số | `i_org_gjahr = '0000'`. Bốn tham số còn lại vẫn dùng `space` được vì đều là CHAR (`ZDE_HDDT_DOCNO` CHAR20, `ZDE_HDDT_SRCTYPE`, `ZDE_HDDT_ADJTYPE`, `ZDE_HDDT_ADJDIR` CHAR1) |
+| 16 | `Method "GET_SECRET" / "GET_TOKEN" / "INVALIDATE" is unknown or PROTECTED or PRIVATE` — cột Type ghi **ABAP Activation**, không phải Syntax | `ZCL_HDDT_SERVICE` dòng 288, 345, 356, 357 | KHÔNG phải lỗi source: `ZCL_HDDT_TOKEN~get_token`/`~invalidate` và `ZCL_HDDT_SECRET~get_secret` đều ở PUBLIC SECTION. Cùng nguyên nhân dòng 13: hai class kia chưa activate nên bản ACTIVE vẫn là khung rỗng do wizard sinh | Activate `ZCL_HDDT_TOKEN`, `ZCL_HDDT_SECRET` (và các class chúng phụ thuộc) trước, hoặc chọn package rồi Activate All Inactive để hệ tự xếp thứ tự. Không sửa gì trong source |
 
 Quy tắc rút ra cho phần DEFINITION của class:
 
@@ -437,6 +438,7 @@ Quy tắc rút ra cho phần DEFINITION của class:
 - Activate ngay từng object theo thứ tự DDIC → interface → class; bản ACTIVE rỗng do wizard sinh ra là nguyên nhân của phần lớn lỗi "unknown method" giả.
 - Sau khi tạo bảng, đối chiếu số field với `tools/gen_ddic.py` hoặc mục 3 của tài liệu tạo tay; thiếu field gây ra hàng loạt lỗi "unknown component" ở class.
 - Không truyền `space` cho tham số kiểu số hoặc ngày; NUMC dùng `'0000'`, số dùng `0`.
+- Lỗi có cột Type là **ABAP Activation** (không phải ABAP Syntax) hầu như luôn là phụ thuộc chưa activate, không phải lỗi code.
 
 Phần INTERFACE (`ZIF_*`) giữ nguyên comment banner vì các interface đã lưu được trên S25;
 nếu về sau gặp cùng lỗi #4 thì áp dụng đúng cách sửa trên.

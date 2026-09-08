@@ -18,6 +18,7 @@ Soát các lỗi mà ADT / SE24 sẽ báo khi activate:
   N. Gọi method qua biến REF TO interface nhưng interface không có
   O. Dùng field không có trong định nghĩa bảng ở tools/gen_ddic.py
   P. Truyền space / ' ' cho tham số kiểu số hoặc ngày
+  Q. Gọi method qua biến REF TO class: phải tồn tại và PUBLIC
 
 Chạy: python tools/check_abap.py
 """
@@ -267,6 +268,13 @@ def read_class(path):
     CLS[name] = info
 
 
+def ancestors(name):
+    out, cur = [], CLS.get(name, {}).get("super")
+    while cur and cur in CLS:
+        out.append(cur)
+        cur = CLS[cur]["super"]
+    return out
+
 # ---------------------------------------------------------------------------
 # G. ký tự { } chưa escape trong string template
 # ---------------------------------------------------------------------------
@@ -498,6 +506,50 @@ def check_literal(path):
 
 
 # ---------------------------------------------------------------------------
+# Q. Gọi method qua biến REF TO class của package: method phải tồn tại và
+#    phải PUBLIC khi gọi từ class khác
+# ---------------------------------------------------------------------------
+def visible(cls, meth):
+    """(tồn tại, là public) — tính cả lớp cha và interface đã implement."""
+    exists = public = False
+    for k in [cls] + ancestors(cls):
+        d = CLS[k]["declared"].get(meth)
+        if d:
+            exists = True
+            public = public or d["section"] == "PUBLIC"
+        for intf in CLS[k]["intf"]:
+            pool = INTF.get(intf, {}).get("methods", set())
+            if meth in pool or any(x.endswith("~" + meth) for x in pool):
+                exists = public = True          # thành phần interface là public
+    return exists, public
+
+
+def check_cref(path):
+    text = io.open(path, encoding="utf-8").read()
+    me = os.path.basename(path).split(".")[0].upper()
+    var = {}
+    for m in re.finditer(r"\b(?:VALUE\()?(\w+)\)?\s+TYPE REF TO\s+(zcl_hddt_\w+)",
+                         text, re.I):
+        var.setdefault(m.group(1).lower(), set()).add(m.group(2).upper())
+    for i, line in enumerate(text.split("\n"), 1):
+        if line.lstrip().startswith(("*", '"')):
+            continue
+        for name, meth in re.findall(r"\b(\w+)->(\w+)\(", line):
+            if name.lower() == "me":
+                continue
+            keys = {k for k in var.get(name.lower(), ()) if k in CLS}
+            if not keys:
+                continue
+            res = [visible(k, meth.lower()) for k in keys]
+            if not any(e for e, _ in res):
+                report("Q", path, i, "%s->%s( ) không có trong %s"
+                       % (name, meth, "/".join(sorted(keys))))
+            elif me not in keys and not any(p for _, p in res):
+                report("Q", path, i, "%s->%s( ) không PUBLIC nên %s không gọi được"
+                       % (name, meth, me))
+
+
+# ---------------------------------------------------------------------------
 # Chạy
 # ---------------------------------------------------------------------------
 for p in sorted(glob.glob("src/**/*.intf.abap", recursive=True)):
@@ -515,14 +567,9 @@ for p in sorted(glob.glob("src/**/*.abap", recursive=True)):
     check_iref(p)
     check_ddic_use(p)
     check_literal(p)
+    check_cref(p)
 
 
-def ancestors(name):
-    out, cur = [], CLS.get(name, {}).get("super")
-    while cur and cur in CLS:
-        out.append(cur)
-        cur = CLS[cur]["super"]
-    return out
 
 
 # A / B. khai báo và hiện thực
@@ -613,6 +660,7 @@ KIND = {
     "N": "Method không có trong interface được tham chiếu",
     "O": "Field không có trong định nghĩa bảng DDIC",
     "P": "Literal ký tự truyền cho tham số kiểu số / ngày",
+    "Q": "Method của class không tồn tại hoặc không PUBLIC",
 }
 print("Đã đọc: %d interface, %d class" % (len(INTF), len(CLS)))
 for k in sorted(KIND):
