@@ -435,6 +435,7 @@ của ADT, nguyên nhân và cách sửa đã áp dụng vào `src/` (repo khôn
 | 24 | Dump `ITAB_NON_NUMERIC_COMPONENT` khi nhấn đôi bảng đã sinh TMG (`SAPLZFG_VM_HDDT`, `LSVIMF21` dòng 163) | `ZPG_HDDT_CONFIG~maintain` truyền `lt_excl` vào `VIEW_MAINTENANCE_CALL` | bảng khai `WITH EMPTY KEY` nên `COLLECT excl_cua_funct` trong code chuẩn không có field khoá nào, field `FUNCTION` kiểu C bị coi là field cộng dồn -> dump lúc chạy | đổi thành `WITH DEFAULT KEY`. Đã đổi luôn 6 bảng khác cũng truyền vào tham số `TABLES` của FM cổ điển (`READ_TEXT`, `POPUP_GET_VALUES` ×3, `SCMS_XSTRING_TO_BINARY` ×2) |
 | 25 | `Data type STRING in field TOKEN is not supported` (SE54) | `ZTB_HDDT_TOK` | cùng hạn chế dòng 23: TMG không hỗ trợ field STRING | không sinh TMG cho bảng này. `ZPG_HDDT_CONFIG` nay có `MAINTAIN_TOK` (xem bộ đệm bằng ALV + hỏi xoá) và `MAINTAIN_LOG` (mở `ZPG_HDDT_LOG`), nên nhấn đôi hai dòng đó không còn báo thiếu TMG |
 | 26 | Chương trình chạy ra ALV nhưng **không có 12 nút nghiệp vụ**, chỉ có toolbar chuẩn | `ZPG_HDDT_INTEGRATION_F01~add_buttons` | `CL_SALV_TABLE` ở chế độ toàn màn hình không cho `ADD_FUNCTION`, ném `CX_SALV_WRONG_CALL`; code cũ `CATCH` rồi bỏ qua nên lỗi biến mất, ALV vẫn hiện và người dùng không biết vì sao thiếu nút | (1) không nuốt ngoại lệ nữa, bật cờ `MV_OWN_STATUS` và báo rõ lý do; (2) `SET_SCREEN_STATUS( pfstatus = 'ZSALV_HDDT' report = sy-repid set_functions = cl_salv_table=>c_functions_all )`; (3) tạo GUI status `ZSALV_HDDT` bằng SE41 copy `STANDARD_FULLSCREEN` của `SAPLSALV_METADATA_STATUS` rồi thêm 12 mã chức năng |
+| 27 | `A RETURNING parameter must be fully typed` nhưng kiểu ĐÃ có LENGTH | `ZIN_HDDT_INTEGRATION_F01` dòng 93, 96, 99 (`map_light`, `status_text`, `adj_code_of`) và `ZPG_HDDT_LOG` dòng 138 | tham số method KHÔNG nhận kiểu dựng sẵn một chữ `c` `n` `x` `p`, kể cả khi ghi `TYPE c LENGTH 4`. Khác với `DATA` và thành phần cấu trúc, chỗ đó `LENGTH` hợp lệ. Dòng 3 của bảng này chỉ sửa `TYPE c` thành `char1` nên không lộ trường hợp có LENGTH | khai kiểu CÓ TÊN rồi dùng: `TYPES gty_icon TYPE c LENGTH 4.` trong include khai báo, chữ ký thành `RETURNING VALUE(r_icon) TYPE gty_icon` |
 
 Quy tắc rút ra cho phần DEFINITION của class:
 
@@ -456,6 +457,7 @@ Quy tắc rút ra cho phần DEFINITION của class:
 - Bảng có field STRING / RAWSTRING không sinh được Table Maintenance Generator; phải có đường bảo trì khác.
 - Bảng nội bộ truyền vào tham số `TABLES` của function module cổ điển phải khai `WITH DEFAULT KEY`, không dùng `EMPTY KEY`.
 - Đừng `CATCH` rồi bỏ qua: nuốt ngoại lệ biến lỗi thành "thiếu tính năng" không dấu vết. Ít nhất phải báo message hoặc bật cờ xử lý thay thế.
+- Tham số method chỉ nhận kiểu có tên; `TYPE c LENGTH n` chỉ dùng được ở `DATA`, `TYPES`, và thành phần cấu trúc.
 - Gọi method có `EXCEPTIONS` phải ghi rõ `EXPORTING`, không dùng dạng ngắn `( name = value )`.
 - `SVAL-FIELDTEXT` tối đa 20 ký tự.
 

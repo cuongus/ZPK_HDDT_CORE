@@ -38,6 +38,9 @@ TYPE-POOLS icon.
 *---------------------------------------------------------------------*
 * Khai báo
 *---------------------------------------------------------------------*
+"! Kiểu có tên cho tham số method (tham số không nhận TYPE c LENGTH n)
+TYPES gty_icon TYPE c LENGTH 4.
+
 TYPES: BEGIN OF gty_log,
          light       TYPE c LENGTH 4,
          created_at  TYPE timestampl,
@@ -135,7 +138,7 @@ CLASS lcl_log DEFINITION FINAL CREATE PUBLIC.
     METHODS map_light
       IMPORTING i_code        TYPE zde_hddt_size
                 i_msgty       TYPE symsgty
-      RETURNING VALUE(r_icon) TYPE c LENGTH 4.
+      RETURNING VALUE(r_icon) TYPE gty_icon.
 
 ENDCLASS.
 

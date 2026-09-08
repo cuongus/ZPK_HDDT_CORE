@@ -74,6 +74,13 @@ TYPES gty_t_alv TYPE STANDARD TABLE OF gty_alv WITH EMPTY KEY.
 DATA gt_alv     TYPE gty_t_alv.
 DATA gt_request TYPE zif_hddt_types=>ty_t_request.
 
+"! Kiểu CÓ TÊN cho tham số method của lớp local: tham số method không
+"! nhận kiểu dựng sẵn dạng "TYPE c LENGTH n", ADT báo "A RETURNING
+"! parameter must be fully typed".
+TYPES gty_icon    TYPE c LENGTH 4.
+TYPES gty_sttext  TYPE c LENGTH 60.
+TYPES gty_adjcode TYPE c LENGTH 1.
+
 "! Danh sách loại nguồn dữ liệu đã cấu hình (ZTB_HDDT_SRC)
 TYPES gty_t_srctype TYPE STANDARD TABLE OF zde_hddt_srctype WITH EMPTY KEY.
 

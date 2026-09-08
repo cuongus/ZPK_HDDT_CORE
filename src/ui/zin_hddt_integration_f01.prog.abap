@@ -90,13 +90,13 @@ CLASS lcl_app DEFINITION FINAL CREATE PUBLIC.
     METHODS map_light
       IMPORTING i_status      TYPE zde_hddt_status
                 i_msgty       TYPE symsgty
-      RETURNING VALUE(r_icon) TYPE c LENGTH 4.
+      RETURNING VALUE(r_icon) TYPE gty_icon.
     METHODS status_text
       IMPORTING i_status      TYPE zde_hddt_status
-      RETURNING VALUE(r_text) TYPE c LENGTH 60.
+      RETURNING VALUE(r_text) TYPE gty_sttext.
     METHODS adj_code_of
       IMPORTING is_reg        TYPE ztb_hddt_inv
-      RETURNING VALUE(r_code) TYPE c LENGTH 1.
+      RETURNING VALUE(r_code) TYPE gty_adjcode.
 
 ENDCLASS.
 

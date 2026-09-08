@@ -26,6 +26,7 @@ Soát các lỗi mà ADT / SE24 sẽ báo khi activate:
   V. MESSAGE ... WITH nhận biểu thức thay vì tên biến
   W. Khai báo lại thành phần / method đã có ở lớp cha
   X. Bảng WITH EMPTY KEY truyền vào tham số TABLES của FM cổ điển
+  Y. Tham số method dùng kiểu dựng sẵn c/n/x/p, kể cả kèm LENGTH
 
 Chạy: python tools/check_abap.py
 """
@@ -313,6 +314,20 @@ def check_template(path):
 # K. DATA() suy ra P(8,0) khi biểu thức có phép chia / nhân trên số P
 # L. POSIX regex đã deprecated, phải dùng PCRE
 # ---------------------------------------------------------------------------
+def check_param_type(path):
+    """Y. Tham số method dùng kiểu dựng sẵn c/n/x/p (kể cả kèm LENGTH).
+
+    ADT: "A RETURNING parameter must be fully typed." Kiểu dựng sẵn một chữ
+    không dùng được ở tham số method, phải khai kiểu CÓ TÊN.
+    """
+    for ln, st in statements(io.open(path, encoding="utf-8").read()):
+        if first_word(st) not in ("METHODS", "CLASS-METHODS"):
+            continue
+        for m in re.finditer(r"\bTYPE\s+([cnxp])\b(\s+LENGTH\s+\d+)?", st, re.I):
+            report("Y", path, ln, "tham số method dùng TYPE %s%s, phải là kiểu "
+                   "có tên" % (m.group(1), m.group(2) or ""))
+
+
 def check_style(path):
     lines = io.open(path, encoding="utf-8").read().split("\n")
     for i, line in enumerate(lines, 1):
@@ -675,6 +690,7 @@ for p in sources("*.clas.abap"):
 for p in sources("*.abap"):
     check_template(p)
     check_style(p)
+    check_param_type(p)
     check_select(p)
     check_iref(p)
     check_ddic_use(p)
@@ -792,6 +808,7 @@ KIND = {
     "V": "MESSAGE ... WITH nhận biểu thức",
     "W": "Khai báo lại thành phần của lớp cha",
     "X": "Bảng EMPTY KEY truyền vào TABLES của FM",
+    "Y": "Tham số method dùng kiểu dựng sẵn c/n/x/p",
 }
 print("Đã đọc: %d interface, %d class" % (len(INTF), len(CLS)))
 for k in sorted(KIND):
