@@ -413,6 +413,7 @@ của ADT, nguyên nhân và cách sửa đã áp dụng vào `src/` (repo khôn
 | 2 | `"CLASS_CONSTRUCTOR" must always be PUBLIC` | `ZCL_HDDT_JSON` | `CLASS-METHODS class_constructor` khai báo ở PRIVATE SECTION | chuyển sang PUBLIC SECTION, ngay sau `constructor` |
 | 3 | `A RETURNING parameter must be fully typed` | `ZCL_HDDT_JSON~cur`, `ZIF_HDDT_PLATFORM` (`newline` / `carriage_return` / `tab`) | `TYPE c` không có độ dài là kiểu generic, RETURNING không nhận kiểu generic | `TYPE char1` |
 | 4 | `The class contains unknown comments which can't be stored` | `ZCL_HDDT_JSON`, `ZCL_HDDT_SERVICE`, `ZCL_HDDT_SRC_BASE`, `ZCL_HDDT_SRC_FI` | comment thường (`*----*` banner, `" chú thích`) trong phần DEFINITION không gắn được vào component nào | chuyển hết thành ABAP Doc `"!` liền trước khai báo; banner thành `"! ---- TIÊU ĐỀ ----` |
+| 5 | `Too long for activation of 'not null' flag (>255)` | `ZTB_HDDT_LOG` (REQ_HEADER, RES_HEADER, REQ_BODY, RES_BODY), `ZTB_HDDT_TOK` (TOKEN), `ZTB_HDDT_TPL` (TPL_BODY) | cột `Init` (Initial Values) trong SE11 bị tích ở field kiểu `STRG` / `RSTR`; DDIC không đặt được cờ NOT NULL cho field dài quá 255 | bỏ tích `Init` ở 6 field đó (XML abapGit chỉ đặt NOT NULL cho field khoá nên không bị) |
 
 Quy tắc rút ra cho phần DEFINITION của class:
 
@@ -420,6 +421,7 @@ Quy tắc rút ra cho phần DEFINITION của class:
 - Không đặt banner `*---------*` hay comment `"` tự do giữa các khai báo.
 - Không dùng `<tag` trong `"!` vì ABAP Doc hiểu là thẻ HTML.
 - `CLASS_CONSTRUCTOR` bắt buộc PUBLIC; RETURNING phải có kiểu đầy đủ (`char1`, `string`, `abap_bool`…).
+- Bảng có field `STRG` / `RSTR`: cột `Init` trong SE11 phải để trống, xem bảng trên.
 - Trong string template, `{` `}` phải escape thành `\{` `\}` nếu muốn in ra chữ.
 
 Phần INTERFACE (`ZIF_*`) giữ nguyên comment banner vì các interface đã lưu được trên S25;
@@ -428,3 +430,14 @@ nếu về sau gặp cùng lỗi #4 thì áp dụng đúng cách sửa trên.
 [Unverified] Nguyên nhân lỗi #4 là suy luận từ thông báo của ADT: trình biên tập class lưu
 comment theo từng component nên comment không gắn được component sẽ bị từ chối. Chưa
 kiểm chứng bằng tài liệu SAP.
+
+Bộ kiểm tra tĩnh `tools/check_abap.py` chạy lại được mọi lúc (`python tools/check_abap.py`),
+soát 9 nhóm lỗi: method khai báo nhưng chưa hiện thực, method interface chưa hiện thực trong
+cây thừa kế, khối lệnh không khớp, kiểu generic ở tham số trả về, comment thường trong
+DEFINITION, `CLASS_CONSTRUCTOR` không PUBLIC, `{` `}` chưa escape trong string template,
+tham chiếu hằng số / kiểu của interface không tồn tại, gọi method tĩnh không tồn tại.
+Kết quả trên commit hiện tại: 0 phát hiện (7 interface, 23 class). Đã kiểm chứng bộ kiểm tra
+bằng cách chèn lỗi giả rồi hoàn nguyên — cả 5 lỗi chèn vào đều bị bắt đúng số dòng.
+
+[Unverified] Bộ kiểm tra chạy ngoài SAP nên không thay được syntax check của ADT: không biết
+bảng / data element đã tồn tại trên hệ hay chưa, không kiểm tra kiểu của API SAP chuẩn.
