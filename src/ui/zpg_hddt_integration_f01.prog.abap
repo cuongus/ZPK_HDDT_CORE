@@ -546,8 +546,11 @@ CLASS lcl_app IMPLEMENTATION.
       RETURN.
     ENDIF.
 
-    cl_gui_frontend_services=>execute( document = lv_url
-      EXCEPTIONS cntl_error = 1 OTHERS = 2 ).
+    " Dạng ngắn ( name = value ) không đi kèm được EXCEPTIONS
+    cl_gui_frontend_services=>execute(
+      EXPORTING  document   = lv_url
+      EXCEPTIONS cntl_error = 1
+                 OTHERS     = 2 ).
     IF sy-subrc <> 0.
       MESSAGE 'Không mở được link tra cứu hoá đơn.' TYPE 'S' DISPLAY LIKE 'W'.
     ENDIF.
@@ -578,7 +581,9 @@ CLASS lcl_app IMPLEMENTATION.
       refresh_row( i_index = lv_row is_result = ls_result ).
       IF p_test = abap_true AND ls_result-request_body IS NOT INITIAL.
         " FS 3.3 STT 14: Test -> pop-up nội dung JSON sẽ gửi
-        PERFORM display_text USING |Payload (Test run) - { gt_request[ lv_row ]-src_docno }|
+        " PERFORM ... USING chỉ nhận TÊN BIẾN, không nhận biểu thức
+        DATA(lv_title) = |Payload (Test run) - { gt_request[ lv_row ]-src_docno }|.
+        PERFORM display_text USING lv_title
                                    ls_result-request_body.
       ENDIF.
     ENDLOOP.
@@ -645,7 +650,9 @@ CLASS lcl_app IMPLEMENTATION.
                                                    i_test_run = p_test ).
       refresh_row( i_index = lv_row is_result = ls_result ).
       IF p_test = abap_true AND ls_result-request_body IS NOT INITIAL.
-        PERFORM display_text USING |Payload (Test run) - { gt_request[ lv_row ]-src_docno }|
+        " PERFORM ... USING chỉ nhận TÊN BIẾN, không nhận biểu thức
+        DATA(lv_title) = |Payload (Test run) - { gt_request[ lv_row ]-src_docno }|.
+        PERFORM display_text USING lv_title
                                    ls_result-request_body.
       ENDIF.
     ENDLOOP.
@@ -829,9 +836,10 @@ CLASS lcl_app IMPLEMENTATION.
     ENDLOOP.
 
     TRY.
-        DATA(lv_gom) = NEW zcl_hddt_gom( )->create( i_bukrs     = p_bukrs
-                                                    i_gjahr     = p_gjahr
-                                                    it_requests = lt_req ).
+        DATA(lo_gom) = NEW zcl_hddt_gom( ).
+        DATA(lv_gom) = lo_gom->create( i_bukrs     = p_bukrs
+                                       i_gjahr     = p_gjahr
+                                       it_requests = lt_req ).
         COMMIT WORK AND WAIT.
         MESSAGE s028(zms_hddt) WITH lines( lt_req ) lv_gom.
         reload( ).
@@ -1222,7 +1230,7 @@ FORM popup_original CHANGING c_docno TYPE zde_hddt_docno
       value = c_docno )
     ( tabname = 'BKPF'         fieldname = 'GJAHR'   fieldtext = 'Năm chứng từ gốc'
       value = c_gjahr )
-    ( tabname = 'ZTB_HDDT_INV' fieldname = 'ADJ_DIR' fieldtext = 'Loại ĐC: 2 tăng, 3 giảm, 4 thông tin, 5 thay thế'
+    ( tabname = 'ZTB_HDDT_INV' fieldname = 'ADJ_DIR' fieldtext = 'Loại ĐC (2/3/4/5)'
       value = c_code ) ).
 
   CALL FUNCTION 'POPUP_GET_VALUES'
@@ -1281,7 +1289,7 @@ FORM popup_edit CHANGING c_date TYPE dats
   DATA lv_rc     TYPE c LENGTH 1.
 
   lt_fields = VALUE #(
-    ( tabname = 'ZTB_HDDT_INV' fieldname = 'INV_DATE'  fieldtext = 'Ngày phát hành hoá đơn' value = c_date )
+    ( tabname = 'ZTB_HDDT_INV' fieldname = 'INV_DATE'  fieldtext = 'Ngày phát hành' value = c_date )
     ( tabname = 'ZTB_HDDT_INV' fieldname = 'INV_TIME'  fieldtext = 'Giờ phát hành'          value = c_time )
     ( tabname = 'ZTB_HDDT_INV' fieldname = 'ITEM_TEXT' fieldtext = 'Tên hàng (ưu tiên 1)'  value = c_text ) ).
 

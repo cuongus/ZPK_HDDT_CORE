@@ -20,6 +20,9 @@ Soát các lỗi mà ADT / SE24 sẽ báo khi activate:
   P. Truyền space / ' ' cho tham số kiểu số hoặc ngày
   Q. Gọi method qua biến REF TO class: phải tồn tại và PUBLIC
   R. Mệnh đề INTO phải đứng sau WHERE / GROUP BY / HAVING / ORDER BY
+  S. PERFORM ... USING nhận biểu thức thay vì tên biến
+  T. SVAL-FIELDTEXT dài quá 20 ký tự (SE38 cắt bớt)
+  U. Dạng ngắn ( name = value ) đi kèm EXCEPTIONS mà thiếu EXPORTING
 
 Chạy: python tools/check_abap.py
 """
@@ -323,10 +326,12 @@ def check_select(path):
             continue
         u = s.upper()
         # R. INTO phải đứng sau WHERE / GROUP BY / HAVING / ORDER BY
-        mi = re.search(r"(INTO|APPENDING)", u)
+        mi = re.search(r"\b(INTO|APPENDING)\b", u)
         if mi:
-            late = [k for k in ("WHERE", "GROUP BY", "HAVING", "ORDER BY")
-                    if re.search(r"" + k + r"", u[mi.end():])]
+            # sau INTO chỉ được phép UP TO / OFFSET / BYPASSING / %_HINTS...
+            late = [k for k in ("WHERE", "GROUP BY", "HAVING", "ORDER BY",
+                                "AND", "OR")
+                    if re.search(r"\b" + k + r"\b", u[mi.end():])]
             if late:
                 report("R", path, ln, "INTO đứng trước %s, phải chuyển xuống cuối"
                        % ", ".join(late))
@@ -561,6 +566,59 @@ def check_cref(path):
 
 
 # ---------------------------------------------------------------------------
+# S. PERFORM ... USING / CHANGING chỉ nhận TÊN BIẾN hoặc literal, không nhận
+#    biểu thức (string template, phép ghép, table expression, gọi hàm)
+# ---------------------------------------------------------------------------
+def check_perform(path):
+    for ln, st in statements(io.open(path, encoding="utf-8").read()):
+        if first_word(st) != "PERFORM":
+            continue
+        m = re.search(r"\b(USING|CHANGING|TABLES)\b(.*)$", st, re.I)
+        if not m:
+            continue
+        act = m.group(2)
+        bad = []
+        if "|" in act:
+            bad.append("string template |...|")
+        if "&&" in act:
+            bad.append("phép ghép &&")
+        if re.search(r"\w\s*\[", act):
+            bad.append("table expression [ ]")
+        if re.search(r"\w\s*\(", act):
+            bad.append("gọi hàm ( )")
+        if bad:
+            report("S", path, ln, "PERFORM USING nhận biểu thức (%s), phải gán "
+                   "vào biến trước" % ", ".join(bad))
+
+
+# ---------------------------------------------------------------------------
+# T. SVAL-FIELDTEXT chỉ có C(20); dài hơn thì SE38 cảnh báo và bị cắt
+# U. Dạng ngắn "name = value" trong gọi method không đi kèm được EXCEPTIONS /
+#    IMPORTING / RECEIVING — phải viết rõ EXPORTING
+# ---------------------------------------------------------------------------
+def check_ui(path):
+    for i, line in enumerate(io.open(path, encoding="utf-8"), 1):
+        if line.lstrip().startswith(("*", '"')):
+            continue
+        for m in re.finditer(r"fieldtext\s*=\s*'([^']*)'", line, re.I):
+            if len(m.group(1)) > 20:
+                report("T", path, i, "FIELDTEXT %d ký tự (tối đa 20): %s"
+                       % (len(m.group(1)), m.group(1)))
+
+    for ln, st in statements(io.open(path, encoding="utf-8").read()):
+        if not re.search(r"\bEXCEPTIONS\b", st) or st.upper().startswith("CALL FUNCTION"):
+            continue
+        head = re.split(r"\bEXCEPTIONS\b", st)[0]
+        if "(" not in head:
+            continue
+        args = head[head.index("(") + 1:]
+        if "=" in args and not re.search(
+                r"\b(EXPORTING|IMPORTING|CHANGING|RECEIVING|TABLES)\b", args):
+            report("U", path, ln, "dạng ngắn ( name = value ) đi kèm EXCEPTIONS, "
+                   "phải ghi rõ EXPORTING")
+
+
+# ---------------------------------------------------------------------------
 # Chạy
 # ---------------------------------------------------------------------------
 for p in sorted(glob.glob("src/**/*.intf.abap", recursive=True)):
@@ -579,6 +637,8 @@ for p in sorted(glob.glob("src/**/*.abap", recursive=True)):
     check_ddic_use(p)
     check_literal(p)
     check_cref(p)
+    check_perform(p)
+    check_ui(p)
 
 
 
@@ -673,6 +733,9 @@ KIND = {
     "P": "Literal ký tự truyền cho tham số kiểu số / ngày",
     "Q": "Method của class không tồn tại hoặc không PUBLIC",
     "R": "INTO không đứng cuối câu SELECT",
+    "S": "PERFORM USING nhận biểu thức",
+    "T": "SVAL-FIELDTEXT dài quá 20 ký tự",
+    "U": "Dạng ngắn name = value đi kèm EXCEPTIONS",
 }
 print("Đã đọc: %d interface, %d class" % (len(INTF), len(CLS)))
 for k in sorted(KIND):

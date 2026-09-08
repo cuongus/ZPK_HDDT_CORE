@@ -443,10 +443,13 @@ CLASS lcl_log IMPLEMENTATION.
       RETURN.
     ENDIF.
 
-    PERFORM save_raw USING |{ ls_db-src_docno }_{ ls_db-action }_request.json|
+    " PERFORM ... USING chỉ nhận TÊN BIẾN, không nhận biểu thức
+    DATA(lv_fn_req) = |{ ls_db-src_docno }_{ ls_db-action }_request.json|.
+    PERFORM save_raw USING lv_fn_req
                            ls_db-req_body.
     IF ls_db-res_body IS NOT INITIAL.
-      PERFORM save_raw USING |{ ls_db-src_docno }_{ ls_db-action }_response.json|
+      DATA(lv_fn_res) = |{ ls_db-src_docno }_{ ls_db-action }_response.json|.
+      PERFORM save_raw USING lv_fn_res
                              ls_db-res_body.
     ENDIF.
 
