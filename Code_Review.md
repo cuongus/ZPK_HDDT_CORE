@@ -430,6 +430,7 @@ của ADT, nguyên nhân và cách sửa đã áp dụng vào `src/` (repo khôn
 | 19 | `Unable to interpret "EXCEPTIONS"` | `ZPG_HDDT_INTEGRATION_F01` dòng 550 | `cl_gui_frontend_services=>execute( document = lv_url EXCEPTIONS ... )` — dạng ngắn `( name = value )` không đi kèm được `EXCEPTIONS` / `IMPORTING` / `RECEIVING` | ghi rõ `EXPORTING document = …` rồi mới `EXCEPTIONS`. Các chỗ khác trong package đã có `EXPORTING`/`IMPORTING` nên không bị |
 | 20 | `Arithmetic calculation not permitted here` | `ZPG_HDDT_INTEGRATION_F01`, câu `MESSAGE s028(zms_hddt) WITH lines( lt_req ) lv_gom` (dòng 836 ở bản cũ, 840 sau khi thêm 4 dòng sửa PERFORM) | `MESSAGE ... WITH` chỉ nhận tên biến hoặc literal, không nhận biểu thức; `lines( )` bị hiểu là phép tính | `DATA(lv_cnt) = \|{ lines( lt_req ) }\|.` rồi `MESSAGE s028(zms_hddt) WITH lv_cnt lv_gom.` |
 | 21 | `"…" is not an admissible value for type "C(20)"` (cảnh báo, text bị cắt) | `ZPG_HDDT_INTEGRATION_F01` dòng 1225, 1284 (bản trên hệ) | `SVAL-FIELDTEXT` chỉ dài 20 ký tự; hai nhãn pop-up dài 48 và 22 ký tự | rút còn `Loại ĐC (2/3/4/5)` và `Ngày phát hành`; ý nghĩa mã điều chỉnh tra bằng F4 trên domain |
+| 22 | `There is already an attribute called "GC_PROVIDER"` | `ZCL_HDDT_PROV_VNPT` dòng 36 | lớp này kế thừa `ZCL_HDDT_PROV_TEMPLATE`, mà lớp cha đã khai `CONSTANTS gc_provider VALUE 'TEMPLATE'`; lớp con không được khai lại tên đã có ở lớp cha. `ZCL_HDDT_PROV_FPT` và `ZCL_HDDT_PROV_VIETTEL` không bị vì kế thừa trực tiếp `ZCL_HDDT_PROV_BASE` (không có hằng số này) | đổi tên hằng số trong lớp con thành `GC_PROV_VNPT`, `get_id` trả về hằng số mới |
 
 Quy tắc rút ra cho phần DEFINITION của class:
 
@@ -447,6 +448,7 @@ Quy tắc rút ra cho phần DEFINITION của class:
 - Thứ tự mệnh đề SQL: `WHERE` → `GROUP BY` → `HAVING` → `ORDER BY` → `INTO` → `UP TO`.
 - `PERFORM ... USING` chỉ nhận tên biến hoặc literal, không nhận string template.
 - `MESSAGE ... WITH` cũng chỉ nhận tên biến hoặc literal, không nhận `lines( )` hay string template.
+- Lớp con không được khai lại hằng số / kiểu / method đã có ở lớp cha; method chỉ được khai lại kèm `REDEFINITION`.
 - Gọi method có `EXCEPTIONS` phải ghi rõ `EXPORTING`, không dùng dạng ngắn `( name = value )`.
 - `SVAL-FIELDTEXT` tối đa 20 ký tự.
 
