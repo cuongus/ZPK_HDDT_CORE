@@ -46,6 +46,11 @@ CLASS lcl_app DEFINITION FINAL CREATE PUBLIC.
     DATA mo_service TYPE REF TO zcl_hddt_service.
 
     METHODS select_data.
+
+    "! Loại nguồn cần đọc: theo s_srct, để trống thì lấy mọi loại đang
+    "! hoạt động trong ZTB_HDDT_SRC của công ty.
+    METHODS src_types
+      RETURNING VALUE(rt_type) TYPE gty_t_srctype.
     METHODS reload.
     METHODS build_alv.
     METHODS add_buttons.
@@ -173,37 +178,63 @@ CLASS lcl_app IMPLEMENTATION.
   ENDMETHOD.
 
 
+  METHOD src_types.
+
+    SELECT DISTINCT src_type
+      FROM ztb_hddt_src
+      WHERE ( bukrs = @p_bukrs OR bukrs = @space )
+        AND src_type IN @s_srct
+        AND xactive  = @abap_true
+      ORDER BY src_type
+      INTO TABLE @rt_type.
+
+  ENDMETHOD.
+
+
   METHOD select_data.
 
     CLEAR: gt_alv, gt_request.
 
-    TRY.
-        DATA(lo_source) = zcl_hddt_factory=>get_source( i_bukrs    = p_bukrs
-                                                        i_src_type = p_srct ).
+    DATA(lt_type) = src_types( ).
+    IF lt_type IS INITIAL.
+      MESSAGE 'Chưa cấu hình lớp đọc nguồn nào cho công ty này (ZTB_HDDT_SRC).'
+              TYPE 'S' DISPLAY LIKE 'E'.
+      RETURN.
+    ENDIF.
 
-        DATA(ls_sel) = VALUE zif_hddt_source=>ty_selection(
-          bukrs     = p_bukrs
-          gjahr     = p_gjahr
-          r_docno   = CORRESPONDING #( s_belnr[] )
-          r_budat   = CORRESPONDING #( s_budat[] )
-          r_bldat   = CORRESPONDING #( s_bldat[] )
-          r_cpudt   = CORRESPONDING #( s_cpudt[] )
-          r_blart   = CORRESPONDING #( s_blart[] )
-          r_vbeln   = CORRESPONDING #( s_vbeln[] )
-          r_kunnr   = CORRESPONDING #( s_kunnr[] )
-          r_usnam   = CORRESPONDING #( s_usnam[] )
-          r_seq     = CORRESPONDING #( s_seq[] )
-          r_gom     = CORRESPONDING #( s_gom[] )
-          r_status  = CORRESPONDING #( s_stat[] )
-          inv_type  = p_ityp
-          xreversed = p_rever ).
+    DATA(ls_sel) = VALUE zif_hddt_source=>ty_selection(
+      bukrs     = p_bukrs
+      gjahr     = p_gjahr
+      r_docno   = CORRESPONDING #( s_belnr[] )
+      r_budat   = CORRESPONDING #( s_budat[] )
+      r_bldat   = CORRESPONDING #( s_bldat[] )
+      r_cpudt   = CORRESPONDING #( s_cpudt[] )
+      r_blart   = CORRESPONDING #( s_blart[] )
+      r_vbeln   = CORRESPONDING #( s_vbeln[] )
+      r_kunnr   = CORRESPONDING #( s_kunnr[] )
+      r_usnam   = CORRESPONDING #( s_usnam[] )
+      r_seq     = CORRESPONDING #( s_seq[] )
+      r_gom     = CORRESPONDING #( s_gom[] )
+      r_status  = CORRESPONDING #( s_stat[] )
+      inv_type  = p_ityp
+      xreversed = p_rever ).
 
-        gt_request = lo_source->select_documents( ls_sel ).
-
-      CATCH zcx_hddt_error INTO DATA(lx).
-        MESSAGE lx->get_text_long( ) TYPE 'S' DISPLAY LIKE 'E'.
-        RETURN.
-    ENDTRY.
+    " Một loại nguồn lỗi cấu hình thì vẫn hiện các loại còn lại
+    DATA lv_err TYPE string.
+    LOOP AT lt_type ASSIGNING FIELD-SYMBOL(<fs_type>).
+      TRY.
+          DATA(lo_source) = zcl_hddt_factory=>get_source( i_bukrs    = p_bukrs
+                                                          i_src_type = <fs_type> ).
+          APPEND LINES OF lo_source->select_documents( ls_sel ) TO gt_request.
+        CATCH zcx_hddt_error INTO DATA(lx).
+          lv_err = COND #( WHEN lv_err IS INITIAL
+                           THEN |{ <fs_type> }: { lx->get_text_long( ) }|
+                           ELSE |{ lv_err } / { <fs_type> }| ).
+      ENDTRY.
+    ENDLOOP.
+    IF lv_err IS NOT INITIAL.
+      MESSAGE lv_err TYPE 'S' DISPLAY LIKE 'W'.
+    ENDIF.
 
     " Ghép sổ đăng ký vào danh sách hiển thị
     SELECT * FROM ztb_hddt_inv

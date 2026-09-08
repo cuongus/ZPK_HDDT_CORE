@@ -24,7 +24,8 @@
 *              s_usnam  - Người hạch toán
 *              s_seq    - Số hoá đơn điện tử đã cấp
 *              s_gom    - Số chứng từ gom
-*              p_srct   - Loại nguồn dữ liệu (FI/SD/GOM/...)
+*              s_srct   - Loại nguồn dữ liệu (FI/SD/GOM/...), để trống
+*                         là lấy mọi loại đã cấu hình
 *              p_prov   - Nhà cung cấp (để trống = theo cấu hình)
 *              p_ityp   - Mẫu hoá đơn phát hành (01GTKT...)
 *              s_stat   - Trạng thái HĐĐT cần lọc

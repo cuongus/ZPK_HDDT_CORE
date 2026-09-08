@@ -74,7 +74,12 @@ TYPES gty_t_alv TYPE STANDARD TABLE OF gty_alv WITH EMPTY KEY.
 DATA gt_alv     TYPE gty_t_alv.
 DATA gt_request TYPE zif_hddt_types=>ty_t_request.
 
-" Dùng cho SELECT-OPTIONS trên trạng thái HĐĐT (không có bảng nguồn)
+"! Danh sách loại nguồn dữ liệu đã cấu hình (ZTB_HDDT_SRC)
+TYPES gty_t_srctype TYPE STANDARD TABLE OF zde_hddt_srctype WITH EMPTY KEY.
+
+" Dùng cho SELECT-OPTIONS trên trạng thái HĐĐT và loại nguồn (không có
+" bảng nguồn để tham chiếu)
+DATA gv_srctype TYPE zde_hddt_srctype.
 DATA gv_status  TYPE zde_hddt_status.
 
 *---------------------------------------------------------------------*
@@ -132,7 +137,9 @@ SELECTION-SCREEN BEGIN OF BLOCK b1 WITH FRAME TITLE TEXT-b01.
 SELECTION-SCREEN END OF BLOCK b1.
 
 SELECTION-SCREEN BEGIN OF BLOCK b2 WITH FRAME TITLE TEXT-b02.
-  PARAMETERS     p_srct  TYPE zde_hddt_srctype OBLIGATORY DEFAULT 'FI'.
+  " Để trống = lấy mọi loại nguồn đã cấu hình cho công ty; chọn nhiều
+  " loại để xem chung, cần cho nghiệp vụ gom nhiều loại chứng từ
+  SELECT-OPTIONS s_srct  FOR gv_srctype.
   " Để trống = lấy nhà cung cấp đang hoạt động theo cấu hình
   PARAMETERS     p_prov  TYPE zde_hddt_prov.
   " Mẫu hoá đơn phát hành (01GTKT...) — trống = dòng mặc định ZTB_HDDT_CRED

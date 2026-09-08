@@ -113,7 +113,7 @@
     </item>
     <item>
      <ID>S</ID>
-     <KEY>P_SRCT</KEY>
+     <KEY>S_SRCT</KEY>
      <ENTRY>Loại nguồn dữ liệu</ENTRY>
      <LENGTH>18</LENGTH>
     </item>

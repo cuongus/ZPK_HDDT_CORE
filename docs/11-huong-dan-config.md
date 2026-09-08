@@ -149,7 +149,7 @@ ZPG_HDDT_INTEGRATION
   Mã công ty    : <công ty>
   Năm tài chính : <năm>
   Số chứng từ   : một chứng từ bán hàng đã ghi sổ
-  Loại nguồn    : FI
+  Loại nguồn    : để trống = mọi loại đã cấu hình; chọn nhiều loại được
   ☑ Test run
 
 → chọn dòng → nút "Xem payload"

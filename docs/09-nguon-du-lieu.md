@@ -208,3 +208,22 @@ cho engine.
 **[Unverified]** trên hệ thật: tên trường `BSEC-BANKS/BANKL/BANKN/INTAD`,
 `ACDOCA-BUZEI = BSEG-BUZEI` cho chứng từ billing, `PRCD_ELEMENTS-KINAK`,
 `KONP-LOEVM_KO`. Cần activate + syntax check ở lần import đầu.
+
+## Chọn nhiều loại nguồn trên màn hình
+
+`s_srct` là SELECT-OPTIONS, không phải tham số đơn:
+
+- để trống: đọc mọi loại nguồn đang hoạt động trong `ZTB_HDDT_SRC` của công ty
+  (dòng có `BUKRS` trống áp cho mọi công ty);
+- chọn nhiều loại: đọc lần lượt từng loại rồi gộp vào một danh sách, cột
+  `Loại nguồn` trên ALV cho biết dòng đến từ đâu;
+- một loại lỗi cấu hình thì các loại còn lại vẫn hiện, lỗi báo dạng cảnh báo.
+
+Chứng từ gom (`GOM`) gom được thành viên thuộc **nhiều loại nguồn khác nhau**.
+`ZCL_HDDT_SRC_GOM` nhóm thành viên theo `SRC_TYPE`, gọi đúng lớp đọc của từng
+loại rồi mới trộn dòng hàng. Trước đây lớp này cố định đọc FI nên thành viên SD
+bị bỏ lặng lẽ.
+
+[Unverified] Ghi ngược số hoá đơn về chứng từ nguồn vẫn chỉ áp dụng cho thành
+viên FI, vì `ZCL_HDDT_WRITEBACK_FI` ghi vào `BKPF`; billing SD không có BKPF nên
+bị bỏ qua có chủ đích.

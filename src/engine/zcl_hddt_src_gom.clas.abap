@@ -68,10 +68,6 @@ CLASS zcl_hddt_src_gom IMPLEMENTATION.
       RETURN.
     ENDIF.
 
-    " Lớp nguồn FI theo cấu hình — thành viên là chứng từ FI
-    DATA(lo_fi) = zcl_hddt_factory=>get_source( i_bukrs    = is_selection-bukrs
-                                                i_src_type = 'FI' ).
-
     LOOP AT lt_gom ASSIGNING FIELD-SYMBOL(<fs_gom>).
       DATA(lt_mem) = zcl_hddt_gom=>members( i_bukrs  = is_selection-bukrs
                                             i_gjahr  = is_selection-gjahr
@@ -88,17 +84,35 @@ CLASS zcl_hddt_src_gom IMPLEMENTATION.
       ls_sel-gjahr     = is_selection-gjahr.
       ls_sel-inv_type  = is_selection-inv_type.
       ls_sel-xreversed = abap_true.
-      LOOP AT lt_mem ASSIGNING FIELD-SYMBOL(<fs_mem>) WHERE src_type = 'FI'.
-        APPEND VALUE #( sign = 'I' option = 'EQ' low = <fs_mem>-src_docno ) TO ls_sel-r_docno.
+      " FS 3.6.7: một chứng từ gom được gom từ NHIỀU loại nguồn khác nhau
+      " nên phải đọc thành viên theo từng loại, không cố định FI
+      DATA lt_mtype TYPE SORTED TABLE OF zde_hddt_srctype WITH UNIQUE KEY table_line.
+      DATA lt_req   TYPE zif_hddt_types=>ty_t_request.
+      CLEAR: lt_mtype, lt_req.
+      LOOP AT lt_mem ASSIGNING FIELD-SYMBOL(<fs_mem>).
+        INSERT <fs_mem>-src_type INTO TABLE lt_mtype.
       ENDLOOP.
-      IF ls_sel-r_docno IS INITIAL.
-        CONTINUE.
-      ENDIF.
 
-      DATA(lt_req) = lo_fi->select_documents( ls_sel ).
+      LOOP AT lt_mtype ASSIGNING FIELD-SYMBOL(<fs_mtype>).
+        CLEAR ls_sel-r_docno.
+        LOOP AT lt_mem ASSIGNING FIELD-SYMBOL(<fs_mem2>) WHERE src_type = <fs_mtype>.
+          APPEND VALUE #( sign = 'I' option = 'EQ' low = <fs_mem2>-src_docno ) TO ls_sel-r_docno.
+        ENDLOOP.
+        IF ls_sel-r_docno IS INITIAL.
+          CONTINUE.
+        ENDIF.
+        TRY.
+            DATA(lo_mem) = zcl_hddt_factory=>get_source( i_bukrs    = is_selection-bukrs
+                                                         i_src_type = <fs_mtype> ).
+          CATCH zcx_hddt_error.
+            CONTINUE.
+        ENDTRY.
+        APPEND LINES OF lo_mem->select_documents( ls_sel ) TO lt_req.
+      ENDLOOP.
       IF lt_req IS INITIAL.
         CONTINUE.
       ENDIF.
+      SORT lt_req BY src_type src_docno.
 
       DATA(ls_req) = merge( i_bukrs    = is_selection-bukrs
                             i_gjahr    = is_selection-gjahr
@@ -139,16 +153,16 @@ CLASS zcl_hddt_src_gom IMPLEMENTATION.
     ENDIF.
     rs_state-exists = abap_true.
 
-    TRY.
-        DATA(lo_fi) = zcl_hddt_factory=>get_source( i_bukrs = i_bukrs i_src_type = 'FI' ).
-      CATCH zcx_hddt_error.
-        RETURN.
-    ENDTRY.
-
     LOOP AT lt_mem ASSIGNING FIELD-SYMBOL(<fs_mem>).
-      DATA(ls_st) = lo_fi->get_doc_state( i_bukrs = i_bukrs
-                                          i_gjahr = <fs_mem>-gjahr
-                                          i_docno = <fs_mem>-src_docno ).
+      TRY.
+          DATA(lo_mem) = zcl_hddt_factory=>get_source( i_bukrs    = i_bukrs
+                                                       i_src_type = <fs_mem>-src_type ).
+        CATCH zcx_hddt_error.
+          CONTINUE.
+      ENDTRY.
+      DATA(ls_st) = lo_mem->get_doc_state( i_bukrs = i_bukrs
+                                           i_gjahr = <fs_mem>-gjahr
+                                           i_docno = <fs_mem>-src_docno ).
       IF rs_state-waers IS INITIAL.
         rs_state-waers = ls_st-waers.
         rs_state-kunnr = ls_st-kunnr.
