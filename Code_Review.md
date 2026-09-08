@@ -422,6 +422,7 @@ của ADT, nguyên nhân và cách sửa đã áp dụng vào `src/` (repo khôn
 | 11 | `Unknown column name` ở mọi câu `ORDER BY` dùng cột không có trong `SELECT` | `ZCL_HDDT_SRC_BASE` (ADR6 ×3, ADR2, VBKD, A003/KONP), `ZCL_HDDT_SRC_FI` (BKPF-BSEG, BSEG) | ABAP SQL chỉ cho `ORDER BY` theo tên cột của tập kết quả; không nhận cột chỉ có trong bảng nguồn, cũng không nhận tiền tố bảng dạng `k~belnr` | thêm cột sắp xếp vào danh sách SELECT (`consnumber`, `posnr`, `buzei`), dùng tên cột kết quả (`belnr`, `cust_buzei`) |
 | 12 | Cột `DATBI` không có trong `A003` trên hệ MAG S25 | `ZCL_HDDT_SRC_BASE~tax_rate_of` | khoá A003 ở hệ này chỉ gồm KAPPL / KSCHL / ALAND / MWSKZ + KNUMH, không có khoảng hiệu lực, nên không thể sắp xếp theo DATBI như dự án tham chiếu | mỗi khoá A003 chỉ có một KNUMH, nên sắp xếp theo `KOPOS` của KONP cho xác định; nếu cần kiểm tra hiệu lực thì phải join thêm KONH (DATAB/DATBI) |
 | 13 | `Method "GET_ID" is unknown or PROTECTED or PRIVATE` | `ZCL_HDDT_FACTORY~get_provider` dòng 94/96 | KHÔNG phải lỗi source: `ZIF_HDDT_PROVIDER` khai `get_id` là public. Khi tạo object mới, ADT sinh sẵn bản ACTIVE rỗng (`INTERFACE ... PUBLIC. ENDINTERFACE.`); mới Save mà chưa Activate thì syntax check của class vẫn đọc bản active rỗng nên không thấy method nào | Activate `ZIF_HDDT_TYPES` trước, rồi các interface còn lại, xong mới activate class. Không sửa gì trong source |
+| 14 | `The data object "LS_LOG" does not have a component called "RES_BODY"` + `The field "LS_DB-CODEPAGE" is unknown` + `Unknown column name "RES_BODY"` | `ZCL_HDDT_LOG` dòng 375, 377, 399, 415 | KHÔNG phải lỗi source: bảng `ZTB_HDDT_LOG` tạo tay trên hệ bị thiếu field. Đối chiếu `tools/gen_ddic.py` thì bảng phải có đủ 44 field, thiếu ít nhất `RES_BODY` (kiểu `ZDE_HDDT_RAW`) và `CODEPAGE` (kiểu `ZDE_HDDT_CODEPAGE`). Lỗi Init ở dòng 5 cũng chỉ liệt kê 3 field RSTR thay vì 4, đúng dấu hiệu thiếu `RES_BODY` từ đầu | SE11 thêm 2 field còn thiếu đúng thứ tự cuối bảng (`REQ_HEADER`, `RES_HEADER`, `REQ_BODY`, `RES_BODY`) và `CODEPAGE` ở vị trí 27, cột Init để trống, rồi activate lại. Không sửa gì trong source |
 
 Quy tắc rút ra cho phần DEFINITION của class:
 
@@ -433,6 +434,7 @@ Quy tắc rút ra cho phần DEFINITION của class:
 - Trong string template, `{` `}` phải escape thành `\{` `\}` nếu muốn in ra chữ.
 - `ORDER BY` chỉ dùng tên cột có trong danh sách `SELECT`, không dùng tiền tố bảng.
 - Activate ngay từng object theo thứ tự DDIC → interface → class; bản ACTIVE rỗng do wizard sinh ra là nguyên nhân của phần lớn lỗi "unknown method" giả.
+- Sau khi tạo bảng, đối chiếu số field với `tools/gen_ddic.py` hoặc mục 3 của tài liệu tạo tay; thiếu field gây ra hàng loạt lỗi "unknown component" ở class.
 
 Phần INTERFACE (`ZIF_*`) giữ nguyên comment banner vì các interface đã lưu được trên S25;
 nếu về sau gặp cùng lỗi #4 thì áp dụng đúng cách sửa trên.

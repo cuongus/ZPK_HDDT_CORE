@@ -16,6 +16,7 @@ Soát các lỗi mà ADT / SE24 sẽ báo khi activate:
   L. POSIX regex đã deprecated, phải dùng PCRE
   M. ORDER BY dùng cột không có trong danh sách SELECT
   N. Gọi method qua biến REF TO interface nhưng interface không có
+  O. Dùng field không có trong định nghĩa bảng ở tools/gen_ddic.py
 
 Chạy: python tools/check_abap.py
 """
@@ -365,6 +366,88 @@ def check_iref(path):
 
 
 # ---------------------------------------------------------------------------
+# O. Code dùng field không có trong định nghĩa bảng (tools/gen_ddic.py)
+# ---------------------------------------------------------------------------
+def ddic_tables():
+    g = io.open("tools/gen_ddic.py", encoding="utf-8").read()
+    ns = {"K": lambda n, r: (n, r, True), "F": lambda n, r: (n, r, False)}
+    tabs = eval(re.search(r"TABLES = (\[.*?\n\])", g, re.S).group(1), ns)
+    return {t.upper(): {f[0].lower() for f in fields} for t, _, _, fields in tabs}
+
+
+TAB = ddic_tables()
+
+
+def check_ddic_use(path):
+    text = io.open(path, encoding="utf-8").read()
+    var = {}
+
+    def add(name, tab):
+        var.setdefault(name.lower(), set()).add(tab.upper())
+
+    for m in re.finditer(r"\b(?:VALUE\()?(\w+)\)?\s+TYPE\s+(?:(?:STANDARD|SORTED|"
+                         r"HASHED)\s+)?(?:TABLE OF\s+)?(ztb_hddt_\w+)\b", text, re.I):
+        add(m.group(1), m.group(2))
+    # SELECT trên bảng của package: cột phải có thật; biến INTO @DATA() chỉ
+    # mang đúng các cột đã chọn
+    varcols = {}
+    for ln, st in statements(text):
+        w = first_word(st)
+        m = re.match(r"UPDATE\s+(ztb_hddt_\w+)\s+SET\s+(.*)$", st, re.I)
+        if m and m.group(1).upper() in TAB:
+            for fld in re.findall(r"(\w+)\s*=", m.group(2)):
+                if fld.lower() not in TAB[m.group(1).upper()]:
+                    report("O", path, ln, "UPDATE %s SET %s: field không có"
+                           % (m.group(1), fld))
+            continue
+        if w != "SELECT":
+            continue
+        mt = re.search(r"\bFROM\s+(ztb_hddt_\w+)\b", st, re.I)
+        if not mt or mt.group(1).upper() not in TAB or " JOIN " in st.upper():
+            continue
+        tab = mt.group(1).upper()
+        head = re.sub(r"^SELECT\s+(?:SINGLE\s+|DISTINCT\s+)?", "",
+                      st[:mt.start()], flags=re.I)
+        cols = set()
+        if "*" in head:
+            cols = set(TAB[tab])
+        else:
+            for col in head.split(","):
+                col = col.strip()
+                if not col or "(" in col or col.startswith(("@", "'", "`")):
+                    continue          # host expression / literal
+                alias = re.search(r"\bAS\s+(\w+)\s*$", col, re.I)
+                base = re.sub(r"\s+AS\s+\w+\s*$", "", col, flags=re.I).split("~")[-1]
+                if base.lower() not in TAB[tab]:
+                    report("O", path, ln, "SELECT %s FROM %s: cột không có"
+                           % (base, tab))
+                cols.add((alias.group(1) if alias else base).lower())
+        for t in re.findall(r"INTO\s+(?:TABLE\s+)?@?(?:DATA\()?(\w+)\)?",
+                            st, re.I):
+            varcols.setdefault(t.lower(), set()).update(cols)
+    # bảng nội bộ kiểu ty_t_* dựng trên bảng DDIC -> field-symbol của LOOP
+    for m in re.finditer(r"LOOP AT\s+(\w+)[^.]*?FIELD-SYMBOL\(<(\w+)>\)", text, re.I):
+        for t in var.get(m.group(1).lower(), ()):
+            add("<" + m.group(2) + ">", t)
+    for i, line in enumerate(text.split("\n"), 1):
+        if line.lstrip().startswith(("*", '"')):
+            continue
+        for name, fld in re.findall(r"(<?\w+>?)-(\w+)\b", line):
+            low = name.lower()
+            if low in varcols and low not in var:
+                if fld.lower() not in varcols[low]:
+                    report("O", path, i, "%s-%s không nằm trong các cột đã "
+                           "SELECT" % (name, fld))
+                continue
+            keys = {k for k in var.get(low, ()) if k in TAB}
+            if not keys:
+                continue
+            if not any(fld.lower() in TAB[k] for k in keys):
+                report("O", path, i, "%s-%s không có trong %s"
+                       % (name, fld, "/".join(sorted(keys))))
+
+
+# ---------------------------------------------------------------------------
 # Chạy
 # ---------------------------------------------------------------------------
 for p in sorted(glob.glob("src/**/*.intf.abap", recursive=True)):
@@ -378,6 +461,7 @@ for p in sorted(glob.glob("src/**/*.abap", recursive=True)):
     check_style(p)
     check_select(p)
     check_iref(p)
+    check_ddic_use(p)
 
 
 def ancestors(name):
@@ -474,6 +558,7 @@ KIND = {
     "L": "POSIX regex deprecated (dùng PCRE)",
     "M": "ORDER BY không khớp danh sách SELECT",
     "N": "Method không có trong interface được tham chiếu",
+    "O": "Field không có trong định nghĩa bảng DDIC",
 }
 print("Đã đọc: %d interface, %d class" % (len(INTF), len(CLS)))
 for k in sorted(KIND):
