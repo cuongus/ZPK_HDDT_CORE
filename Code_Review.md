@@ -436,6 +436,7 @@ của ADT, nguyên nhân và cách sửa đã áp dụng vào `src/` (repo khôn
 | 25 | `Data type STRING in field TOKEN is not supported` (SE54) | `ZTB_HDDT_TOK` | cùng hạn chế dòng 23: TMG không hỗ trợ field STRING | không sinh TMG cho bảng này. `ZPG_HDDT_CONFIG` nay có `MAINTAIN_TOK` (xem bộ đệm bằng ALV + hỏi xoá) và `MAINTAIN_LOG` (mở `ZPG_HDDT_LOG`), nên nhấn đôi hai dòng đó không còn báo thiếu TMG |
 | 26 | Chương trình chạy ra ALV nhưng **không có 12 nút nghiệp vụ**, chỉ có toolbar chuẩn | `ZPG_HDDT_INTEGRATION_F01~add_buttons` | `CL_SALV_TABLE` ở chế độ toàn màn hình không cho `ADD_FUNCTION`, ném `CX_SALV_WRONG_CALL`; code cũ `CATCH` rồi bỏ qua nên lỗi biến mất, ALV vẫn hiện và người dùng không biết vì sao thiếu nút | (1) không nuốt ngoại lệ nữa, bật cờ `MV_OWN_STATUS` và báo rõ lý do; (2) `SET_SCREEN_STATUS( pfstatus = 'ZSALV_HDDT' report = sy-repid set_functions = cl_salv_table=>c_functions_all )`; (3) tạo GUI status `ZSALV_HDDT` bằng SE41 copy `STANDARD_FULLSCREEN` của `SAPLSALV_METADATA_STATUS` rồi thêm 12 mã chức năng |
 | 27 | `A RETURNING parameter must be fully typed` nhưng kiểu ĐÃ có LENGTH | `ZIN_HDDT_INTEGRATION_F01` dòng 93, 96, 99 (`map_light`, `status_text`, `adj_code_of`) và `ZPG_HDDT_LOG` dòng 138 | tham số method KHÔNG nhận kiểu dựng sẵn một chữ `c` `n` `x` `p`, kể cả khi ghi `TYPE c LENGTH 4`. Khác với `DATA` và thành phần cấu trúc, chỗ đó `LENGTH` hợp lệ. Dòng 3 của bảng này chỉ sửa `TYPE c` thành `char1` nên không lộ trường hợp có LENGTH | khai kiểu CÓ TÊN rồi dùng: `TYPES gty_icon TYPE c LENGTH 4.` trong include khai báo, chữ ký thành `RETURNING VALUE(r_icon) TYPE gty_icon` |
+| 28 | Đổi kiến trúc màn hình danh sách: `CL_SALV_TABLE` → `CL_GUI_ALV_GRID` + docking (09/09/2026, theo yêu cầu) | `ZIN_HDDT_INTEGRATION_TOP`, `ZIN_HDDT_INTEGRATION_F01`, `ZPG_HDDT_INTEGRATION` | mỗi nút trên Application Toolbar của GUI status đòi một function key, hệ chỉ còn 10 phím trống mà cần 12 nút | 12 nút khai trong code qua event `TOOLBAR` của grid; GUI status `ZGRID_HDDT` chỉ cần BACK / EXIT / CANC; thêm dynpro `0100` layout rỗng làm nền cho docking. Field catalog lấy từ `CL_SALV_CONTROLLER_METADATA=>GET_LVC_FIELDCATALOG` nên giữ nhãn cột theo data element, không phải khai tay 45 cột. Bản SALV còn ở commit trước `9eb8270` nếu cần hoàn nguyên |
 
 Quy tắc rút ra cho phần DEFINITION của class:
 
@@ -458,6 +459,7 @@ Quy tắc rút ra cho phần DEFINITION của class:
 - Bảng nội bộ truyền vào tham số `TABLES` của function module cổ điển phải khai `WITH DEFAULT KEY`, không dùng `EMPTY KEY`.
 - Đừng `CATCH` rồi bỏ qua: nuốt ngoại lệ biến lỗi thành "thiếu tính năng" không dấu vết. Ít nhất phải báo message hoặc bật cờ xử lý thay thế.
 - Tham số method chỉ nhận kiểu có tên; `TYPE c LENGTH n` chỉ dùng được ở `DATA`, `TYPES`, và thành phần cấu trúc.
+- Xoá khai báo method thì phải xoá luôn phần hiện thực: lớp local trong program không được bộ kiểm tra global class soát, nay có nhóm Z.
 - Gọi method có `EXCEPTIONS` phải ghi rõ `EXPORTING`, không dùng dạng ngắn `( name = value )`.
 - `SVAL-FIELDTEXT` tối đa 20 ký tự.
 

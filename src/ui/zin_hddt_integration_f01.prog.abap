@@ -1,6 +1,6 @@
 *=====================================================================
 * Tên/Mã     : ZIN_HDDT_INTEGRATION_F01
-* Mô tả chung: Lớp local điều khiển ALV (LCL_APP) và form routine của
+* Mô tả chung: Lớp local điều khiển ALV GRID (LCL_APP) và form routine của
 *              ZPG_HDDT_INTEGRATION theo FS MAG v0.5 mục 3.6:
 *                Tích hợp HĐ   -> ZCL_HDDT_SERVICE->CREATE_DRAFT
 *                Hủy HĐ nháp   -> DELETE_DRAFT (tra cứu trước khi lỗi)
@@ -19,6 +19,11 @@
 * 1.0       28/08/2026    cuongus - CuongUS        abapGit     Tạo mới
 * 1.1       03/09/2026    cuongus - CuongUS        abapGit     Popup chọn
 *                         hoá đơn gốc, truyền chứng từ gốc cho engine
+* 1.3       09/09/2026    cuongus - CuongUS        abapGit     Đổi màn hình
+*                         danh sách từ CL_SALV_TABLE sang CL_GUI_ALV_GRID +
+*                         docking trên dynpro 0100: 12 nút khai trong code
+*                         qua event TOOLBAR, GUI status chỉ cần Back/Exit/
+*                         Cancel. Field catalog lấy từ metadata của SALV.
 * 1.2       07/09/2026    cuongus - CuongUS        abapGit     FS MAG v0.5:
 *                         8 nút nghiệp vụ, email, gom, sửa ngày/giờ,
 *                         phát hành tự động, kiểm quyền theo chức năng
@@ -32,19 +37,29 @@ CLASS lcl_app DEFINITION FINAL CREATE PUBLIC.
     "! FS 3.6.9: phát hành tự động bằng background job
     METHODS run_auto.
 
-    METHODS on_function
-      FOR EVENT added_function OF cl_salv_events
-      IMPORTING e_salv_function.
+    "! PBO / PAI của dynpro 0100 — gọi từ hai module trong include này
+    METHODS pbo_0100.
+    METHODS pai_0100
+      IMPORTING i_ucomm TYPE syucomm.
 
-    METHODS on_link_click
-      FOR EVENT link_click OF cl_salv_events_table
-      IMPORTING row column.
+    "! 12 nút nghiệp vụ thêm vào toolbar của grid (không cần GUI status)
+    METHODS on_toolbar
+      FOR EVENT toolbar OF cl_gui_alv_grid
+      IMPORTING e_object.
+
+    METHODS on_user_command
+      FOR EVENT user_command OF cl_gui_alv_grid
+      IMPORTING e_ucomm.
+
+    METHODS on_hotspot
+      FOR EVENT hotspot_click OF cl_gui_alv_grid
+      IMPORTING e_row_id e_column_id.
 
   PRIVATE SECTION.
 
-    DATA mo_alv     TYPE REF TO cl_salv_table.
-    "! abap_true = toolbar chuẩn không nhận thêm nút, phải dùng GUI status
-    DATA mv_own_status TYPE abap_bool.
+    DATA mo_dock    TYPE REF TO cl_gui_docking_container.
+    DATA mo_grid    TYPE REF TO cl_gui_alv_grid.
+    DATA mt_fcat    TYPE lvc_t_fcat.
     DATA mo_service TYPE REF TO zcl_hddt_service.
 
     METHODS select_data.
@@ -54,9 +69,15 @@ CLASS lcl_app DEFINITION FINAL CREATE PUBLIC.
     METHODS src_types
       RETURNING VALUE(rt_type) TYPE gty_t_srctype.
     METHODS reload.
-    METHODS build_alv.
-    METHODS add_buttons.
-    METHODS set_columns.
+
+    "! Field catalog: lấy metadata từ SALV (nhãn cột theo data element) rồi
+    "! đắp thêm cột icon / hotspot / cột ẩn.
+    METHODS build_fcat.
+    METHODS refresh_grid.
+
+    "! Điều phối mã chức năng của toolbar sang từng nghiệp vụ
+    METHODS dispatch
+      IMPORTING i_code TYPE syucomm.
     METHODS fill_row_from_registry
       IMPORTING is_reg TYPE ztb_hddt_inv
       CHANGING  cs_alv TYPE gty_alv.
@@ -100,6 +121,9 @@ CLASS lcl_app DEFINITION FINAL CREATE PUBLIC.
 
 ENDCLASS.
 
+" Hai module của dynpro 0100 nằm ngoài lớp nên cần tham chiếu toàn cục
+DATA go_app TYPE REF TO lcl_app.
+
 
 CLASS lcl_app IMPLEMENTATION.
 
@@ -113,7 +137,8 @@ CLASS lcl_app IMPLEMENTATION.
       RETURN.
     ENDIF.
 
-    build_alv( ).
+    build_fcat( ).
+    CALL SCREEN 100.
 
   ENDMETHOD.
 
@@ -356,157 +381,302 @@ CLASS lcl_app IMPLEMENTATION.
   METHOD reload.
 
     select_data( ).
-    IF mo_alv IS BOUND.
-      mo_alv->refresh( ).
-    ENDIF.
+    refresh_grid( ).
 
   ENDMETHOD.
 
 
-  METHOD build_alv.
+  METHOD build_fcat.
 
+    " Field catalog lấy từ metadata của SALV: nhãn cột theo data element,
+    " kiểu và độ dài đầy đủ, khỏi phải khai tay 45 cột và không cần
+    " structure DDIC riêng. Sau đó chỉ đắp thêm cột icon / hotspot / ẩn.
+    CLEAR mt_fcat.
+    DATA lo_meta TYPE REF TO cl_salv_table.
     TRY.
-        cl_salv_table=>factory( IMPORTING r_salv_table = mo_alv
+        cl_salv_table=>factory( IMPORTING r_salv_table = lo_meta
                                 CHANGING  t_table      = gt_alv ).
-      CATCH cx_salv_msg INTO DATA(lx_salv).
-        MESSAGE lx_salv->get_text( ) TYPE 'S' DISPLAY LIKE 'E'.
-        RETURN.
+        mt_fcat = cl_salv_controller_metadata=>get_lvc_fieldcatalog(
+                    r_columns      = lo_meta->get_columns( )
+                    r_aggregations = lo_meta->get_aggregations( ) ).
+      CATCH cx_salv_error INTO DATA(lx_meta).
+        MESSAGE lx_meta->get_text( ) TYPE 'S' DISPLAY LIKE 'W'.
     ENDTRY.
 
-    mo_alv->get_functions( )->set_all( abap_true ).
-    add_buttons( ).
-    IF mv_own_status = abap_true.
-      " SALV toàn màn hình chặn ADD_FUNCTION -> lấy toolbar từ GUI status
-      " riêng của chương trình, tạo bằng SE41 (xem docs/06 §3)
-      mo_alv->set_screen_status( pfstatus      = gc_pfstatus
-                                 report        = sy-repid
-                                 set_functions = cl_salv_table=>c_functions_all ).
+    TYPES: BEGIN OF lty_col,
+             field  TYPE lvc_fname,
+             short  TYPE scrtext_s,
+             medium TYPE scrtext_m,
+             flag   TYPE gty_adjcode,
+           END OF lty_col.
+    DATA lt_col TYPE STANDARD TABLE OF lty_col WITH DEFAULT KEY.
+
+    " flag: I = cột icon · H = cột bấm được (link) · T = cột kỹ thuật, ẩn
+    lt_col = VALUE #(
+      ( field = 'LIGHT'      short = 'TT'        medium = 'Trạng thái'          flag = 'I' )
+      ( field = 'MAIL_LIGHT' short = 'Email'     medium = 'Trạng thái email'    flag = 'I' )
+      ( field = 'BUKRS'      short = 'Công ty'   medium = 'Mã công ty' )
+      ( field = 'GJAHR'      short = 'Năm'       medium = 'Năm tài chính' )
+      ( field = 'SRC_TYPE'   short = 'Nguồn'     medium = 'Loại nguồn' )
+      ( field = 'SRC_DOCNO'  short = 'Số CT'     medium = 'Số chứng từ' )
+      ( field = 'GOM_NO'     short = 'Gom'       medium = 'Số FI gom' )
+      ( field = 'BLART'      short = 'Loại CT'   medium = 'Loại chứng từ' )
+      ( field = 'BUDAT'      short = 'Ghi sổ'    medium = 'Ngày ghi sổ' )
+      ( field = 'BLDAT'      short = 'Ngày CT'   medium = 'Ngày chứng từ' )
+      ( field = 'AWKEY'      short = 'Billing'   medium = 'Billing SD' )
+      ( field = 'REVERSED'   short = 'Đảo'       medium = 'Đã đảo/huỷ'          flag = 'I' )
+      ( field = 'INV_DATE'   short = 'Ngày PH'   medium = 'Ngày phát hành' )
+      ( field = 'INV_TIME'   short = 'Giờ PH'    medium = 'Giờ phát hành' )
+      ( field = 'BUYER_CODE' short = 'Khách'     medium = 'Khách hàng' )
+      ( field = 'BUYER_NAME' short = 'Tên ĐV'    medium = 'Tên đơn vị' )
+      ( field = 'BUYER_ADDR' short = 'Địa chỉ'   medium = 'Địa chỉ' )
+      ( field = 'BUYER_TAX'  short = 'MST'       medium = 'Mã số thuế' )
+      ( field = 'BUYER_MAIL' short = 'Email KH'  medium = 'Email khách hàng' )
+      ( field = 'ITEM_TEXT'  short = 'Tên hàng'  medium = 'Tên hàng (nhập tay)' )
+      ( field = 'PAYM'       short = 'HTTT'      medium = 'HT thanh toán' )
+      ( field = 'WAERS'      short = 'Tiền'      medium = 'Loại tiền' )
+      ( field = 'EXCH_RATE'  short = 'Tỷ giá'    medium = 'Tỷ giá' )
+      ( field = 'AMOUNT'     short = 'Tiền hàng' medium = 'Thành tiền' )
+      ( field = 'VAT_AMOUNT' short = 'Thuế'      medium = 'Tiền thuế' )
+      ( field = 'TOTAL'      short = 'Tổng'      medium = 'Tổng tiền' )
+      ( field = 'TAX_SUMM'   short = 'Thuế suất' medium = 'Thuế suất' )
+      ( field = 'PROVIDER'   short = 'NCC'       medium = 'Nhà cung cấp' )
+      ( field = 'INV_TYPE'   short = 'Loại HĐ'   medium = 'Mẫu HĐ phát hành' )
+      ( field = 'TEMPLATE'   short = 'Mẫu số'    medium = 'Mẫu hoá đơn' )
+      ( field = 'SERIAL'     short = 'Ký hiệu'   medium = 'Ký hiệu hoá đơn' )
+      ( field = 'SEQ'        short = 'Số HĐ'     medium = 'Số hoá đơn' )
+      ( field = 'ISSUE_DATE' short = 'Ngày TH'   medium = 'Ngày tích hợp' )
+      ( field = 'MSCQT'      short = 'Mã CQT'    medium = 'Mã của CQT' )
+      ( field = 'SEC_CODE'   short = 'Mã tra'    medium = 'Mã tra cứu' )
+      ( field = 'INV_LINK'   short = 'Link'      medium = 'Link tra cứu'        flag = 'H' )
+      ( field = 'ADJ_CODE'   short = 'Loại ĐC'   medium = 'Loại điều chỉnh' )
+      ( field = 'REF_DOCNO'  short = 'CT gốc'    medium = 'Số chứng từ gốc' )
+      ( field = 'REF_GJAHR'  short = 'Năm gốc'   medium = 'Năm chứng từ gốc' )
+      ( field = 'STATUS'     short = 'Mã TT'     medium = 'Mã trạng thái' )
+      ( field = 'STATUS_TXT' short = 'Diễn giải' medium = 'Diễn giải trạng thái' )
+      ( field = 'TAX_STATUS' short = 'TT CQT'    medium = 'TT Cơ quan thuế' )
+      ( field = 'MESSAGE'    short = 'Thông báo' medium = 'Thông báo' )
+      ( field = 'MSGTY'                                                        flag = 'T' )
+      ( field = 'LOG_ID'                                                       flag = 'T' ) ).
+
+    LOOP AT lt_col ASSIGNING FIELD-SYMBOL(<fs_col>).
+      ASSIGN mt_fcat[ fieldname = <fs_col>-field ] TO FIELD-SYMBOL(<fs_fcat>).
+      IF sy-subrc <> 0.
+        " Metadata của SALV không có cột này -> thêm dòng tối thiểu
+        APPEND VALUE lvc_s_fcat( fieldname = <fs_col>-field ) TO mt_fcat.
+        ASSIGN mt_fcat[ fieldname = <fs_col>-field ] TO <fs_fcat>.
+        IF sy-subrc <> 0.
+          CONTINUE.
+        ENDIF.
+      ENDIF.
+      IF <fs_col>-medium IS NOT INITIAL.
+        <fs_fcat>-scrtext_s = <fs_col>-short.
+        <fs_fcat>-scrtext_m = <fs_col>-medium.
+        <fs_fcat>-scrtext_l = <fs_col>-medium.
+        <fs_fcat>-coltext   = <fs_col>-medium.
+      ENDIF.
+      CASE <fs_col>-flag.
+        WHEN 'I'.
+          <fs_fcat>-icon = abap_true.
+        WHEN 'H'.
+          <fs_fcat>-hotspot = abap_true.
+        WHEN 'T'.
+          <fs_fcat>-tech = abap_true.
+        WHEN OTHERS.
+      ENDCASE.
+    ENDLOOP.
+
+  ENDMETHOD.
+
+
+  METHOD pbo_0100.
+
+    SET PF-STATUS gc_pfstatus.
+
+    IF mo_grid IS BOUND.
+      RETURN.
     ENDIF.
-    set_columns( ).
 
-    mo_alv->get_selections( )->set_selection_mode(
-      if_salv_c_selection_mode=>row_column ).
+    " Docking chiếm gần hết dynpro 0100 (layout của dynpro để rỗng)
+    CREATE OBJECT mo_dock
+      EXPORTING
+        repid = sy-repid
+        dynnr = sy-dynnr
+        side  = cl_gui_docking_container=>dock_at_left
+        ratio = 95
+      EXCEPTIONS
+        OTHERS = 1.
+    IF sy-subrc <> 0.
+      MESSAGE 'Không tạo được docking container cho ALV.' TYPE 'S' DISPLAY LIKE 'E'.
+      RETURN.
+    ENDIF.
 
-    DATA lv_title TYPE lvc_title.
-    lv_title = |Tích hợp HĐĐT - công ty { p_bukrs } / năm { p_gjahr }|.
-    mo_alv->get_display_settings( )->set_list_header( lv_title ).
-    mo_alv->get_display_settings( )->set_striped_pattern( abap_true ).
+    CREATE OBJECT mo_grid
+      EXPORTING
+        i_parent = mo_dock
+      EXCEPTIONS
+        OTHERS   = 1.
+    IF sy-subrc <> 0.
+      MESSAGE 'Không tạo được ALV grid.' TYPE 'S' DISPLAY LIKE 'E'.
+      RETURN.
+    ENDIF.
 
-    SET HANDLER me->on_function   FOR mo_alv->get_event( ).
-    SET HANDLER me->on_link_click FOR mo_alv->get_event( ).
+    SET HANDLER me->on_toolbar      FOR mo_grid.
+    SET HANDLER me->on_user_command FOR mo_grid.
+    SET HANDLER me->on_hotspot      FOR mo_grid.
 
-    mo_alv->display( ).
+    DATA ls_layout TYPE lvc_s_layo.
+    ls_layout-grid_title = |Tích hợp HĐĐT - công ty { p_bukrs } / năm { p_gjahr }|.
+    ls_layout-zebra      = abap_true.
+    ls_layout-cwidth_opt = abap_true.
+    ls_layout-sel_mode   = 'A'.
 
-  ENDMETHOD.
-
-
-  METHOD add_buttons.
-
-    DATA(lo_fn) = mo_alv->get_functions( ).
-    DATA(lv_pos) = if_salv_c_function_position=>right_of_salv_functions.
-
-    TRY.
-        " Thứ tự 8 nút theo FS mục 3.4
-        lo_fn->add_function( name = gc_fcode-draft   icon = CONV #( icon_create )
-                             text = 'Tích hợp HĐ'   tooltip = 'Tạo hoá đơn nháp trên hệ thống HĐĐT (chờ cấp số)' position = lv_pos ).
-        lo_fn->add_function( name = gc_fcode-deldrf  icon = CONV #( icon_delete )
-                             text = 'Hủy HĐ nháp'   tooltip = 'Xoá hoá đơn nháp trên hệ thống HĐĐT, về trạng thái chưa tích hợp' position = lv_pos ).
-        lo_fn->add_function( name = gc_fcode-issue   icon = CONV #( icon_execute_object )
-                             text = 'Phát hành HĐ'  tooltip = 'Cấp số và ký duyệt trên chính bản nháp, gửi Cơ quan thuế' position = lv_pos ).
-        lo_fn->add_function( name = gc_fcode-update  icon = CONV #( icon_refresh )
-                             text = 'Cập nhật HĐ'   tooltip = 'Tra cứu và đồng bộ trạng thái hoá đơn / Cơ quan thuế về SAP' position = lv_pos ).
-        lo_fn->add_function( name = gc_fcode-adjref  icon = CONV #( icon_change )
-                             text = 'HĐ Điều chỉnh' tooltip = 'Gắn hoá đơn gốc và loại điều chỉnh / thay thế cho chứng từ' position = lv_pos ).
-        lo_fn->add_function( name = gc_fcode-mail    icon = CONV #( icon_mail )
-                             text = 'Send Email'    tooltip = 'Gửi email hoá đơn (PDF) cho khách hàng' position = lv_pos ).
-        lo_fn->add_function( name = gc_fcode-gom     icon = CONV #( icon_collapse )
-                             text = 'Gom HĐ'        tooltip = 'Gom các chứng từ đã chọn thành một hoá đơn' position = lv_pos ).
-        lo_fn->add_function( name = gc_fcode-ungom   icon = CONV #( icon_expand )
-                             text = 'Huỷ Gom HĐ'    tooltip = 'Gỡ toàn bộ chứng từ khỏi chứng từ gom' position = lv_pos ).
-        " Tiện ích
-        lo_fn->add_function( name = gc_fcode-edit    icon = CONV #( icon_edit_file )
-                             text = 'Sửa ngày/giờ/tên hàng' tooltip = 'Sửa ngày, giờ phát hành và tên hàng trước khi tích hợp' position = lv_pos ).
-        lo_fn->add_function( name = gc_fcode-getfile icon = CONV #( icon_pdf )
-                             text = 'Lấy file'      tooltip = 'Tải file PDF hoá đơn từ nhà cung cấp' position = lv_pos ).
-        lo_fn->add_function( name = gc_fcode-showjs  icon = CONV #( icon_xml_doc )
-                             text = 'Xem payload'   tooltip = 'Xem payload sẽ gửi cho nhà cung cấp (không gọi API)' position = lv_pos ).
-        lo_fn->add_function( name = gc_fcode-showlog icon = CONV #( icon_protocol )
-                             text = 'Log'           tooltip = 'Xem log gọi API của chứng từ' position = lv_pos ).
-      CATCH cx_salv_wrong_call cx_salv_existing INTO DATA(lx_fn).
-        " SALV toàn màn hình không cho thêm nút vào toolbar chuẩn. Không nuốt
-        " ngoại lệ: bật cờ để build_alv dùng GUI status riêng và cho người
-        " dùng biết lý do nếu status chưa được tạo.
-        mv_own_status = abap_true.
-        DATA(lv_fn_msg) = |{ lx_fn->get_text( ) } Toolbar lấy từ GUI status | &&
-                          |{ gc_pfstatus }, tạo bằng SE41 nếu chưa có.|.
-        MESSAGE lv_fn_msg TYPE 'S' DISPLAY LIKE 'W'.
-    ENDTRY.
+    mo_grid->set_table_for_first_display(
+      EXPORTING
+        is_layout       = ls_layout
+      CHANGING
+        it_fieldcatalog = mt_fcat
+        it_outtab       = gt_alv ).
 
   ENDMETHOD.
 
 
-  METHOD set_columns.
+  METHOD pai_0100.
 
-    DATA(lo_cols) = mo_alv->get_columns( ).
-    lo_cols->set_optimize( abap_true ).
+    CASE i_ucomm.
+      WHEN 'BACK' OR 'EXIT' OR 'CANC'.
+        LEAVE TO SCREEN 0.
+      WHEN OTHERS.
+        " Nút của grid đi qua event USER_COMMAND, không qua PAI
+    ENDCASE.
 
-    TRY.
-        lo_cols->get_column( 'LIGHT' )->set_short_text( 'TT' ).
-        lo_cols->get_column( 'LIGHT' )->set_medium_text( 'Trạng thái' ).
-        lo_cols->get_column( 'LIGHT' )->set_long_text( 'Trạng thái HĐĐT' ).
-        CAST cl_salv_column_table( lo_cols->get_column( 'LIGHT' ) )->set_icon( abap_true ).
-        lo_cols->get_column( 'MAIL_LIGHT' )->set_short_text( 'Email' ).
-        lo_cols->get_column( 'MAIL_LIGHT' )->set_medium_text( 'Trạng thái email' ).
-        CAST cl_salv_column_table( lo_cols->get_column( 'MAIL_LIGHT' ) )->set_icon( abap_true ).
-        lo_cols->get_column( 'REVERSED' )->set_short_text( 'Đảo' ).
-        lo_cols->get_column( 'REVERSED' )->set_medium_text( 'Đã đảo/huỷ' ).
-        CAST cl_salv_column_table( lo_cols->get_column( 'REVERSED' ) )->set_icon( abap_true ).
+  ENDMETHOD.
 
-        lo_cols->get_column( 'SRC_DOCNO' )->set_medium_text( 'Số chứng từ' ).
-        lo_cols->get_column( 'GOM_NO' )->set_medium_text( 'Số FI gom' ).
-        lo_cols->get_column( 'AWKEY' )->set_medium_text( 'Billing SD' ).
-        lo_cols->get_column( 'INV_DATE' )->set_medium_text( 'Ngày phát hành' ).
-        lo_cols->get_column( 'INV_TIME' )->set_medium_text( 'Giờ phát hành' ).
-        lo_cols->get_column( 'BUYER_NAME' )->set_medium_text( 'Tên đơn vị' ).
-        lo_cols->get_column( 'BUYER_ADDR' )->set_medium_text( 'Địa chỉ' ).
-        lo_cols->get_column( 'BUYER_TAX' )->set_medium_text( 'Mã số thuế' ).
-        lo_cols->get_column( 'BUYER_MAIL' )->set_medium_text( 'Email' ).
-        lo_cols->get_column( 'ITEM_TEXT' )->set_medium_text( 'Tên hàng (nhập tay)' ).
-        lo_cols->get_column( 'PAYM' )->set_medium_text( 'HT thanh toán' ).
-        lo_cols->get_column( 'EXCH_RATE' )->set_medium_text( 'Tỷ giá' ).
-        lo_cols->get_column( 'AMOUNT' )->set_medium_text( 'Thành tiền' ).
-        lo_cols->get_column( 'VAT_AMOUNT' )->set_medium_text( 'Tiền thuế' ).
-        lo_cols->get_column( 'TOTAL' )->set_medium_text( 'Tổng tiền' ).
-        lo_cols->get_column( 'TAX_SUMM' )->set_medium_text( 'Thuế suất' ).
-        lo_cols->get_column( 'TEMPLATE' )->set_medium_text( 'Mẫu HĐ' ).
-        lo_cols->get_column( 'SERIAL' )->set_medium_text( 'Ký hiệu HĐ' ).
-        lo_cols->get_column( 'SEQ' )->set_medium_text( 'Số hoá đơn' ).
-        lo_cols->get_column( 'ISSUE_DATE' )->set_medium_text( 'Ngày tích hợp' ).
-        lo_cols->get_column( 'MSCQT' )->set_medium_text( 'Mã CQT' ).
-        lo_cols->get_column( 'SEC_CODE' )->set_medium_text( 'Mã tra cứu' ).
-        lo_cols->get_column( 'ADJ_CODE' )->set_short_text( 'Loại ĐC' ).
-        lo_cols->get_column( 'ADJ_CODE' )->set_medium_text( 'Loại điều chỉnh' ).
-        lo_cols->get_column( 'REF_DOCNO' )->set_medium_text( 'Số chứng từ gốc' ).
-        lo_cols->get_column( 'REF_GJAHR' )->set_medium_text( 'Năm chứng từ gốc' ).
-        lo_cols->get_column( 'STATUS_TXT' )->set_medium_text( 'Diễn giải TT' ).
-        lo_cols->get_column( 'TAX_STATUS' )->set_medium_text( 'TT Cơ quan thuế' ).
-        lo_cols->get_column( 'MESSAGE' )->set_medium_text( 'Thông báo' ).
 
-        lo_cols->get_column( 'LOG_ID' )->set_technical( abap_true ).
-        lo_cols->get_column( 'MSGTY' )->set_technical( abap_true ).
+  METHOD on_toolbar.
 
-        CAST cl_salv_column_table( lo_cols->get_column( 'INV_LINK' )
-          )->set_cell_type( if_salv_c_cell_type=>hotspot ).
-      CATCH cx_salv_not_found.
-        " Cột có thể bị đổi tên khi mở rộng -> bỏ qua
-    ENDTRY.
+    " 12 nút nghiệp vụ khai ngay trong code: GUI status chỉ cần Back /
+    " Exit / Cancel, không phải khai mã và không cần function key.
+    DATA lt_btn TYPE STANDARD TABLE OF stb_button WITH DEFAULT KEY.
+
+    lt_btn = VALUE #(
+      ( butn_type = 3 )
+      ( function = gc_fcode-draft   icon = CONV #( icon_create )
+        text = 'Tích hợp HĐ'   quickinfo = 'Tạo hoá đơn nháp trên hệ thống HĐĐT (chờ cấp số)' )
+      ( function = gc_fcode-deldrf  icon = CONV #( icon_delete )
+        text = 'Hủy HĐ nháp'   quickinfo = 'Xoá hoá đơn nháp, đưa chứng từ về chưa tích hợp' )
+      ( function = gc_fcode-issue   icon = CONV #( icon_execute_object )
+        text = 'Phát hành HĐ'  quickinfo = 'Cấp số và ký duyệt trên chính bản nháp' )
+      ( function = gc_fcode-update  icon = CONV #( icon_refresh )
+        text = 'Cập nhật HĐ'   quickinfo = 'Tra cứu và đồng bộ trạng thái về SAP' )
+      ( function = gc_fcode-adjref  icon = CONV #( icon_change )
+        text = 'HĐ Điều chỉnh' quickinfo = 'Gắn hoá đơn gốc và loại điều chỉnh / thay thế' )
+      ( butn_type = 3 )
+      ( function = gc_fcode-mail    icon = CONV #( icon_mail )
+        text = 'Send Email'    quickinfo = 'Gửi email hoá đơn (PDF) cho khách hàng' )
+      ( function = gc_fcode-gom     icon = CONV #( icon_collapse )
+        text = 'Gom HĐ'        quickinfo = 'Gom các chứng từ đã chọn thành một hoá đơn' )
+      ( function = gc_fcode-ungom   icon = CONV #( icon_expand )
+        text = 'Huỷ Gom HĐ'    quickinfo = 'Gỡ toàn bộ chứng từ khỏi chứng từ gom' )
+      ( function = gc_fcode-edit    icon = CONV #( icon_edit_file )
+        text = 'Sửa ngày/giờ'  quickinfo = 'Sửa ngày, giờ phát hành và tên hàng' )
+      ( butn_type = 3 )
+      ( function = gc_fcode-getfile icon = CONV #( icon_pdf )
+        text = 'Lấy file'      quickinfo = 'Tải file PDF hoá đơn từ nhà cung cấp' )
+      ( function = gc_fcode-showjs  icon = CONV #( icon_xml_doc )
+        text = 'Xem payload'   quickinfo = 'Xem payload sẽ gửi cho nhà cung cấp (không gọi API)' )
+      ( function = gc_fcode-showlog icon = CONV #( icon_protocol )
+        text = 'Log'           quickinfo = 'Xem log gọi API của chứng từ' ) ).
+
+    APPEND LINES OF lt_btn TO e_object->mt_toolbar.
+
+  ENDMETHOD.
+
+
+  METHOD on_user_command.
+
+    dispatch( e_ucomm ).
+
+  ENDMETHOD.
+
+
+  METHOD dispatch.
+
+    CASE i_code.
+      WHEN gc_fcode-draft.    do_draft( ).
+      WHEN gc_fcode-deldrf.   do_delete_draft( ).
+      WHEN gc_fcode-issue.    do_issue( ).
+      WHEN gc_fcode-update.   do_update( ).
+      WHEN gc_fcode-adjref.   do_adjust_ref( ).
+      WHEN gc_fcode-mail.     do_mail( ).
+      WHEN gc_fcode-gom.      do_gom( ).
+      WHEN gc_fcode-ungom.    do_ungom( ).
+      WHEN gc_fcode-edit.     do_edit( ).
+      WHEN gc_fcode-getfile.  do_getfile( ).
+      WHEN gc_fcode-showjs.   show_payload( ).
+      WHEN gc_fcode-showlog.  show_log( ).
+      WHEN OTHERS.
+    ENDCASE.
+
+  ENDMETHOD.
+
+
+  METHOD refresh_grid.
+
+    IF mo_grid IS NOT BOUND.
+      RETURN.
+    ENDIF.
+
+    DATA ls_stable TYPE lvc_s_stbl.
+    ls_stable-row = abap_true.
+    ls_stable-col = abap_true.
+    mo_grid->refresh_table_display(
+      EXPORTING
+        is_stable = ls_stable
+      EXCEPTIONS
+        OTHERS    = 0 ).
+
+  ENDMETHOD.
+
+
+  METHOD on_hotspot.
+
+    " Nhấn vào link tra cứu hoá đơn -> mở trình duyệt
+    IF e_column_id-fieldname <> 'INV_LINK'.
+      RETURN.
+    ENDIF.
+    IF e_row_id-index < 1 OR e_row_id-index > lines( gt_alv ).
+      RETURN.
+    ENDIF.
+
+    DATA(lv_url) = CONV string( gt_alv[ e_row_id-index ]-inv_link ).
+    IF lv_url IS INITIAL.
+      RETURN.
+    ENDIF.
+
+    " Dạng ngắn ( name = value ) không đi kèm được EXCEPTIONS
+    cl_gui_frontend_services=>execute(
+      EXPORTING  document   = lv_url
+      EXCEPTIONS cntl_error = 1
+                 OTHERS     = 2 ).
+    IF sy-subrc <> 0.
+      MESSAGE 'Không mở được link tra cứu hoá đơn.' TYPE 'S' DISPLAY LIKE 'W'.
+    ENDIF.
 
   ENDMETHOD.
 
 
   METHOD get_selected.
 
-    rt_index = mo_alv->get_selections( )->get_selected_rows( ).
+    IF mo_grid IS NOT BOUND.
+      RETURN.
+    ENDIF.
+
+    DATA lt_rows TYPE lvc_t_row.
+    mo_grid->get_selected_rows( IMPORTING et_index_rows = lt_rows ).
+    LOOP AT lt_rows ASSIGNING FIELD-SYMBOL(<fs_row>).
+      APPEND <fs_row>-index TO rt_index.
+    ENDLOOP.
 
   ENDMETHOD.
 
@@ -556,54 +726,6 @@ CLASS lcl_app IMPLEMENTATION.
   ENDMETHOD.
 
 
-  METHOD on_function.
-
-    CASE e_salv_function.
-      WHEN gc_fcode-draft.    do_draft( ).
-      WHEN gc_fcode-deldrf.   do_delete_draft( ).
-      WHEN gc_fcode-issue.    do_issue( ).
-      WHEN gc_fcode-update.   do_update( ).
-      WHEN gc_fcode-adjref.   do_adjust_ref( ).
-      WHEN gc_fcode-mail.     do_mail( ).
-      WHEN gc_fcode-gom.      do_gom( ).
-      WHEN gc_fcode-ungom.    do_ungom( ).
-      WHEN gc_fcode-edit.     do_edit( ).
-      WHEN gc_fcode-getfile.  do_getfile( ).
-      WHEN gc_fcode-showjs.   show_payload( ).
-      WHEN gc_fcode-showlog.  show_log( ).
-      WHEN OTHERS.
-    ENDCASE.
-
-  ENDMETHOD.
-
-
-  METHOD on_link_click.
-
-    " Nhấn vào link tra cứu hoá đơn -> mở trình duyệt
-    IF column <> 'INV_LINK'.
-      RETURN.
-    ENDIF.
-    IF row < 1 OR row > lines( gt_alv ).
-      RETURN.
-    ENDIF.
-
-    DATA(lv_url) = CONV string( gt_alv[ row ]-inv_link ).
-    IF lv_url IS INITIAL.
-      RETURN.
-    ENDIF.
-
-    " Dạng ngắn ( name = value ) không đi kèm được EXCEPTIONS
-    cl_gui_frontend_services=>execute(
-      EXPORTING  document   = lv_url
-      EXCEPTIONS cntl_error = 1
-                 OTHERS     = 2 ).
-    IF sy-subrc <> 0.
-      MESSAGE 'Không mở được link tra cứu hoá đơn.' TYPE 'S' DISPLAY LIKE 'W'.
-    ENDIF.
-
-  ENDMETHOD.
-
-
 *---------------------------------------------------------------------*
 * Nút Tích hợp HĐ (FS 3.6.1) — tạo hoá đơn nháp
 *---------------------------------------------------------------------*
@@ -633,7 +755,7 @@ CLASS lcl_app IMPLEMENTATION.
                                    ls_result-request_body.
       ENDIF.
     ENDLOOP.
-    mo_alv->refresh( ).
+    refresh_grid( ).
 
   ENDMETHOD.
 
@@ -663,7 +785,7 @@ CLASS lcl_app IMPLEMENTATION.
       DATA(ls_result) = mo_service->delete_draft( gt_request[ lv_row ] ).
       refresh_row( i_index = lv_row is_result = ls_result ).
     ENDLOOP.
-    mo_alv->refresh( ).
+    refresh_grid( ).
 
   ENDMETHOD.
 
@@ -702,7 +824,7 @@ CLASS lcl_app IMPLEMENTATION.
                                    ls_result-request_body.
       ENDIF.
     ENDLOOP.
-    mo_alv->refresh( ).
+    refresh_grid( ).
 
   ENDMETHOD.
 
@@ -733,7 +855,7 @@ CLASS lcl_app IMPLEMENTATION.
       ENDIF.
       refresh_row( i_index = lv_row is_result = ls_result ).
     ENDLOOP.
-    mo_alv->refresh( ).
+    refresh_grid( ).
 
   ENDMETHOD.
 
@@ -850,7 +972,7 @@ CLASS lcl_app IMPLEMENTATION.
       gt_alv[ lv_row ]-mail_light = COND #( WHEN ls_result-success = abap_true
                                             THEN icon_mail ELSE icon_message_error_small ).
     ENDLOOP.
-    mo_alv->refresh( ).
+    refresh_grid( ).
 
   ENDMETHOD.
 
@@ -1017,7 +1139,7 @@ CLASS lcl_app IMPLEMENTATION.
         PERFORM save_file USING ls_result-file_name ls_result-file_content.
       ENDIF.
     ENDLOOP.
-    mo_alv->refresh( ).
+    refresh_grid( ).
 
   ENDMETHOD.
 
@@ -1432,3 +1554,26 @@ FORM save_file USING i_name    TYPE string
   ENDIF.
 
 ENDFORM.
+
+
+*&---------------------------------------------------------------------*
+*& Module STATUS_0100 OUTPUT
+*&---------------------------------------------------------------------*
+*& Dynpro 0100 có layout RỖNG: toàn bộ vùng màn hình do docking
+*& container chiếm. Flow logic của dynpro chỉ gồm hai module này.
+*&---------------------------------------------------------------------*
+MODULE status_0100 OUTPUT.
+
+  go_app->pbo_0100( ).
+
+ENDMODULE.
+
+
+*&---------------------------------------------------------------------*
+*& Module USER_COMMAND_0100 INPUT
+*&---------------------------------------------------------------------*
+MODULE user_command_0100 INPUT.
+
+  go_app->pai_0100( sy-ucomm ).
+
+ENDMODULE.

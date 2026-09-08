@@ -76,7 +76,7 @@ AT SELECTION-SCREEN ON p_prov.
   ENDIF.
 
 START-OF-SELECTION.
-  DATA(go_app) = NEW lcl_app( ).
+  go_app = NEW lcl_app( ).
 
   " FS 3.6.9: "Phát hành tự động" chỉ có hiệu lực ở background job;
   " chạy online thì bỏ qua và chỉ hiển thị danh sách

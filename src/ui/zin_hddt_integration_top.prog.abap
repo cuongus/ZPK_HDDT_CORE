@@ -107,9 +107,10 @@ CONSTANTS: BEGIN OF gc_fcode,
              showlog TYPE salv_de_function VALUE 'ZLOG',     " Log
            END OF gc_fcode.
 
-" GUI status riêng của chương trình, chứa 12 mã chức năng trên. Cần khi
-" SALV toàn màn hình không cho ADD_FUNCTION (xem docs/06 §3).
-CONSTANTS gc_pfstatus TYPE sypfkey VALUE 'ZSALV_HDDT' ##NO_TEXT.
+" GUI status của dynpro 0100 chứa ALV grid. Chỉ cần Back / Exit /
+" Cancel: 12 nút nghiệp vụ do event TOOLBAR của grid tự thêm.
+CONSTANTS gc_pfstatus TYPE sypfkey VALUE 'ZGRID_HDDT' ##NO_TEXT.
+CONSTANTS gc_dynnr    TYPE sydynnr VALUE '0100' ##NO_TEXT.
 
 " Hoạt động (ACTVT) kiểm quyền theo chức năng — object khai ở tham số
 " AUTH_OBJECT (trống = không kiểm), field BUKRS + ACTVT

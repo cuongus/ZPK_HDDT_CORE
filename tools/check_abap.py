@@ -27,6 +27,7 @@ Soát các lỗi mà ADT / SE24 sẽ báo khi activate:
   W. Khai báo lại thành phần / method đã có ở lớp cha
   X. Bảng WITH EMPTY KEY truyền vào tham số TABLES của FM cổ điển
   Y. Tham số method dùng kiểu dựng sẵn c/n/x/p, kể cả kèm LENGTH
+  Z. Lớp local trong program: method hiện thực nhưng không khai báo
 
 Chạy: python tools/check_abap.py
 """
@@ -314,6 +315,31 @@ def check_template(path):
 # K. DATA() suy ra P(8,0) khi biểu thức có phép chia / nhân trên số P
 # L. POSIX regex đã deprecated, phải dùng PCRE
 # ---------------------------------------------------------------------------
+def check_local_class(path):
+    """Z. Lớp local trong program: method hiện thực mà không có khai báo và
+    ngược lại. read_class chỉ soát global class nên chỗ này bù lại."""
+    if not path.endswith(".prog.abap"):
+        return
+    declared, implemented, abstract = {}, {}, set()
+    for ln, st in statements(io.open(path, encoding="utf-8").read()):
+        w = first_word(st)
+        if w in ("METHODS", "CLASS-METHODS"):
+            name = st.split(" ")[1].lower().rstrip(":")
+            declared[name] = ln
+            if re.search(r"\bABSTRACT\b", st, re.I):
+                abstract.add(name)
+        elif w == "METHOD":
+            implemented[st.split(" ")[1].lower().rstrip(".")] = ln
+    for name, ln in implemented.items():
+        if name not in declared:
+            report("Z", path, ln, "method %s có hiện thực nhưng không còn khai "
+                   "báo trong lớp local" % name)
+    for name, ln in declared.items():
+        if name not in implemented and name not in abstract:
+            report("Z", path, ln, "method %s khai báo nhưng chưa hiện thực "
+                   "trong lớp local" % name)
+
+
 def check_param_type(path):
     """Y. Tham số method dùng kiểu dựng sẵn c/n/x/p (kể cả kèm LENGTH).
 
@@ -691,6 +717,7 @@ for p in sources("*.abap"):
     check_template(p)
     check_style(p)
     check_param_type(p)
+    check_local_class(p)
     check_select(p)
     check_iref(p)
     check_ddic_use(p)
@@ -809,6 +836,7 @@ KIND = {
     "W": "Khai báo lại thành phần của lớp cha",
     "X": "Bảng EMPTY KEY truyền vào TABLES của FM",
     "Y": "Tham số method dùng kiểu dựng sẵn c/n/x/p",
+    "Z": "Lớp local: khai báo và hiện thực method không khớp",
 }
 print("Đã đọc: %d interface, %d class" % (len(INTF), len(CLS)))
 for k in sorted(KIND):

@@ -54,22 +54,23 @@ Bước 8 — Program + transaction
 Trong ADT/SE80 dùng **mass activation** (chọn tất cả object inactive → Activate)
 để hệ thống tự giải quyết thứ tự phụ thuộc vòng (interface ↔ exception class).
 
-### GUI status ZSALV_HDDT (bắt buộc để 12 nút nghiệp vụ hiện ra)
+### Dynpro 0100 + GUI status ZGRID_HDDT (bắt buộc để 12 nút hiện ra)
 
-`CL_SALV_TABLE` ở chế độ toàn màn hình KHÔNG cho thêm nút vào toolbar chuẩn:
-`ADD_FUNCTION` ném `CX_SALV_WRONG_CALL`. Toolbar phải lấy từ GUI status riêng.
+Màn hình danh sách dùng `CL_GUI_ALV_GRID` trên docking container, 12 nút khai
+trong code qua event `TOOLBAR`. Phải tạo tay hai object:
 
 ```
-SE41 → Program ZPG_HDDT_INTEGRATION → Status ZSALV_HDDT → Create
-  Copy status: program SAPLSALV_METADATA_STATUS, status STANDARD_FULLSCREEN
-  Application toolbar: thêm 12 mã chức năng
-    ZDRAFT ZDELDRF ZISSUE ZUPDATE ZADJREF ZMAIL
-    ZGOM ZUNGOM ZEDIT ZFILE ZJSON ZLOG
-  Activate
+SE51 → dynpro 0100 của ZPG_HDDT_INTEGRATION
+  Layout để RỖNG; flow logic:
+    PROCESS BEFORE OUTPUT.  MODULE status_0100.
+    PROCESS AFTER INPUT.    MODULE user_command_0100.
+
+SE41 → status ZGRID_HDDT, type Normal screen
+  Bấm Display Standards; chỉ cần BACK / EXIT / CANC
+  Application Toolbar để trống
 ```
 
-Thiếu status thì chương trình vẫn chạy, vẫn hiện ALV, nhưng chỉ có toolbar chuẩn
-và một cảnh báo nêu tên status cần tạo.
+Chi tiết và cách kiểm tra: [docs/12-dynpro-alv-grid.md](12-dynpro-alv-grid.md).
 
 ### Table Maintenance Generator (bắt buộc để `ZFI002` chạy)
 
