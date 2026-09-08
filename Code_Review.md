@@ -428,7 +428,7 @@ của ADT, nguyên nhân và cách sửa đã áp dụng vào `src/` (repo khôn
 | 17 | `In this statement, the INTO clause has to be placed at the end of the statement` | 20 câu SELECT: `ZCL_HDDT_LOG` (6), `ZCL_HDDT_TOKEN`, `ZCL_HDDT_PROV_TEMPLATE`, `ZPG_HDDT_INTEGRATION`, `ZPG_HDDT_INTEGRATION_F01` (3), `ZPG_HDDT_LOG`, `ZPG_HDDT_SETUP` (7) | ABAP SQL dạng nghiêm ngặt (dùng host expression `@`) bắt buộc thứ tự `SELECT … FROM … WHERE … GROUP BY … HAVING … ORDER BY … INTO … UP TO …`; đặt `INTO` trước `WHERE` là lỗi | dời khối `INTO` xuống sau `WHERE` / `ORDER BY` ở cả 20 câu. `UP TO n ROWS` vẫn đứng SAU `INTO` mới đúng |
 | 18 | `Field "\|" is unknown` | `ZPG_HDDT_LOG` dòng 446, 449 và `ZPG_HDDT_INTEGRATION_F01` dòng 581, 648 | `PERFORM ... USING` chỉ nhận TÊN BIẾN hoặc literal, không nhận biểu thức; string template `\|...\|` bị hiểu là tên field | gán template vào biến trước (`lv_fn_req`, `lv_fn_res`, `lv_title`) rồi truyền biến |
 | 19 | `Unable to interpret "EXCEPTIONS"` | `ZPG_HDDT_INTEGRATION_F01` dòng 550 | `cl_gui_frontend_services=>execute( document = lv_url EXCEPTIONS ... )` — dạng ngắn `( name = value )` không đi kèm được `EXCEPTIONS` / `IMPORTING` / `RECEIVING` | ghi rõ `EXPORTING document = …` rồi mới `EXCEPTIONS`. Các chỗ khác trong package đã có `EXPORTING`/`IMPORTING` nên không bị |
-| 20 | `Arithmetic calculation not permitted here` | `ZPG_HDDT_INTEGRATION_F01` dòng 836 | gọi method ngay trên biểu thức `NEW`: `DATA(lv_gom) = NEW zcl_hddt_gom( )->create( … )` trong chương trình cổ điển | tách hai câu: `DATA(lo_gom) = NEW zcl_hddt_gom( ).` rồi `DATA(lv_gom) = lo_gom->create( … ).` [Unverified] chưa rõ vì sao cùng cú pháp lại chạy được trong class; tách ra là cách chắc chắn |
+| 20 | `Arithmetic calculation not permitted here` | `ZPG_HDDT_INTEGRATION_F01`, câu `MESSAGE s028(zms_hddt) WITH lines( lt_req ) lv_gom` (dòng 836 ở bản cũ, 840 sau khi thêm 4 dòng sửa PERFORM) | `MESSAGE ... WITH` chỉ nhận tên biến hoặc literal, không nhận biểu thức; `lines( )` bị hiểu là phép tính | `DATA(lv_cnt) = \|{ lines( lt_req ) }\|.` rồi `MESSAGE s028(zms_hddt) WITH lv_cnt lv_gom.` |
 | 21 | `"…" is not an admissible value for type "C(20)"` (cảnh báo, text bị cắt) | `ZPG_HDDT_INTEGRATION_F01` dòng 1225, 1284 (bản trên hệ) | `SVAL-FIELDTEXT` chỉ dài 20 ký tự; hai nhãn pop-up dài 48 và 22 ký tự | rút còn `Loại ĐC (2/3/4/5)` và `Ngày phát hành`; ý nghĩa mã điều chỉnh tra bằng F4 trên domain |
 
 Quy tắc rút ra cho phần DEFINITION của class:
@@ -446,6 +446,7 @@ Quy tắc rút ra cho phần DEFINITION của class:
 - Lỗi có cột Type là **ABAP Activation** (không phải ABAP Syntax) hầu như luôn là phụ thuộc chưa activate, không phải lỗi code.
 - Thứ tự mệnh đề SQL: `WHERE` → `GROUP BY` → `HAVING` → `ORDER BY` → `INTO` → `UP TO`.
 - `PERFORM ... USING` chỉ nhận tên biến hoặc literal, không nhận string template.
+- `MESSAGE ... WITH` cũng chỉ nhận tên biến hoặc literal, không nhận `lines( )` hay string template.
 - Gọi method có `EXCEPTIONS` phải ghi rõ `EXPORTING`, không dùng dạng ngắn `( name = value )`.
 - `SVAL-FIELDTEXT` tối đa 20 ký tự.
 
