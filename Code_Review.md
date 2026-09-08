@@ -426,6 +426,10 @@ của ADT, nguyên nhân và cách sửa đã áp dụng vào `src/` (repo khôn
 | 15 | `The literal "' '" is not type-compatible with the formal parameter "I_ORG_GJAHR"` | `ZCL_HDDT_SERVICE~attach_original` dòng 1227 | truyền `space` (literal CHAR1) cho tham số kiểu `GJAHR` là NUMC(4); literal ký tự không tương thích kiểu số | `i_org_gjahr = '0000'`. Bốn tham số còn lại vẫn dùng `space` được vì đều là CHAR (`ZDE_HDDT_DOCNO` CHAR20, `ZDE_HDDT_SRCTYPE`, `ZDE_HDDT_ADJTYPE`, `ZDE_HDDT_ADJDIR` CHAR1) |
 | 16 | `Method "GET_SECRET" / "GET_TOKEN" / "INVALIDATE" is unknown or PROTECTED or PRIVATE` — cột Type ghi **ABAP Activation**, không phải Syntax | `ZCL_HDDT_SERVICE` dòng 288, 345, 356, 357 | KHÔNG phải lỗi source: `ZCL_HDDT_TOKEN~get_token`/`~invalidate` và `ZCL_HDDT_SECRET~get_secret` đều ở PUBLIC SECTION. Cùng nguyên nhân dòng 13: hai class kia chưa activate nên bản ACTIVE vẫn là khung rỗng do wizard sinh | Activate `ZCL_HDDT_TOKEN`, `ZCL_HDDT_SECRET` (và các class chúng phụ thuộc) trước, hoặc chọn package rồi Activate All Inactive để hệ tự xếp thứ tự. Không sửa gì trong source |
 | 17 | `In this statement, the INTO clause has to be placed at the end of the statement` | 20 câu SELECT: `ZCL_HDDT_LOG` (6), `ZCL_HDDT_TOKEN`, `ZCL_HDDT_PROV_TEMPLATE`, `ZPG_HDDT_INTEGRATION`, `ZPG_HDDT_INTEGRATION_F01` (3), `ZPG_HDDT_LOG`, `ZPG_HDDT_SETUP` (7) | ABAP SQL dạng nghiêm ngặt (dùng host expression `@`) bắt buộc thứ tự `SELECT … FROM … WHERE … GROUP BY … HAVING … ORDER BY … INTO … UP TO …`; đặt `INTO` trước `WHERE` là lỗi | dời khối `INTO` xuống sau `WHERE` / `ORDER BY` ở cả 20 câu. `UP TO n ROWS` vẫn đứng SAU `INTO` mới đúng |
+| 18 | `Field "\|" is unknown` | `ZPG_HDDT_LOG` dòng 446, 449 và `ZPG_HDDT_INTEGRATION_F01` dòng 581, 648 | `PERFORM ... USING` chỉ nhận TÊN BIẾN hoặc literal, không nhận biểu thức; string template `\|...\|` bị hiểu là tên field | gán template vào biến trước (`lv_fn_req`, `lv_fn_res`, `lv_title`) rồi truyền biến |
+| 19 | `Unable to interpret "EXCEPTIONS"` | `ZPG_HDDT_INTEGRATION_F01` dòng 550 | `cl_gui_frontend_services=>execute( document = lv_url EXCEPTIONS ... )` — dạng ngắn `( name = value )` không đi kèm được `EXCEPTIONS` / `IMPORTING` / `RECEIVING` | ghi rõ `EXPORTING document = …` rồi mới `EXCEPTIONS`. Các chỗ khác trong package đã có `EXPORTING`/`IMPORTING` nên không bị |
+| 20 | `Arithmetic calculation not permitted here` | `ZPG_HDDT_INTEGRATION_F01` dòng 836 | gọi method ngay trên biểu thức `NEW`: `DATA(lv_gom) = NEW zcl_hddt_gom( )->create( … )` trong chương trình cổ điển | tách hai câu: `DATA(lo_gom) = NEW zcl_hddt_gom( ).` rồi `DATA(lv_gom) = lo_gom->create( … ).` [Unverified] chưa rõ vì sao cùng cú pháp lại chạy được trong class; tách ra là cách chắc chắn |
+| 21 | `"…" is not an admissible value for type "C(20)"` (cảnh báo, text bị cắt) | `ZPG_HDDT_INTEGRATION_F01` dòng 1225, 1284 (bản trên hệ) | `SVAL-FIELDTEXT` chỉ dài 20 ký tự; hai nhãn pop-up dài 48 và 22 ký tự | rút còn `Loại ĐC (2/3/4/5)` và `Ngày phát hành`; ý nghĩa mã điều chỉnh tra bằng F4 trên domain |
 
 Quy tắc rút ra cho phần DEFINITION của class:
 
@@ -441,6 +445,9 @@ Quy tắc rút ra cho phần DEFINITION của class:
 - Không truyền `space` cho tham số kiểu số hoặc ngày; NUMC dùng `'0000'`, số dùng `0`.
 - Lỗi có cột Type là **ABAP Activation** (không phải ABAP Syntax) hầu như luôn là phụ thuộc chưa activate, không phải lỗi code.
 - Thứ tự mệnh đề SQL: `WHERE` → `GROUP BY` → `HAVING` → `ORDER BY` → `INTO` → `UP TO`.
+- `PERFORM ... USING` chỉ nhận tên biến hoặc literal, không nhận string template.
+- Gọi method có `EXCEPTIONS` phải ghi rõ `EXPORTING`, không dùng dạng ngắn `( name = value )`.
+- `SVAL-FIELDTEXT` tối đa 20 ký tự.
 
 Phần INTERFACE (`ZIF_*`) giữ nguyên comment banner vì các interface đã lưu được trên S25;
 nếu về sau gặp cùng lỗi #4 thì áp dụng đúng cách sửa trên.
