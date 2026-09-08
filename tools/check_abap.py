@@ -24,6 +24,7 @@ Soát các lỗi mà ADT / SE24 sẽ báo khi activate:
   T. SVAL-FIELDTEXT dài quá 20 ký tự (SE38 cắt bớt)
   U. Dạng ngắn ( name = value ) đi kèm EXCEPTIONS mà thiếu EXPORTING
   V. MESSAGE ... WITH nhận biểu thức thay vì tên biến
+  W. Khai báo lại thành phần / method đã có ở lớp cha
 
 Chạy: python tools/check_abap.py
 """
@@ -665,6 +666,16 @@ for name, info in CLS.items():
             report("A", path, d["line"],
                    "%s.%s khai báo nhưng chưa hiện thực" % (name, mname))
 
+    # W. khai báo lại thành phần / method đã có ở lớp cha
+    for a in ancestors(name):
+        for mem in sorted(info["members"] & CLS[a]["members"]):
+            report("W", path, 1, "%s khai báo lại %s đã có ở lớp cha %s"
+                   % (name, mem.upper(), a))
+        for mname, d in info["declared"].items():
+            if not d["redef"] and mname in CLS[a]["declared"]:
+                report("W", path, d["line"], "%s khai báo lại method %s của lớp "
+                       "cha %s mà không có REDEFINITION" % (name, mname, a))
+
     known = set(info["declared"])
     for intf in info["intf"] | {i for a in ancestors(name) for i in CLS[a]["intf"]}:
         known |= {intf.lower() + "~" + m for m in INTF.get(intf, {}).get("methods", set())}
@@ -746,6 +757,7 @@ KIND = {
     "T": "SVAL-FIELDTEXT dài quá 20 ký tự",
     "U": "Dạng ngắn name = value đi kèm EXCEPTIONS",
     "V": "MESSAGE ... WITH nhận biểu thức",
+    "W": "Khai báo lại thành phần của lớp cha",
 }
 print("Đã đọc: %d interface, %d class" % (len(INTF), len(CLS)))
 for k in sorted(KIND):

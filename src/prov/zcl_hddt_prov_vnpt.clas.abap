@@ -33,7 +33,8 @@ CLASS zcl_hddt_prov_vnpt DEFINITION
 
   PUBLIC SECTION.
 
-    CONSTANTS gc_provider TYPE zde_hddt_prov VALUE 'VNPT' ##NO_TEXT.
+    "! Không đặt tên GC_PROVIDER: lớp cha ZCL_HDDT_PROV_TEMPLATE đã có
+    CONSTANTS gc_prov_vnpt TYPE zde_hddt_prov VALUE 'VNPT' ##NO_TEXT.
 
     METHODS zif_hddt_provider~get_id         REDEFINITION .
     METHODS zif_hddt_provider~parse_response REDEFINITION .
@@ -57,7 +58,7 @@ CLASS zcl_hddt_prov_vnpt IMPLEMENTATION.
 
   METHOD zif_hddt_provider~get_id.
 
-    r_provider = gc_provider.
+    r_provider = gc_prov_vnpt.
 
   ENDMETHOD.
 
