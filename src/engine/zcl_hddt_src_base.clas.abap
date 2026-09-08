@@ -37,11 +37,11 @@ CLASS zcl_hddt_src_base DEFINITION
 
   PROTECTED SECTION.
 
-    "! Thuế suất theo mã thuế đọc từ bảng thuế của chứng từ
     TYPES: BEGIN OF ty_mwskz_rate,
              mwskz TYPE mwskz,
              kbetr TYPE kbetr,
            END OF ty_mwskz_rate.
+    "! Thuế suất theo mã thuế đọc từ bảng thuế của chứng từ
     TYPES ty_t_mwskz_rate TYPE SORTED TABLE OF ty_mwskz_rate
                           WITH UNIQUE KEY mwskz.
 
@@ -716,8 +716,8 @@ CLASS zcl_hddt_src_base IMPLEMENTATION.
 
     " Gộp các đoạn ', , ,' do trường trống thành một dấu phẩy, cắt dấu
     " phẩy / khoảng trắng đầu-cuối (dự án tham chiếu REPLACE 6 lần + SHIFT)
-    c_addr = replace( val = c_addr regex = `(\s*,\s*)+` with = `, ` occ = 0 ).
-    c_addr = replace( val = c_addr regex = `^[\s,]+|[\s,]+$` with = `` occ = 0 ).
+    c_addr = replace( val = c_addr pcre = `(\s*,\s*)+` with = `, ` occ = 0 ).
+    c_addr = replace( val = c_addr pcre = `^[\s,]+|[\s,]+$` with = `` occ = 0 ).
     CONDENSE c_addr.
 
     IF c_addr IS INITIAL OR i_land1 IS INITIAL.
@@ -781,17 +781,18 @@ CLASS zcl_hddt_src_base IMPLEMENTATION.
                             i_bukrs   = i_bukrs
                             i_default = `MWAS` ).
     SELECT SINGLE land1 FROM t001 WHERE bukrs = @i_bukrs INTO @DATA(lv_land1).
-    SELECT k~kbetr
+    " ORDER BY chỉ nhận cột có trong danh sách SELECT -> lấy kèm DATBI
+    SELECT a~datbi AS datbi, k~kbetr AS kbetr
       FROM a003 AS a INNER JOIN konp AS k ON k~knumh = a~knumh
       WHERE a~kappl = 'TX'
         AND a~kschl = @lv_kschl
         AND a~aland = @lv_land1
         AND a~mwskz = @i_mwskz
         AND k~loevm_ko = @space
-      ORDER BY a~datbi DESCENDING
+      ORDER BY datbi DESCENDING
       INTO TABLE @DATA(lt_konp)
       UP TO 1 ROWS.
-    IF sy-subrc = 0.
+    IF lt_konp IS NOT INITIAL.
       r_rate = lt_konp[ 1 ]-kbetr / 10.
     ENDIF.
 
@@ -821,7 +822,9 @@ CLASS zcl_hddt_src_base IMPLEMENTATION.
       r_tax = 0.
       RETURN.
     ENDIF.
-    DATA(lv_tax) = i_amount * i_rate / 100.
+    " Không dùng DATA() vì phép chia trên P suy ra P(8,0) -> mất số lẻ
+    DATA lv_tax TYPE decfloat34.
+    lv_tax = i_amount * i_rate / 100.
     IF i_waers = 'VND' OR i_waers IS INITIAL.
       r_tax = round( val = lv_tax dec = 0 ).
     ELSE.

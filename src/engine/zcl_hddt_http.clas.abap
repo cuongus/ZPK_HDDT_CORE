@@ -12,6 +12,8 @@
 *              Placeholder {taxcode} {serial} {seq} ... trong API_PATH
 *              được thay bằng bảng symbol do adapter cung cấp.
 * Tham Số    : SEND( is_call ) -> ty_response
+* Kiểu       : TY_CALL - thông tin kỹ thuật của một lần gọi, gom lại
+*              để chữ ký method không phình ra 20 tham số.
 *=====================================================================
 * Version   Ngày          Người sửa                Transport   Mô tả
 *=====================================================================
@@ -99,7 +101,7 @@ CLASS zcl_hddt_http IMPLEMENTATION.
 
     " Placeholder còn sót (không được adapter cung cấp) -> bỏ đi để
     " không gửi chuỗi '{taxcode}' lên nhà cung cấp.
-    REPLACE ALL OCCURRENCES OF REGEX '\{[A-Za-z_0-9]+\}'
+    REPLACE ALL OCCURRENCES OF PCRE '\{[A-Za-z_0-9]+\}'
             IN r_path WITH ``.
 
   ENDMETHOD.

@@ -24,6 +24,8 @@
 *              header Authorization. Danh sách thẻ cần che khai được
 *              trong ZTB_HDDT_PARM key LOG_MASK_TAGS.
 * Tham Số    : LOG_CALL / SAVE_INVOICE / SAVE_ITEMS / READ_PAYLOAD
+* Kiểu       : TY_PAYLOAD - nội dung log đã giải mã lại thành text,
+*              dùng cho màn hình xem log.
 *=====================================================================
 * Version   Ngày          Người sửa                Transport   Mô tả
 *=====================================================================
@@ -48,8 +50,6 @@ CLASS zcl_hddt_log DEFINITION
     CONSTANTS gc_mask           TYPE string
                                 VALUE '********' ##NO_TEXT.
 
-    "! Thông tin kỹ thuật của một lần gọi, gom lại để chữ ký method
-    "! không phình ra 20 tham số.
     TYPES: BEGIN OF ty_call_info,
              connid      TYPE zde_hddt_connid,
              method      TYPE zde_hddt_method,
@@ -66,7 +66,6 @@ CLASS zcl_hddt_log DEFINITION
              res_header  TYPE string,
            END OF ty_call_info.
 
-    "! Nội dung log đã giải mã lại thành text, dùng cho màn hình xem log.
     TYPES: BEGIN OF ty_payload,
              log_id     TYPE zde_hddt_logid,
              codepage   TYPE zde_hddt_codepage,
@@ -233,22 +232,22 @@ CLASS zcl_hddt_log IMPLEMENTATION.
       ENDIF.
 
       " (1) JSON:  "password" : "gia tri"   ->  "password":"********"
-      REPLACE ALL OCCURRENCES OF REGEX
+      REPLACE ALL OCCURRENCES OF PCRE
               |"{ lv_tag }"\\s*:\\s*"[^"]*"|
               IN r_text WITH |"{ lv_tag }":"{ gc_mask }"| IGNORING CASE.
 
       " (2) JSON số / không ngoặc kép: "token": abc123
-      REPLACE ALL OCCURRENCES OF REGEX
+      REPLACE ALL OCCURRENCES OF PCRE
               |"{ lv_tag }"\\s*:\\s*[^",\{\}\\[\\]]+|
               IN r_text WITH |"{ lv_tag }":"{ gc_mask }"| IGNORING CASE.
 
       " (3) form-urlencoded:  password=abc&  ->  password=********&
-      REPLACE ALL OCCURRENCES OF REGEX
+      REPLACE ALL OCCURRENCES OF PCRE
               |(^\|&){ lv_tag }=[^&]*|
               IN r_text WITH |$1{ lv_tag }={ gc_mask }| IGNORING CASE.
 
       " (4) HTTP header:  Authorization: Basic xxx  ->  Authorization: ********
-      REPLACE ALL OCCURRENCES OF REGEX
+      REPLACE ALL OCCURRENCES OF PCRE
               |(^\|\\n){ lv_tag }\\s*:\\s*[^\\n]*|
               IN r_text WITH |$1{ lv_tag }: { gc_mask }| IGNORING CASE.
     ENDLOOP.

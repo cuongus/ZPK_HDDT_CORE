@@ -54,7 +54,6 @@ CLASS zcl_hddt_src_fi DEFINITION
 
   PROTECTED SECTION.
 
-    "! Header chứng từ + dòng khách hàng (kết quả JOIN BKPF-BSEG)
     TYPES: BEGIN OF ty_hdr,
              bukrs      TYPE bkpf-bukrs,
              belnr      TYPE bkpf-belnr,
@@ -80,6 +79,7 @@ CLASS zcl_hddt_src_fi DEFINITION
              zlsch      TYPE bseg-zlsch,
              bvtyp      TYPE bseg-bvtyp,
            END OF ty_hdr.
+    "! Header chứng từ + dòng khách hàng (kết quả JOIN BKPF-BSEG)
     TYPES ty_t_hdr TYPE STANDARD TABLE OF ty_hdr WITH EMPTY KEY.
 
     TYPES: BEGIN OF ty_bseg,
@@ -115,7 +115,6 @@ CLASS zcl_hddt_src_fi DEFINITION
            END OF ty_bset.
     TYPES ty_t_bset TYPE STANDARD TABLE OF ty_bset WITH EMPTY KEY.
 
-    "! Dòng billing SD tham chiếu (khi BKPF-AWTYP = 'VBRK')
     TYPES: BEGIN OF ty_vbrp,
              vbeln TYPE vbrp-vbeln,
              posnr TYPE vbrp-posnr,
@@ -126,15 +125,16 @@ CLASS zcl_hddt_src_fi DEFINITION
              fkimg TYPE vbrp-fkimg,
              vrkme TYPE vbrp-vrkme,
            END OF ty_vbrp.
+    "! Dòng billing SD tham chiếu (khi BKPF-AWTYP = 'VBRK')
     TYPES ty_t_vbrp TYPE SORTED TABLE OF ty_vbrp WITH UNIQUE KEY vbeln posnr.
 
-    "! Nối dòng kế toán với dòng billing (ACDOCA-AWREF/AWITEM)
     TYPES: BEGIN OF ty_link,
              belnr  TYPE acdoca-belnr,
              buzei  TYPE acdoca-buzei,
              awref  TYPE acdoca-awref,
              awitem TYPE acdoca-awitem,
            END OF ty_link.
+    "! Nối dòng kế toán với dòng billing (ACDOCA-AWREF/AWITEM)
     TYPES ty_t_link TYPE SORTED TABLE OF ty_link WITH NON-UNIQUE KEY belnr buzei.
 
     TYPES: BEGIN OF ty_vbrk_pay,

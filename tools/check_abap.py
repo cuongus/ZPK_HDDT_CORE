@@ -11,6 +11,9 @@ Soát các lỗi mà ADT / SE24 sẽ báo khi activate:
   G. Ký tự { } chưa escape trong string template
   H. Tham chiếu hằng số / kiểu của interface không tồn tại
   I. Gọi method tĩnh của class trong package nhưng method không tồn tại
+  J. ABAP Doc đứng trước khai báo chuỗi (ADT báo sai vị trí)
+  K. DATA() suy ra P(8,0) từ biểu thức số học (mất phần thập phân)
+  L. POSIX regex đã deprecated, phải dùng PCRE
 
 Chạy: python tools/check_abap.py
 """
@@ -276,6 +279,28 @@ def check_template(path):
 
 
 # ---------------------------------------------------------------------------
+# J. ABAP Doc đứng trước khai báo chuỗi (CONSTANTS:/TYPES: BEGIN OF ...,)
+# K. DATA() suy ra P(8,0) khi biểu thức có phép chia / nhân trên số P
+# L. POSIX regex đã deprecated, phải dùng PCRE
+# ---------------------------------------------------------------------------
+def check_style(path):
+    lines = io.open(path, encoding="utf-8").read().split("\n")
+    for i, line in enumerate(lines, 1):
+        if re.match(r"\s*(TYPES|CONSTANTS):\s*BEGIN OF \w+\s*,", line) \
+                and i >= 2 and lines[i - 2].strip().startswith('"!'):
+            report("J", path, i - 1,
+                   "ABAP Doc trước khai báo chuỗi %s" % line.strip()[:40])
+        if re.search(r"DATA\((l[vs]_\w+)\)\s*=[^.]*[*/]", line) \
+                and "|" not in line and "&&" not in line:
+            report("K", path, i,
+                   "DATA() từ biểu thức số học suy ra P(8,0): %s" % line.strip()[:50])
+        if re.search(r"OCCURRENCES OF REGEX\b|\bFIND\b.*\bREGEX\b|\bregex\s*=", line) \
+                and not line.lstrip().startswith(("*", '"')):
+            report("L", path, i, "POSIX regex deprecated, dùng PCRE: %s"
+                   % line.strip()[:50])
+
+
+# ---------------------------------------------------------------------------
 # Chạy
 # ---------------------------------------------------------------------------
 for p in sorted(glob.glob("src/**/*.intf.abap", recursive=True)):
@@ -286,6 +311,7 @@ for p in sorted(glob.glob("src/**/*.clas.abap", recursive=True)):
     read_class(p)
 for p in sorted(glob.glob("src/**/*.abap", recursive=True)):
     check_template(p)
+    check_style(p)
 
 
 def ancestors(name):
@@ -377,6 +403,9 @@ KIND = {
     "G": "String template chưa escape { }",
     "H": "Hằng số / kiểu interface không tồn tại",
     "I": "Method tĩnh không tồn tại",
+    "J": "ABAP Doc sai vị trí (trước khai báo chuỗi)",
+    "K": "DATA() suy ra P(8,0) từ biểu thức số học",
+    "L": "POSIX regex deprecated (dùng PCRE)",
 }
 print("Đã đọc: %d interface, %d class" % (len(INTF), len(CLS)))
 for k in sorted(KIND):

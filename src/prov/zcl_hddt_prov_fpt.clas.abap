@@ -24,6 +24,7 @@
 *              cấu hình tham số FPT_USER_IN_BODY = '' để bỏ nút user.
 * Tham Số    : ZTB_HDDT_PROV: PROVIDER='FPT',
 *              CLASSNAME='ZCL_HDDT_PROV_FPT'
+* Hằng số    : GC_PARM - tham số cấu hình riêng của adapter FPT.
 *=====================================================================
 * Version   Ngày          Người sửa                Transport   Mô tả
 *=====================================================================
@@ -42,7 +43,6 @@ CLASS zcl_hddt_prov_fpt DEFINITION
 
     CONSTANTS gc_provider TYPE zde_hddt_prov VALUE 'FPT' ##NO_TEXT.
 
-    "! Tham số cấu hình riêng của adapter FPT
     CONSTANTS: BEGIN OF gc_parm,
                  "! '' = bỏ nút "user" trong payload (dùng Basic/JWT)
                  user_in_body TYPE zde_hddt_parmkey VALUE 'FPT_USER_IN_BODY',

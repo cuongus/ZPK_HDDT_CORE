@@ -184,7 +184,7 @@ CLASS zcl_hddt_writeback_fi IMPLEMENTATION.
     CALL FUNCTION 'FI_DOCUMENT_CHANGE'
       EXPORTING
         i_awtyp              = 'BKPF'
-        i_awref              = CONV awref( i_belnr )
+        i_awref              = i_belnr
         i_aworg              = CONV aworg( lv_aworg )
         i_bukrs              = i_bukrs
         i_belnr              = i_belnr
