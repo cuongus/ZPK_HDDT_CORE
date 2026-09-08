@@ -23,6 +23,7 @@ Soát các lỗi mà ADT / SE24 sẽ báo khi activate:
   S. PERFORM ... USING nhận biểu thức thay vì tên biến
   T. SVAL-FIELDTEXT dài quá 20 ký tự (SE38 cắt bớt)
   U. Dạng ngắn ( name = value ) đi kèm EXCEPTIONS mà thiếu EXPORTING
+  V. MESSAGE ... WITH nhận biểu thức thay vì tên biến
 
 Chạy: python tools/check_abap.py
 """
@@ -605,6 +606,14 @@ def check_ui(path):
                 report("T", path, i, "FIELDTEXT %d ký tự (tối đa 20): %s"
                        % (len(m.group(1)), m.group(1)))
 
+    # V. MESSAGE ... WITH chỉ nhận tên biến / literal, không nhận biểu thức
+    for ln, st in statements(io.open(path, encoding="utf-8").read()):
+        if st.upper().startswith("MESSAGE ") and re.search(r"\bWITH\b", st, re.I):
+            tail = re.split(r"\bWITH\b", st, flags=re.I)[1]
+            if re.search(r"\w\s*\(", tail) or "|" in tail or "&&" in tail:
+                report("V", path, ln, "MESSAGE ... WITH nhận biểu thức, phải gán "
+                       "vào biến trước")
+
     for ln, st in statements(io.open(path, encoding="utf-8").read()):
         if not re.search(r"\bEXCEPTIONS\b", st) or st.upper().startswith("CALL FUNCTION"):
             continue
@@ -736,6 +745,7 @@ KIND = {
     "S": "PERFORM USING nhận biểu thức",
     "T": "SVAL-FIELDTEXT dài quá 20 ký tự",
     "U": "Dạng ngắn name = value đi kèm EXCEPTIONS",
+    "V": "MESSAGE ... WITH nhận biểu thức",
 }
 print("Đã đọc: %d interface, %d class" % (len(INTF), len(CLS)))
 for k in sorted(KIND):

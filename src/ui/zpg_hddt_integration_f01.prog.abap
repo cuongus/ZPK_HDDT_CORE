@@ -841,7 +841,9 @@ CLASS lcl_app IMPLEMENTATION.
                                        i_gjahr     = p_gjahr
                                        it_requests = lt_req ).
         COMMIT WORK AND WAIT.
-        MESSAGE s028(zms_hddt) WITH lines( lt_req ) lv_gom.
+        " MESSAGE ... WITH chỉ nhận tên biến / literal, không nhận biểu thức
+        DATA(lv_cnt) = |{ lines( lt_req ) }|.
+        MESSAGE s028(zms_hddt) WITH lv_cnt lv_gom.
         reload( ).
       CATCH zcx_hddt_error INTO DATA(lx).
         ROLLBACK WORK.
