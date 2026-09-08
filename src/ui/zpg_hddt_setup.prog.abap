@@ -603,8 +603,9 @@ CLASS lcl_setup IMPLEMENTATION.
 
   METHOD put_prov.
 
-    SELECT SINGLE @abap_true FROM ztb_hddt_prov INTO @DATA(lv_ex)
-      WHERE provider = @is_row-provider.
+    SELECT SINGLE @abap_true FROM ztb_hddt_prov
+      WHERE provider = @is_row-provider
+      INTO @DATA(lv_ex).
     IF lv_ex = abap_true AND p_ovwrt = abap_false.
       log( i_tab = 'ZTB_HDDT_PROV' i_key = is_row-provider
            i_action = 'DA CO - GIU' i_info = is_row-classname ).
@@ -620,8 +621,9 @@ CLASS lcl_setup IMPLEMENTATION.
 
   METHOD put_conn.
 
-    SELECT SINGLE @abap_true FROM ztb_hddt_conn INTO @DATA(lv_ex)
-      WHERE provider = @is_row-provider AND connid = @is_row-connid.
+    SELECT SINGLE @abap_true FROM ztb_hddt_conn
+      WHERE provider = @is_row-provider AND connid = @is_row-connid
+      INTO @DATA(lv_ex).
     IF lv_ex = abap_true AND p_ovwrt = abap_false.
       log( i_tab = 'ZTB_HDDT_CONN'
            i_key = |{ is_row-provider }/{ is_row-connid }|
@@ -639,8 +641,9 @@ CLASS lcl_setup IMPLEMENTATION.
 
   METHOD put_act.
 
-    SELECT SINGLE @abap_true FROM ztb_hddt_act INTO @DATA(lv_ex)
-      WHERE provider = @is_row-provider AND action = @is_row-action.
+    SELECT SINGLE @abap_true FROM ztb_hddt_act
+      WHERE provider = @is_row-provider AND action = @is_row-action
+      INTO @DATA(lv_ex).
     IF lv_ex = abap_true AND p_ovwrt = abap_false.
       log( i_tab = 'ZTB_HDDT_ACT'
            i_key = |{ is_row-provider }/{ is_row-action }|
@@ -658,9 +661,10 @@ CLASS lcl_setup IMPLEMENTATION.
 
   METHOD put_parm.
 
-    SELECT SINGLE @abap_true FROM ztb_hddt_parm INTO @DATA(lv_ex)
+    SELECT SINGLE @abap_true FROM ztb_hddt_parm
       WHERE provider = @is_row-provider AND bukrs = @is_row-bukrs
-        AND parm_key = @is_row-parm_key.
+        AND parm_key = @is_row-parm_key
+      INTO @DATA(lv_ex).
     IF lv_ex = abap_true AND p_ovwrt = abap_false.
       log( i_tab = 'ZTB_HDDT_PARM' i_key = is_row-parm_key
            i_action = 'DA CO - GIU' i_info = is_row-parm_val ).
@@ -677,9 +681,10 @@ CLASS lcl_setup IMPLEMENTATION.
 
   METHOD put_map.
 
-    SELECT SINGLE @abap_true FROM ztb_hddt_map INTO @DATA(lv_ex)
+    SELECT SINGLE @abap_true FROM ztb_hddt_map
       WHERE provider = @is_row-provider AND map_type = @is_row-map_type
-        AND sap_value = @is_row-sap_value.
+        AND sap_value = @is_row-sap_value
+      INTO @DATA(lv_ex).
     IF lv_ex = abap_true AND p_ovwrt = abap_false.
       RETURN.
     ENDIF.
@@ -694,9 +699,10 @@ CLASS lcl_setup IMPLEMENTATION.
 
   METHOD put_stat.
 
-    SELECT SINGLE @abap_true FROM ztb_hddt_stat INTO @DATA(lv_ex)
+    SELECT SINGLE @abap_true FROM ztb_hddt_stat
       WHERE provider = @is_row-provider AND action = @is_row-action
-        AND rc_code = @is_row-rc_code.
+        AND rc_code = @is_row-rc_code
+      INTO @DATA(lv_ex).
     IF lv_ex = abap_true AND p_ovwrt = abap_false.
       RETURN.
     ENDIF.
@@ -711,8 +717,9 @@ CLASS lcl_setup IMPLEMENTATION.
 
   METHOD put_src.
 
-    SELECT SINGLE @abap_true FROM ztb_hddt_src INTO @DATA(lv_ex)
-      WHERE bukrs = @is_row-bukrs AND src_type = @is_row-src_type.
+    SELECT SINGLE @abap_true FROM ztb_hddt_src
+      WHERE bukrs = @is_row-bukrs AND src_type = @is_row-src_type
+      INTO @DATA(lv_ex).
     IF lv_ex = abap_true AND p_ovwrt = abap_false.
       log( i_tab = 'ZTB_HDDT_SRC' i_key = is_row-src_type
            i_action = 'DA CO - GIU' i_info = is_row-classname ).

@@ -67,9 +67,9 @@ AT SELECTION-SCREEN ON p_prov.
     RETURN.
   ENDIF.
   SELECT SINGLE @abap_true FROM ztb_hddt_prov
-    INTO @DATA(lv_exists)
     WHERE provider = @p_prov
-      AND xactive  = @abap_true.
+      AND xactive  = @abap_true
+    INTO @DATA(lv_exists).
   IF lv_exists <> abap_true.
     MESSAGE e005(zms_hddt) WITH p_prov.
   ENDIF.

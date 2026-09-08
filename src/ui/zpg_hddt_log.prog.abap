@@ -436,8 +436,8 @@ CLASS lcl_log IMPLEMENTATION.
     " phận hỗ trợ của nhà cung cấp đúng thứ đã đi trên đường truyền.
     SELECT SINGLE req_body, res_body, action, src_docno
       FROM ztb_hddt_log
-      INTO @DATA(ls_db)
-      WHERE log_id = @lv_log_id.
+      WHERE log_id = @lv_log_id
+      INTO @DATA(ls_db).
     IF sy-subrc <> 0 OR ls_db-req_body IS INITIAL.
       MESSAGE 'Dòng log này không có nội dung để tải.' TYPE 'S' DISPLAY LIKE 'W'.
       RETURN.

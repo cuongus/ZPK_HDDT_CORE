@@ -207,9 +207,9 @@ CLASS lcl_app IMPLEMENTATION.
 
     " Ghép sổ đăng ký vào danh sách hiển thị
     SELECT * FROM ztb_hddt_inv
-      INTO TABLE @DATA(lt_reg)
       WHERE bukrs = @p_bukrs
-        AND gjahr = @p_gjahr.
+        AND gjahr = @p_gjahr
+      INTO TABLE @DATA(lt_reg).
 
     LOOP AT gt_request ASSIGNING FIELD-SYMBOL(<fs_req>).
       IF p_prov IS NOT INITIAL.
@@ -1128,18 +1128,18 @@ CLASS lcl_app IMPLEMENTATION.
     " Lấy đúng nhãn đã khai trong domain ZDO_HDDT_STATUS để text hiển
     " thị luôn khớp với cấu hình, không hardcode ở đây.
     SELECT SINGLE ddtext FROM dd07t
-      INTO @r_text
       WHERE domname    = 'ZDO_HDDT_STATUS'
         AND as4local   = 'A'
         AND ddlanguage = @sy-langu
-        AND domvalue_l = @i_status.
+        AND domvalue_l = @i_status
+      INTO @r_text.
     IF sy-subrc <> 0.
       SELECT SINGLE ddtext FROM dd07t
-        INTO @r_text
         WHERE domname    = 'ZDO_HDDT_STATUS'
           AND as4local   = 'A'
           AND ddlanguage = 'E'
-          AND domvalue_l = @i_status.
+          AND domvalue_l = @i_status
+        INTO @r_text.
     ENDIF.
 
   ENDMETHOD.

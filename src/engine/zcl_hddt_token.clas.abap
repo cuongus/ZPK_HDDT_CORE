@@ -99,11 +99,11 @@ CLASS zcl_hddt_token IMPLEMENTATION.
 
     SELECT SINGLE token, valid_to
       FROM ztb_hddt_tok
-      INTO @DATA(ls_tok)
       WHERE provider = @is_conn-provider
         AND connid   = @is_conn-connid
         AND bukrs    = @is_cred-bukrs
-        AND apiuser  = @is_cred-apiuser.
+        AND apiuser  = @is_cred-apiuser
+      INTO @DATA(ls_tok).
     IF sy-subrc <> 0.
       RETURN.
     ENDIF.

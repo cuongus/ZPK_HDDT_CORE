@@ -291,13 +291,13 @@ CLASS zcl_hddt_log IMPLEMENTATION.
 
     SELECT COUNT( * )
       FROM ztb_hddt_log
-      INTO @DATA(lv_count)
       WHERE bukrs     = @is_request-bukrs
         AND gjahr     = @is_request-gjahr
         AND src_type  = @is_request-src_type
         AND src_docno = @is_request-src_docno
         AND action    = @i_action
-        AND test_run  = @space.
+        AND test_run  = @space
+      INTO @DATA(lv_count).
 
     r_count = lv_count + 1.
 
@@ -398,8 +398,8 @@ CLASS zcl_hddt_log IMPLEMENTATION.
 
     SELECT SINGLE log_id, codepage, req_header, res_header, req_body, res_body
       FROM ztb_hddt_log
-      INTO @DATA(ls_db)
-      WHERE log_id = @i_log_id.
+      WHERE log_id = @i_log_id
+      INTO @DATA(ls_db).
     IF sy-subrc <> 0.
       RETURN.
     ENDIF.
@@ -430,11 +430,11 @@ CLASS zcl_hddt_log IMPLEMENTATION.
     DATA ls_inv TYPE ztb_hddt_inv.
 
     SELECT SINGLE * FROM ztb_hddt_inv
-      INTO @ls_inv
       WHERE bukrs     = @is_request-bukrs
         AND gjahr     = @is_request-gjahr
         AND src_type  = @is_request-src_type
-        AND src_docno = @is_request-src_docno.
+        AND src_docno = @is_request-src_docno
+      INTO @ls_inv.
     DATA(lv_exists) = xsdbool( sy-subrc = 0 ).
 
     IF lv_exists = abap_false.
@@ -601,11 +601,11 @@ CLASS zcl_hddt_log IMPLEMENTATION.
   METHOD ensure_row.
 
     SELECT SINGLE * FROM ztb_hddt_inv
-      INTO @rs_inv
       WHERE bukrs     = @is_request-bukrs
         AND gjahr     = @is_request-gjahr
         AND src_type  = @is_request-src_type
-        AND src_docno = @is_request-src_docno.
+        AND src_docno = @is_request-src_docno
+      INTO @rs_inv.
     IF sy-subrc = 0.
       RETURN.
     ENDIF.
@@ -750,17 +750,17 @@ CLASS zcl_hddt_log IMPLEMENTATION.
 
     IF i_src_type IS NOT INITIAL.
       SELECT SINGLE * FROM ztb_hddt_inv
-        INTO @rs_inv
         WHERE bukrs     = @i_bukrs
           AND gjahr     = @i_gjahr
           AND src_type  = @i_src_type
-          AND src_docno = @i_src_docno.
+          AND src_docno = @i_src_docno
+        INTO @rs_inv.
     ELSE.
       SELECT SINGLE * FROM ztb_hddt_inv
-        INTO @rs_inv
         WHERE bukrs     = @i_bukrs
           AND gjahr     = @i_gjahr
-          AND src_docno = @i_src_docno.
+          AND src_docno = @i_src_docno
+        INTO @rs_inv.
     ENDIF.
 
     IF sy-subrc <> 0.

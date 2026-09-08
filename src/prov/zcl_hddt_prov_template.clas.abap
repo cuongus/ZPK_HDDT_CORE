@@ -105,9 +105,9 @@ CLASS zcl_hddt_prov_template IMPLEMENTATION.
 
     SELECT SINGLE tpl_body, xactive
       FROM ztb_hddt_tpl
-      INTO @DATA(ls_tpl)
       WHERE provider = @( zif_hddt_provider~get_id( ) )
-        AND action   = @i_action.
+        AND action   = @i_action
+      INTO @DATA(ls_tpl).
     IF sy-subrc <> 0.
       zcx_hddt_error=>raise_text(
         |Chưa khai mẫu payload cho { zif_hddt_provider~get_id( ) } / | &&

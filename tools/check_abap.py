@@ -19,6 +19,7 @@ Soát các lỗi mà ADT / SE24 sẽ báo khi activate:
   O. Dùng field không có trong định nghĩa bảng ở tools/gen_ddic.py
   P. Truyền space / ' ' cho tham số kiểu số hoặc ngày
   Q. Gọi method qua biến REF TO class: phải tồn tại và PUBLIC
+  R. Mệnh đề INTO phải đứng sau WHERE / GROUP BY / HAVING / ORDER BY
 
 Chạy: python tools/check_abap.py
 """
@@ -318,9 +319,19 @@ def check_style(path):
 # ---------------------------------------------------------------------------
 def check_select(path):
     for ln, s in statements(io.open(path, encoding="utf-8").read()):
-        if first_word(s) != "SELECT" or " ORDER BY " not in s.upper():
+        if first_word(s) != "SELECT":
             continue
         u = s.upper()
+        # R. INTO phải đứng sau WHERE / GROUP BY / HAVING / ORDER BY
+        mi = re.search(r"(INTO|APPENDING)", u)
+        if mi:
+            late = [k for k in ("WHERE", "GROUP BY", "HAVING", "ORDER BY")
+                    if re.search(r"" + k + r"", u[mi.end():])]
+            if late:
+                report("R", path, ln, "INTO đứng trước %s, phải chuyển xuống cuối"
+                       % ", ".join(late))
+        if " ORDER BY " not in u:
+            continue
         if "ORDER BY PRIMARY KEY" in u:
             continue
         head = s[6:u.find(" FROM ")] if " FROM " in u else ""
@@ -661,6 +672,7 @@ KIND = {
     "O": "Field không có trong định nghĩa bảng DDIC",
     "P": "Literal ký tự truyền cho tham số kiểu số / ngày",
     "Q": "Method của class không tồn tại hoặc không PUBLIC",
+    "R": "INTO không đứng cuối câu SELECT",
 }
 print("Đã đọc: %d interface, %d class" % (len(INTF), len(CLS)))
 for k in sorted(KIND):
