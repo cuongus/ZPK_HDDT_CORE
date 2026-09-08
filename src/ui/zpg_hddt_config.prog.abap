@@ -142,7 +142,9 @@ CLASS lcl_cfg IMPLEMENTATION.
       RETURN.
     ENDIF.
 
-    DATA lt_excl TYPE STANDARD TABLE OF vimexclfun WITH EMPTY KEY.
+    " DEFAULT KEY: code chuẩn của view maintenance dùng COLLECT trên bảng
+    " này; EMPTY KEY làm COLLECT dump ITAB_NON_NUMERIC_COMPONENT
+    DATA lt_excl TYPE STANDARD TABLE OF vimexclfun WITH DEFAULT KEY.
 
     CALL FUNCTION 'VIEW_MAINTENANCE_CALL'
       EXPORTING
@@ -183,7 +185,7 @@ CLASS lcl_cfg IMPLEMENTATION.
 
   METHOD maintain_tpl.
 
-    DATA lt_fields TYPE STANDARD TABLE OF sval WITH EMPTY KEY.
+    DATA lt_fields TYPE STANDARD TABLE OF sval WITH DEFAULT KEY.
     DATA lv_rc     TYPE c LENGTH 1.
 
     lt_fields = VALUE #(

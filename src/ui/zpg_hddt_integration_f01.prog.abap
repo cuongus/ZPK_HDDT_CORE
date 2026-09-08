@@ -1224,7 +1224,7 @@ FORM popup_original CHANGING c_docno TYPE zde_hddt_docno
                              c_code  TYPE c
                              c_ok    TYPE abap_bool.
 
-  DATA lt_fields TYPE STANDARD TABLE OF sval WITH EMPTY KEY.
+  DATA lt_fields TYPE STANDARD TABLE OF sval WITH DEFAULT KEY.
   DATA lv_rc     TYPE c LENGTH 1.
 
   lt_fields = VALUE #(
@@ -1287,7 +1287,7 @@ FORM popup_edit CHANGING c_date TYPE dats
                          c_text TYPE zde_hddt_name
                          c_ok   TYPE abap_bool.
 
-  DATA lt_fields TYPE STANDARD TABLE OF sval WITH EMPTY KEY.
+  DATA lt_fields TYPE STANDARD TABLE OF sval WITH DEFAULT KEY.
   DATA lv_rc     TYPE c LENGTH 1.
 
   lt_fields = VALUE #(
@@ -1333,7 +1333,7 @@ ENDFORM.
 FORM save_file USING i_name    TYPE string
                      i_content TYPE xstring.
 
-  DATA lt_bin TYPE STANDARD TABLE OF x255 WITH EMPTY KEY.
+  DATA lt_bin TYPE STANDARD TABLE OF x255 WITH DEFAULT KEY.
   DATA lv_len TYPE i.
 
   IF i_content IS INITIAL.

@@ -515,7 +515,7 @@ ENDFORM.
 FORM save_raw USING i_name TYPE string
                     i_data TYPE xstring.
 
-  DATA lt_bin      TYPE STANDARD TABLE OF x255 WITH EMPTY KEY.
+  DATA lt_bin      TYPE STANDARD TABLE OF x255 WITH DEFAULT KEY.
   DATA lv_len      TYPE i.
   DATA lv_path     TYPE string.
   DATA lv_fullpath TYPE string.

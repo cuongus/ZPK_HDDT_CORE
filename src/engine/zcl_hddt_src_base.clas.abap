@@ -994,7 +994,7 @@ CLASS zcl_hddt_src_base IMPLEMENTATION.
 
   METHOD read_text.
 
-    DATA lt_lines TYPE STANDARD TABLE OF tline WITH EMPTY KEY.
+    DATA lt_lines TYPE STANDARD TABLE OF tline WITH DEFAULT KEY.
 
     " Kiểm tra header trước để lấy đúng ngôn ngữ đã lưu (long text
     " thường chỉ có 1 ngôn ngữ và không trùng ngôn ngữ đăng nhập).

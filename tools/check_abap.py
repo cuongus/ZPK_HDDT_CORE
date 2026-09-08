@@ -25,6 +25,7 @@ Soát các lỗi mà ADT / SE24 sẽ báo khi activate:
   U. Dạng ngắn ( name = value ) đi kèm EXCEPTIONS mà thiếu EXPORTING
   V. MESSAGE ... WITH nhận biểu thức thay vì tên biến
   W. Khai báo lại thành phần / method đã có ở lớp cha
+  X. Bảng WITH EMPTY KEY truyền vào tham số TABLES của FM cổ điển
 
 Chạy: python tools/check_abap.py
 """
@@ -607,6 +608,23 @@ def check_ui(path):
                 report("T", path, i, "FIELDTEXT %d ký tự (tối đa 20): %s"
                        % (len(m.group(1)), m.group(1)))
 
+    # X. Bảng WITH EMPTY KEY truyền vào tham số TABLES của function module cổ
+    #    điển: code chuẩn có thể COLLECT / READ WITH KEY -> dump lúc chạy
+    text = io.open(path, encoding="utf-8").read()
+    empty = set(re.findall(r"\b(\w+)\s+TYPE\s+(?:STANDARD\s+)?TABLE OF\s+\w+"
+                           r"\s+WITH EMPTY KEY", text, re.I))
+    if empty:
+        for ln, st in statements(text):
+            if not st.upper().startswith("CALL FUNCTION"):
+                continue
+            m = re.search(r"\bTABLES\b(.*)$", st, re.I)
+            if not m:
+                continue
+            for v in sorted(empty):
+                if re.search(r"=\s*" + re.escape(v) + r"\b", m.group(1), re.I):
+                    report("X", path, ln, "%s khai EMPTY KEY nhưng truyền vào "
+                           "TABLES của FM, nên dùng DEFAULT KEY" % v)
+
     # V. MESSAGE ... WITH chỉ nhận tên biến / literal, không nhận biểu thức
     for ln, st in statements(io.open(path, encoding="utf-8").read()):
         if st.upper().startswith("MESSAGE ") and re.search(r"\bWITH\b", st, re.I):
@@ -758,6 +776,7 @@ KIND = {
     "U": "Dạng ngắn name = value đi kèm EXCEPTIONS",
     "V": "MESSAGE ... WITH nhận biểu thức",
     "W": "Khai báo lại thành phần của lớp cha",
+    "X": "Bảng EMPTY KEY truyền vào TABLES của FM",
 }
 print("Đã đọc: %d interface, %d class" % (len(INTF), len(CLS)))
 for k in sorted(KIND):
