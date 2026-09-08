@@ -229,7 +229,7 @@ Z<PREFIX loại object>_HDDT_<CHỨC NĂNG>[_hậu tố]
 | Loại | Prefix | Ví dụ |
 |---|---|---|
 | Report | `ZPG_` | `ZPG_HDDT_INTEGRATION` |
-| Include | `<report>_TOP` / `_F01` | `ZPG_HDDT_INTEGRATION_TOP`, `ZPG_HDDT_INTEGRATION_F01` |
+| Include | `ZIN_<mã>_TOP` / `_F01` | `ZIN_HDDT_INTEGRATION_TOP`, `ZIN_HDDT_INTEGRATION_F01` (prefix `ZIN_` theo yêu cầu dự án MAG, khác chuẩn `<report>_TOP` trong docs) |
 | Class | `ZCL_` | `ZCL_HDDT_SERVICE` |
 | Interface | `ZIF_` | `ZIF_HDDT_PROVIDER` |
 | Exception | `ZCX_` | `ZCX_HDDT_ERROR` |

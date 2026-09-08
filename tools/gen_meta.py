@@ -103,6 +103,8 @@ for folder, name, descr, final, abstract, category in CLASSES:
 # tpool: list of (ID, KEY, ENTRY)
 # ---------------------------------------------------------------------------
 PROGS = [
+    ("ui", "ZIN_HDDT_INTEGRATION_TOP", "I", [("R", "", "Include ZIN_HDDT_INTEGRATION_TOP")]),
+    ("ui", "ZIN_HDDT_INTEGRATION_F01", "I", [("R", "", "Include ZIN_HDDT_INTEGRATION_F01")]),
     ("ui", "ZPG_HDDT_INTEGRATION", "1", [
         ("R", "", "Tích hợp hoá đơn điện tử"),
         ("I", "B01", "Chứng từ nguồn"),
@@ -128,8 +130,6 @@ PROGS = [
         ("S", "P_TEST", "Test run (chỉ dựng payload)"),
         ("S", "P_AUTO", "Phát hành tự động (chỉ job)"),
     ]),
-    ("ui", "ZPG_HDDT_INTEGRATION_TOP", "I", [("R", "", "Include ZPG_HDDT_INTEGRATION_TOP")]),
-    ("ui", "ZPG_HDDT_INTEGRATION_F01", "I", [("R", "", "Include ZPG_HDDT_INTEGRATION_F01")]),
     ("ui", "ZPG_HDDT_CONFIG", "1", [
         ("R", "", "Cấu hình tích hợp hoá đơn điện tử"),
     ]),

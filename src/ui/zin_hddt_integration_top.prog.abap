@@ -1,5 +1,5 @@
 *=====================================================================
-* Tên/Mã     : ZPG_HDDT_INTEGRATION_TOP
+* Tên/Mã     : ZIN_HDDT_INTEGRATION_TOP
 * Mô tả chung: Khai báo dữ liệu + màn hình chọn cho ZPG_HDDT_INTEGRATION
 *              (gộp include _SEL cũ theo chuẩn include _TOP/_F01).
 *              Tham số lọc và cột ALV theo FS MAG_SAP_2026_PM_FS_Tich

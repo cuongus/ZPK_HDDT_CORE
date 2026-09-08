@@ -383,7 +383,7 @@ Rà theo skill `fis-sap-private-cloud-naming` (tài liệu `QUY_UOC_DAT_TEN_SAP_
 | 47 DE / 10 domain | `ZFIDE_` / `ZFIDO_` | `ZDE_HDDT_*` / `ZDO_HDDT_*` | ✓ |
 | 19 class / 5 interface / exception | `ZFIC_` / `ZFIIF_` / `ZFICX_` | `ZCL_HDDT_*` / `ZIF_HDDT_*` / `ZCX_HDDT_ERROR` | ✓ |
 | 4 report | `ZFIR_HDDT_*` | `ZPG_HDDT_*` | ✓ |
-| Include `_INT_TOP/_SEL/_CL1/_EVT/_F01` | 5 include | `ZPG_HDDT_INTEGRATION_TOP` (khai báo + màn hình chọn), `_F01` (lớp local ALV + FORM), sự kiện trong chương trình chính | ✓ |
+| Include `_INT_TOP/_SEL/_CL1/_EVT/_F01` | 5 include | `ZIN_HDDT_INTEGRATION_TOP` (khai báo + màn hình chọn), `ZIN_..._F01` (lớp local ALV + FORM), sự kiện trong chương trình chính; prefix `ZIN_` do dự án MAG yêu cầu (08/09/2026) | ✓ |
 | Message class | `ZFIE_HDDT` | `ZMS_HDDT` | ✓ |
 | Tcode | `ZFI_HDDT`, `_CFG`, `_LOG` | `ZFI001`, `ZFI002`, `ZFI003` | ✓ — **[Unverified]** số còn trống trên hệ đích, kiểm SE93 trước khi import |
 | Package `ZPK_HDDT_CORE` + `_DDIC/_ENGINE/_PROV/_UI` | | giữ (đúng `ZPK_<dự án>[_<lớp>]`, gốc không chứa object) | ✓ |

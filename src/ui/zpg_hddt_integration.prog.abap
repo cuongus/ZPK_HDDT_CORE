@@ -45,8 +45,8 @@
 *=====================================================================
 REPORT zpg_hddt_integration MESSAGE-ID zms_hddt.
 
-INCLUDE zpg_hddt_integration_top.          " khai báo + màn hình chọn
-INCLUDE zpg_hddt_integration_f01.          " lớp local ALV + form routine
+INCLUDE zin_hddt_integration_top.          " khai báo + màn hình chọn
+INCLUDE zin_hddt_integration_f01.          " lớp local ALV + form routine
 
 *---------------------------------------------------------------------*
 * Sự kiện
@@ -62,10 +62,6 @@ AT SELECTION-SCREEN ON p_bukrs.
   IF sy-subrc <> 0.
     MESSAGE e004(zms_hddt) WITH p_bukrs.
   ENDIF.
-
-AT SELECTION-SCREEN ON VALUE-REQUEST FOR s_srct-low.
-  " Danh sách loại nguồn đã cấu hình, cho tích chọn nhiều dòng
-  PERFORM f4_srctype.
 
 AT SELECTION-SCREEN ON p_prov.
   IF p_prov IS INITIAL.

@@ -1,5 +1,5 @@
 *=====================================================================
-* Tên/Mã     : ZPG_HDDT_INTEGRATION_F01
+* Tên/Mã     : ZIN_HDDT_INTEGRATION_F01
 * Mô tả chung: Lớp local điều khiển ALV (LCL_APP) và form routine của
 *              ZPG_HDDT_INTEGRATION theo FS MAG v0.5 mục 3.6:
 *                Tích hợp HĐ   -> ZCL_HDDT_SERVICE->CREATE_DRAFT
@@ -1202,100 +1202,6 @@ CLASS lcl_app IMPLEMENTATION.
 
 ENDCLASS.
 
-
-*&---------------------------------------------------------------------*
-*& Form F4_SRCTYPE
-*&---------------------------------------------------------------------*
-*& Danh sách trợ giúp cho "Loại nguồn dữ liệu". SELECT-OPTIONS không làm
-*& được dropdown (AS LISTBOX chỉ dùng cho PARAMETERS đơn giá trị) nên đây
-*& là hộp thoại danh sách kèm mô tả, CHO TÍCH CHỌN NHIỀU DÒNG. Mỗi dòng
-*& chọn thành một dòng của s_srct. Chỉ hiện loại nguồn đã cấu hình và
-*& đang hoạt động trong ZTB_HDDT_SRC của công ty đang chọn.
-*&---------------------------------------------------------------------*
-FORM f4_srctype.
-
-  TYPES: BEGIN OF lty_val,
-           src_type TYPE zde_hddt_srctype,
-           ddtext   TYPE val_text,
-         END OF lty_val.
-
-  DATA lt_val TYPE STANDARD TABLE OF lty_val WITH DEFAULT KEY.
-  DATA lt_ret TYPE STANDARD TABLE OF ddshretval WITH DEFAULT KEY.
-  DATA lt_dyn TYPE STANDARD TABLE OF dynpread WITH DEFAULT KEY.
-  DATA ls_val TYPE lty_val.
-
-  SELECT DISTINCT src_type
-    FROM ztb_hddt_src
-    WHERE ( bukrs = @p_bukrs OR bukrs = @space )
-      AND xactive = @abap_true
-    ORDER BY src_type
-    INTO TABLE @DATA(lt_type).
-  IF lt_type IS INITIAL.
-    MESSAGE 'Chưa cấu hình lớp đọc nguồn nào cho công ty này (ZTB_HDDT_SRC).'
-            TYPE 'S' DISPLAY LIKE 'W'.
-    RETURN.
-  ENDIF.
-
-  " Mô tả lấy từ giá trị cố định của domain ZDO_HDDT_SRCTYPE
-  SELECT domvalue_l, ddtext
-    FROM dd07t
-    WHERE domname    = 'ZDO_HDDT_SRCTYPE'
-      AND ddlanguage = @sy-langu
-      AND as4local   = 'A'
-    INTO TABLE @DATA(lt_text).
-
-  LOOP AT lt_type ASSIGNING FIELD-SYMBOL(<fs_type>).
-    CLEAR ls_val.
-    ls_val-src_type = <fs_type>.
-    READ TABLE lt_text ASSIGNING FIELD-SYMBOL(<fs_text>)
-         WITH KEY domvalue_l = <fs_type>.
-    IF sy-subrc = 0.
-      ls_val-ddtext = <fs_text>-ddtext.
-    ENDIF.
-    APPEND ls_val TO lt_val.
-  ENDLOOP.
-
-  CALL FUNCTION 'F4IF_INT_TABLE_VALUE_REQUEST'
-    EXPORTING
-      retfield        = 'SRC_TYPE'
-      dynpprog        = sy-repid
-      dynpnr          = sy-dynnr
-      dynprofield     = 'S_SRCT-LOW'
-      value_org       = 'S'
-      multiple_choice = abap_true
-    TABLES
-      value_tab       = lt_val
-      return_tab      = lt_ret
-    EXCEPTIONS
-      parameter_error = 1
-      no_values_found = 2
-      OTHERS          = 3.
-  IF sy-subrc <> 0 OR lt_ret IS INITIAL.
-    RETURN.
-  ENDIF.
-
-  " Chọn nhiều dòng thì nạp hết vào select-options; dòng đầu hiện trên màn
-  " hình chọn, các dòng còn lại xem bằng nút chọn nhiều
-  CLEAR s_srct[].
-  LOOP AT lt_ret ASSIGNING FIELD-SYMBOL(<fs_ret>).
-    APPEND VALUE #( sign = 'I' option = 'EQ' low = <fs_ret>-fieldval ) TO s_srct.
-  ENDLOOP.
-
-  READ TABLE lt_ret INDEX 1 ASSIGNING FIELD-SYMBOL(<fs_first>).
-  IF sy-subrc = 0.
-    APPEND VALUE #( fieldname  = 'S_SRCT-LOW'
-                    fieldvalue = <fs_first>-fieldval ) TO lt_dyn.
-    CALL FUNCTION 'DYNP_VALUES_UPDATE'
-      EXPORTING
-        dyname     = sy-repid
-        dynumb     = sy-dynnr
-      TABLES
-        dynpfields = lt_dyn
-      EXCEPTIONS
-        OTHERS     = 1.
-  ENDIF.
-
-ENDFORM.
 
 *&---------------------------------------------------------------------*
 *& Form DISPLAY_TEXT
