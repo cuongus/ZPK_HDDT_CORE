@@ -64,10 +64,12 @@ def src(path):
     return io.open(path, encoding="utf-8").read().rstrip("\n")
 
 w("\n---\n\n## 5. Interface (SE24 → Source Code-Based) — %d object\n" % len(INTFS))
+w("\n> **Activate ngay từng interface trước khi sang class.** Khi tạo object mới, ADT / SE24 sinh sẵn một bản ACTIVE rỗng (`INTERFACE ... PUBLIC. ENDINTERFACE.`). Nếu chỉ Save mà chưa Activate thì bản active vẫn rỗng, và class dùng interface đó sẽ báo `Method \"GET_ID\" is unknown or PROTECTED or PRIVATE` dù source interface đã đúng. Thứ tự: `ZIF_HDDT_TYPES` trước, rồi các interface còn lại.\n")
 for folder, name, descr in INTFS:
     w(f"\n### {name}\n- Mô tả: `{descr}`\n\n```abap\n{src(f'src/{folder}/{name.lower()}.intf.abap')}\n```\n")
 
 w("\n---\n\n## 6. Class (SE24 → Source Code-Based) — %d object\n" % len(CLASSES))
+w("\n> **Activate từng class ngay sau khi dán.** Class con và class gọi tới nó chỉ thấy bản ACTIVE; class cha chưa activate sẽ làm class con báo thiếu method hoặc thiếu kiểu. Nếu một class không activate được vì phụ thuộc chưa xong thì cứ Save, dán hết rồi Activate cả package một lượt (chọn package → Activate All Inactive).\n")
 w("\nThứ tự dưới đây đã theo phụ thuộc (lớp cha / lớp được gọi đứng trước). Exception class: tạo với superclass CX_STATIC_CHECK rồi dán source.\n")
 order = ["ZCX_HDDT_ERROR","ZCL_HDDT_JSON","ZCL_HDDT_CONFIG","ZCL_HDDT_PLATFORM","ZCL_HDDT_PLAT_CLASSIC",
          "ZCL_HDDT_SECRET","ZCL_HDDT_FACTORY","ZCL_HDDT_HTTP","ZCL_HDDT_TOKEN","ZCL_HDDT_LOG","ZCL_HDDT_SERVICE",

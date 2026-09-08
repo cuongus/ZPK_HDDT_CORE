@@ -15,6 +15,7 @@ Soát các lỗi mà ADT / SE24 sẽ báo khi activate:
   K. DATA() suy ra P(8,0) từ biểu thức số học (mất phần thập phân)
   L. POSIX regex đã deprecated, phải dùng PCRE
   M. ORDER BY dùng cột không có trong danh sách SELECT
+  N. Gọi method qua biến REF TO interface nhưng interface không có
 
 Chạy: python tools/check_abap.py
 """
@@ -337,6 +338,33 @@ def check_select(path):
 
 
 # ---------------------------------------------------------------------------
+# N. Gọi method qua biến tham chiếu interface nhưng interface không có method
+# ---------------------------------------------------------------------------
+def check_iref(path):
+    text = io.open(path, encoding="utf-8").read()
+    var = {}
+    for m in re.finditer(r"\b(?:VALUE\()?(\w+)\)?\s+TYPE REF TO\s+(zif_hddt_\w+)",
+                         text, re.I):
+        var.setdefault(m.group(1).lower(), set()).add(m.group(2).upper())
+    for i, line in enumerate(text.split("\n"), 1):
+        if line.lstrip().startswith(("*", '"')):
+            continue
+        for name, meth in re.findall(r"\b(\w+)->(\w+)\(", line):
+            keys = var.get(name.lower())
+            if not keys:
+                continue
+            ok = False
+            for k in keys:
+                pool = INTF.get(k, {}).get("methods", set())
+                if meth.lower() in pool or any(
+                        x.endswith("~" + meth.lower()) for x in pool):
+                    ok = True
+            if not ok:
+                report("N", path, i, "%s->%s( ) không có trong %s"
+                       % (name, meth, "/".join(sorted(keys))))
+
+
+# ---------------------------------------------------------------------------
 # Chạy
 # ---------------------------------------------------------------------------
 for p in sorted(glob.glob("src/**/*.intf.abap", recursive=True)):
@@ -349,6 +377,7 @@ for p in sorted(glob.glob("src/**/*.abap", recursive=True)):
     check_template(p)
     check_style(p)
     check_select(p)
+    check_iref(p)
 
 
 def ancestors(name):
@@ -444,6 +473,7 @@ KIND = {
     "K": "DATA() suy ra P(8,0) từ biểu thức số học",
     "L": "POSIX regex deprecated (dùng PCRE)",
     "M": "ORDER BY không khớp danh sách SELECT",
+    "N": "Method không có trong interface được tham chiếu",
 }
 print("Đã đọc: %d interface, %d class" % (len(INTF), len(CLS)))
 for k in sorted(KIND):
