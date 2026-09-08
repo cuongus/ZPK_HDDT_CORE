@@ -63,6 +63,10 @@ AT SELECTION-SCREEN ON p_bukrs.
     MESSAGE e004(zms_hddt) WITH p_bukrs.
   ENDIF.
 
+AT SELECTION-SCREEN ON VALUE-REQUEST FOR s_srct-low.
+  " Danh sách loại nguồn đã cấu hình, cho tích chọn nhiều dòng
+  PERFORM f4_srctype.
+
 AT SELECTION-SCREEN ON p_prov.
   IF p_prov IS INITIAL.
     RETURN.
