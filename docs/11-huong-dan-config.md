@@ -104,6 +104,53 @@ Bảng quan trọng nhất về số liệu. Nạp mẫu chỉ có ví dụ, ph�
 
 `EXT_TEXT` là chữ hiển thị, ví dụ `10%`.
 
+### 2.5 `GLACCT` — tài khoản nào thành dòng hàng
+
+Đây là dòng cấu hình quyết định nội dung hoá đơn khi nguồn là FI, và là chỗ
+hay bỏ sót nhất vì **để trống thì chương trình vẫn chạy**.
+
+Dòng hàng của nguồn FI lấy từ `BSEG` với ba điều kiện, theo thứ tự:
+
+1. `KOART = 'S'` (dòng sổ cái) **và** `MWSKZ` khác trống — code cứng, không cấu
+   hình được
+2. tài khoản nằm trong danh sách `GLACCT`
+3. tài khoản **không** nằm trong danh sách `TAXACCT`
+
+`in_map_list` trả về `abap_true` khi `GLACCT` chưa có dòng nào, nghĩa là **mọi
+tài khoản đều thành dòng hàng**. Với hệ thống thật điều đó sai: thuế GTGT được
+khấu trừ `1331*` và các dòng chi phí `627*` `641*` `642*` của chứng từ mua vào
+cũng bị đưa lên hoá đơn bán ra.
+
+Khai theo mẫu, `*` thay cho nhóm ký tự:
+
+| Cột | Giá trị |
+|---|---|
+| `PROVIDER` | để trống (tầng đọc nguồn, không theo nhà cung cấp) |
+| `MAP_TYPE` | `GLACCT` |
+| `SAP_VALUE` | số tài khoản hoặc mẫu, ví dụ `5113*` |
+| `EXT_VALUE` | `X` |
+| `EXT_TEXT` | tên hàng mặc định của tài khoản đó |
+
+`EXT_TEXT` không phải để trang trí: khi dòng `BSEG` không có text (`SGTXT`
+trống) và không có vật tư, engine lấy đúng `EXT_TEXT` này làm **tên hàng trên
+hoá đơn**. Thứ tự ưu tiên tên hàng: tên nhập tay trong `ZTB_HDDT_INV` → long
+text theo `ITEM_TEXT_IDS` → `SGTXT` → `EXT_TEXT` của `GLACCT` → tên vật tư →
+số tài khoản.
+
+### 2.6 `TAXCODE` — chứng từ nào được lấy vào danh sách
+
+`TAXCODE` lọc ở tầng chứng từ, so mẫu với `MWSKZ` của **dòng khách hàng**. Bản
+nạp mẫu có hai dòng `O*` và `**`; `**` là mẫu bắt tất cả nên thực tế mọi chứng
+từ đều qua, kể cả chứng từ không có mã thuế.
+
+Nếu hệ của bạn dùng quy ước mã thuế đầu ra bắt đầu bằng `O` thì **xoá dòng
+`**`**, giữ lại `O*`. Danh sách sẽ sạch ngay: chứng từ bù trừ AB và thu tiền DZ
+không có mã thuế trên dòng khách hàng nên bị loại, thay vì hiện ra rồi báo
+"chưa dựng được dòng hàng nào".
+
+Kiểm chứng trên S25 client 300 công ty M800 năm 2026 (09/09/2026): mã đầu ra là
+`O1`–`O5`, mã đầu vào là `A*` `B*` `C*` `D*`.
+
 ## 3. Bảng kết nối — sửa khi lên môi trường thật
 
 `ZTB_HDDT_CONN` nạp sẵn dòng `FPT / UAT` trỏ tới `https://api-uat.einvoice.fpt.com.vn`,
