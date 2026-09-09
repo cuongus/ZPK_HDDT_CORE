@@ -16,6 +16,8 @@
 * Version   Ngày          Người sửa                Transport   Mô tả
 *=====================================================================
 * 1.0       07/09/2026    cuongus - CuongUS        abapGit     Tạo mới
+* 1.1       09/09/2026    cuongus - CuongUS        abapGit     MERGE thành
+*                         PUBLIC cho màn hình 0200 xem trước chứng từ gom
 *=====================================================================
 CLASS zcl_hddt_src_gom DEFINITION
   PUBLIC
