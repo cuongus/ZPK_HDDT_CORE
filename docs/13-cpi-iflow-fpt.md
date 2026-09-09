@@ -20,15 +20,28 @@ và `ZTB_HDDT_ACT`.
 HTTPS của CPI có tenant không nhận sub-path: gọi `/<urlPath>/create-invoice` ra
 404 và `CamelHttpPath` luôn rỗng. Vì vậy `API_PATH` khai dạng:
 
-```
-/http/hddt_fpt?api=create-invoice
-/http/hddt_fpt?api=issue-invoice
-/http/hddt_fpt?api=del-invoice
-/http/hddt_fpt?api=adjust-invoice
-/http/hddt_fpt?api=replace-invoice
-/http/hddt_fpt?api=apprs
-/http/hddt_fpt?api=search-invoice
-```
+| ACTION | Method | API_PATH khi đi qua CPI |
+|---|---|---|
+| `CREATE_INVOICE` | POST | `/http/hddt_fpt?api=create-appr-inv` |
+| `CREATE_DRAFT` | POST | `/http/hddt_fpt?api=create-invoice` |
+| `UPDATE_INVOICE` | POST | `/http/hddt_fpt?api=update-invoice` |
+| `ISSUE_INVOICE` | POST | `/http/hddt_fpt?api=issue-invoice` |
+| `APPROVE_INVOICE` | POST | `/http/hddt_fpt?api=apprs` |
+| `REPLACE_INVOICE` | POST | `/http/hddt_fpt?api=replace-invoice` |
+| `ADJUST_INVOICE` | POST | `/http/hddt_fpt?api=adjust-invoice` |
+| `CANCEL_INVOICE` | POST | `/http/hddt_fpt?api=cancel-invoice` |
+| `DELETE_INVOICE` | POST | `/http/hddt_fpt?api=del-invoice` |
+| `WRONG_NOTICE` | POST | `/http/hddt_fpt?api=create-wno-list` |
+| `SEARCH_INVOICE` | **GET** | `/http/hddt_fpt?api=search-invoice` |
+| `GET_FILE` | **GET** | `/http/hddt_fpt?api=search-invoice` |
+
+Đủ 12 dòng, thiếu dòng nào thì nghiệp vụ đó gọi vào CPI ra 400. `LOGIN`
+(`/c_signin`) **không** cần đổi: `AUTH_MODE = N` nên engine không gọi lấy token.
+
+Hai dòng cuối là **GET** và FPT nhận tham số tra cứu trong **HTTP header**
+(`stax`, `form`, `serial`, `seq`, `sid`, `type`, và các tham số caller truyền
+thêm như `fd`, `td`, `btax`). Hai điều này buộc iFlow phải giữ nguyên method và
+cho header lạ đi qua — xem Step 2b, Step 4 và Step 7.
 
 Nếu tenant của bạn nhận sub-path thì dùng `/http/hddt_fpt/create-invoice` cũng
 được, nhưng phải thử trước một lần.
@@ -151,9 +164,10 @@ def Message processData(Message message) {
         if (kv.length == 2 && kv[0] == 'api') { api = kv[1] }
     }
 
-    def allowed = ['create-invoice', 'issue-invoice', 'del-invoice',
-                   'adjust-invoice', 'replace-invoice', 'apprs',
-                   'search-invoice', 'create-appr-inv']
+    def allowed = ['create-invoice', 'create-appr-inv', 'update-invoice',
+                   'issue-invoice', 'apprs', 'replace-invoice',
+                   'adjust-invoice', 'cancel-invoice', 'del-invoice',
+                   'create-wno-list', 'search-invoice']
     if (!allowed.contains(api)) {
         message.setHeader('CamelHttpResponseCode', 400)
         message.setHeader('Content-Type', 'application/json')
@@ -164,6 +178,12 @@ def Message processData(Message message) {
 
     def base = message.getProperty('p_fpt_base')      // {{FPT_BaseURL}}
     message.setHeader('CamelHttpUri', base + '/' + api)
+
+    // search-invoice / get_file la GET: giu nguyen method cua ABAP,
+    // receiver phai de Method = Dynamic
+    def m = message.getHeaders().get('CamelHttpMethod')
+    message.setHeader('CamelHttpMethod', (m == null) ? 'POST' : m.toString())
+
     message.setProperty('p_api', api)
     return message
 }
@@ -200,9 +220,9 @@ vì body là JSON.
 ```
 Adapter: HTTP
   Address                    : {{FPT_BaseURL}}     ← bị CamelHttpUri ghi đè
-  Method                     : POST
+  Method                     : Dynamic             ← lấy từ CamelHttpMethod
   Content-Type               : application/json
-  Request Headers            : Content-Type,Authorization
+  Request Headers            : Content-Type,stax,form,serial,seq,sid,type,fd,td,btax
   Response Headers           : Content-Type
   Authentication             : None       ← FPT nhận tài khoản trong thân payload
   Timeout                    : 45000      ← phải NHỎ HƠN TIMEOUT của ZTB_HDDT_CONN
@@ -222,6 +242,21 @@ Bật `Throw Exception on Failure` thì lỗi từ FPT thành exception, client 
 
 `Authentication = Basic` sẽ ghi đè header `Authorization`; để `None` khi hệ đích
 tự lo xác thực.
+
+Để `Method = POST` cứng thì `SEARCH_INVOICE` và `GET_FILE` bị đổi từ GET sang
+POST, FPT trả lỗi method. `Dynamic` đọc header `CamelHttpMethod` mà `GV_Route`
+đã đặt.
+
+`Request Headers` **không nên có `Authorization`**. Tài khoản FPT nằm trong thân
+payload ở nút `user` (xem `ZCL_HDDT_PROV_FPT~add_user_node`), còn header
+`Authorization` mà CPI nhận được là Basic `clientid:clientsecret` của
+destination SM59. [Inference] Liệt kê `Authorization` ở đây là chuyển tiếp
+chính bí mật đó sang FPT — dựa trên cách CPI lọc header, chưa kiểm trên tenant
+MAG. Chỉ khai lại khi nào chuyển sang provider dùng bearer token.
+
+Sáu header `stax` `form` `serial` `seq` `sid` `type` là tham số tra cứu của
+`search-invoice`; thiếu chúng thì FPT trả rỗng chứ không báo lỗi, rất dễ tưởng
+là không có dữ liệu.
 
 ### Step 5 — Groovy `GV_Response`
 
@@ -288,10 +323,13 @@ ngay trên SAP mà không cần mở Monitor.
 ### Step 7 — Runtime Configuration
 
 ```
-Allowed Header(s) : Content-Type,Accept,Authorization
+Allowed Header(s) : Content-Type,Accept,stax,form,serial,seq,sid,type,fd,td,btax
 ```
 
-Thiếu dòng này thì header không tới được receiver.
+Thiếu dòng này thì header không tới được receiver. Sáu header giữa là tham số
+của `search-invoice`, ba header cuối là tham số tra cứu tuỳ chọn.
+
+Không cần `Authorization` cho luồng FPT — lý do ở Step 4.
 
 Ô này nhận **danh sách tên header**, không phải tham số. Đừng đặt
 `{{FPT_BaseURL}}` vào đây: base URL thuộc ô **Address của adapter HTTP** ở
@@ -325,12 +363,56 @@ không tin tab Deployment Status của bản draft đang mở.
      /http/hddt_fpt?api=<mã nghiệp vụ>
 ```
 
-`AUTH_MODE = N` vì destination đã lo xác thực với CPI. Không lưu clientsecret
-trong bảng nào của package.
+**Không sửa một dòng ABAP nào.** `ZCL_HDDT_HTTP` đã có sẵn nhánh
+`create_by_destination`: có `RFCDEST` thì nó mở destination và đặt path vào
+pseudo-header `~request_uri`, nên query `?api=...` đi kèm được. Toàn bộ việc
+chuyển sang CPI nằm ở ba bảng cấu hình cộng hai giao dịch hạ tầng.
 
-Muốn quay lại gọi FPT trực tiếp: đổi `CONNID` trong `ZTB_HDDT_CRED` về `UAT` và
-trả `API_PATH` về `/create-invoice`, `/issue-invoice`... Giữ hai bộ giá trị
-trong file để đổi qua lại nhanh.
+### 3.1 Chi tiết từng bảng
+
+`ZTB_HDDT_CONN` — thêm một dòng, giữ nguyên dòng `UAT` để còn đường quay lại:
+
+| Cột | Giá trị | Ghi chú |
+|---|---|---|
+| `PROVIDER` / `CONNID` | `FPT` / `CPI` | khoá của dòng mới |
+| `RFCDEST` | `ZHDDT_CPI` | có giá trị này thì `BASE_URL` bị bỏ qua |
+| `BASE_URL` | để trống | |
+| `AUTH_MODE` | `N` | destination tự gắn Basic; engine không gắn `Authorization` |
+| `TOKEN_ACTION` | để trống | `AUTH_MODE = N` nên không có lượt gọi `c_signin` |
+| `TIMEOUT` | `60` | phải **lớn hơn** Timeout của receiver trong iFlow |
+| `SSL_ID` | để trống | chỉ dùng cho nhánh `BASE_URL`, destination tự lo SSL |
+| `XACTIVE` | `X` | |
+
+`ZTB_HDDT_CRED` — đổi `CONNID` của từng dòng công ty sang `CPI`. Giữ nguyên
+`APIUSER` / `APISECRET`: tài khoản FPT vẫn đi trong thân payload ở nút `user`,
+CPI không thay thế nó.
+
+`ZTB_HDDT_ACT` — đổi `API_PATH` của 12 dòng provider `FPT` theo bảng ở mục 1.
+Giữ nguyên `HTTP_METHOD`, kể cả hai dòng `GET`.
+
+`ZTB_HDDT_PARM` — không đổi. Riêng `FPT_USER_IN_BODY` phải để mặc định (khác
+`N`), nếu tắt thì payload mất nút `user` và FPT từ chối.
+
+### 3.2 Cái bẫy của ZTB_HDDT_ACT
+
+Khoá của bảng là `MANDT + PROVIDER + ACTION`, **không có `CONNID`**. Nghĩa là
+đổi `API_PATH` là đổi cho mọi công ty đang dùng provider `FPT` — không thể để
+một công ty đi CPI còn công ty khác gọi FPT trực tiếp bằng cách chỉ đổi `CONNID`
+trong `ZTB_HDDT_CRED`.
+
+Muốn chạy song song thì tách provider: `ZTB_HDDT_PROV` thêm dòng `FPTCPI` với
+`CLASSNAME = ZCL_HDDT_PROV_FPT`, rồi khai riêng bộ `ZTB_HDDT_ACT` và
+`ZTB_HDDT_CONN` cho `FPTCPI`; `ZTB_HDDT_CRED` của từng công ty chọn provider
+nào. Lưu ý `ZCL_HDDT_PROV_FPT` đọc tham số bằng hằng số `GC_PROVIDER = 'FPT'`,
+nên `API_VERSION` vẫn tra dưới mã `FPT` — dùng chung tham số, đúng ý muốn.
+
+### 3.3 Quay lại gọi FPT trực tiếp
+
+Đổi `CONNID` trong `ZTB_HDDT_CRED` về `UAT` và trả `API_PATH` về dạng
+`/create-appr-inv`, `/search-invoice`... Giữ hai bộ giá trị trong file để đổi
+qua lại nhanh. Không cần undeploy iFlow, không cần transport.
+
+Không lưu `clientsecret` trong bảng nào của package: nó nằm ở destination SM59.
 
 ## 4. Kiểm tra
 
@@ -356,6 +438,10 @@ trong file để đổi qua lại nhanh.
 | Groovy báo `unexpected char: \` | mất dấu gạch chéo khi copy | bỏ escape, dùng `split` / `indexOf` |
 | Request hợp lệ cũng trả 400 `api khong hop le` | điều kiện `p_stop` đặt lên nhánh đi Request Reply | chuyển điều kiện sang nhánh đi End Message, nhánh còn lại tick Default Route |
 | SAP báo timeout nhưng Monitor CPI vẫn `Processing` | `Timeout` receiver ≥ `TIMEOUT` của `ZTB_HDDT_CONN` | hạ Timeout receiver xuống dưới mốc của SAP |
+| `search-invoice` qua CPI trả rỗng | Allowed Header(s) thiếu `stax,form,serial,seq,sid,type` | thêm đủ tên header ở Runtime Configuration và Request Headers của receiver |
+| FPT báo sai method ở `search-invoice` | receiver để `Method = POST` cứng | đổi `Dynamic`, `GV_Route` đặt `CamelHttpMethod` |
+| Một nghiệp vụ trả 400 `api khong hop le`, các nghiệp vụ khác chạy | mã đó thiếu trong danh sách `allowed` của `GV_Route` | đối chiếu đủ 11 mã ở Step 2b |
+| Đổi API_PATH xong công ty khác cũng đi CPI | `ZTB_HDDT_ACT` không có cột `CONNID` | tách provider `FPTCPI`, xem mục 3.2 |
 | Deploy xong endpoint vẫn vào iFlow cũ | hai iFlow trùng `urlPath` | đổi Address của một bản trước khi deploy |
 | `401 invalid_client` khi lấy token | lỗi client authentication, không phải grant hay scope | Basic Auth đúng cặp clientid/secret, body `x-www-form-urlencoded`, secret có `$` phải nháy đơn |
 | `consumed the assigned subaccount quota for integration flows` | hết quota iFlow | undeploy iFlow khác hoặc xin tăng quota |
