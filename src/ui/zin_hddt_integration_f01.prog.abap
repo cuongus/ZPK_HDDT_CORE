@@ -597,34 +597,36 @@ CLASS lcl_app IMPLEMENTATION.
     " Exit / Cancel, không phải khai mã và không cần function key.
     DATA lt_btn TYPE STANDARD TABLE OF stb_button WITH DEFAULT KEY.
 
+    " QUICKINFO của STB_BUTTON là C(30): chuỗi dài hơn ra cảnh báo
+    " "not an admissible value for type C(30)" khi activate.
     lt_btn = VALUE #(
       ( butn_type = 3 )
       ( function = gc_fcode-draft   icon = CONV #( icon_create )
-        text = 'Tích hợp HĐ'   quickinfo = 'Tạo hoá đơn nháp trên hệ thống HĐĐT (chờ cấp số)' )
+        text = 'Tích hợp HĐ'   quickinfo = 'Tạo hoá đơn nháp chờ cấp số' )
       ( function = gc_fcode-deldrf  icon = CONV #( icon_delete )
-        text = 'Hủy HĐ nháp'   quickinfo = 'Xoá hoá đơn nháp, đưa chứng từ về chưa tích hợp' )
+        text = 'Hủy HĐ nháp'   quickinfo = 'Xoá nháp, về chưa tích hợp' )
       ( function = gc_fcode-issue   icon = CONV #( icon_execute_object )
-        text = 'Phát hành HĐ'  quickinfo = 'Cấp số và ký duyệt trên chính bản nháp' )
+        text = 'Phát hành HĐ'  quickinfo = 'Cấp số và ký duyệt bản nháp' )
       ( function = gc_fcode-update  icon = CONV #( icon_refresh )
-        text = 'Cập nhật HĐ'   quickinfo = 'Tra cứu và đồng bộ trạng thái về SAP' )
+        text = 'Cập nhật HĐ'   quickinfo = 'Tra cứu, đồng bộ trạng thái' )
       ( function = gc_fcode-adjref  icon = CONV #( icon_change )
-        text = 'HĐ Điều chỉnh' quickinfo = 'Gắn hoá đơn gốc và loại điều chỉnh / thay thế' )
+        text = 'HĐ Điều chỉnh' quickinfo = 'Gắn HĐ gốc và loại điều chỉnh' )
       ( butn_type = 3 )
       ( function = gc_fcode-mail    icon = CONV #( icon_mail )
-        text = 'Send Email'    quickinfo = 'Gửi email hoá đơn (PDF) cho khách hàng' )
+        text = 'Send Email'    quickinfo = 'Gửi email hoá đơn PDF' )
       ( function = gc_fcode-gom     icon = CONV #( icon_collapse )
-        text = 'Gom HĐ'        quickinfo = 'Gom các chứng từ đã chọn thành một hoá đơn' )
+        text = 'Gom HĐ'        quickinfo = 'Gom chứng từ thành một HĐ' )
       ( function = gc_fcode-ungom   icon = CONV #( icon_expand )
-        text = 'Huỷ Gom HĐ'    quickinfo = 'Gỡ toàn bộ chứng từ khỏi chứng từ gom' )
+        text = 'Huỷ Gom HĐ'    quickinfo = 'Gỡ chứng từ khỏi HĐ gom' )
       ( function = gc_fcode-edit    icon = CONV #( icon_edit_file )
-        text = 'Sửa ngày/giờ'  quickinfo = 'Sửa ngày, giờ phát hành và tên hàng' )
+        text = 'Sửa ngày/giờ'  quickinfo = 'Sửa ngày/giờ, tên hàng' )
       ( butn_type = 3 )
       ( function = gc_fcode-getfile icon = CONV #( icon_pdf )
-        text = 'Lấy file'      quickinfo = 'Tải file PDF hoá đơn từ nhà cung cấp' )
+        text = 'Lấy file'      quickinfo = 'Tải file PDF từ nhà cung cấp' )
       ( function = gc_fcode-showjs  icon = CONV #( icon_xml_doc )
-        text = 'Xem payload'   quickinfo = 'Xem payload sẽ gửi cho nhà cung cấp (không gọi API)' )
+        text = 'Xem payload'   quickinfo = 'Xem payload, không gọi API' )
       ( function = gc_fcode-showlog icon = CONV #( icon_protocol )
-        text = 'Log'           quickinfo = 'Xem log gọi API của chứng từ' ) ).
+        text = 'Log'           quickinfo = 'Xem log gọi API' ) ).
 
     APPEND LINES OF lt_btn TO e_object->mt_toolbar.
 
@@ -686,7 +688,8 @@ CLASS lcl_app IMPLEMENTATION.
     CASE e_column_id-fieldname.
 
       WHEN 'EXPAND'.
-        show_items( e_row_id-index ).
+        " E_ROW_ID-INDEX kiểu N(10), tham số nhận TYPE i nên phải CONV
+        show_items( CONV i( e_row_id-index ) ).
 
       WHEN 'INV_LINK'.
         " Nhấn vào link tra cứu hoá đơn -> mở trình duyệt

@@ -21,7 +21,8 @@ Soát các lỗi mà ADT / SE24 sẽ báo khi activate:
   Q. Gọi method qua biến REF TO class: phải tồn tại và PUBLIC
   R. Mệnh đề INTO phải đứng sau WHERE / GROUP BY / HAVING / ORDER BY
   S. PERFORM ... USING nhận biểu thức thay vì tên biến
-  T. SVAL-FIELDTEXT dài quá 20 ký tự (SE38 cắt bớt)
+  T. Nhãn UI vượt giới hạn: SVAL-FIELDTEXT 20, STB_BUTTON-QUICKINFO 30
+  AA. E_ROW_ID-INDEX (N(10)) truyền thẳng vào tham số TYPE i
   U. Dạng ngắn ( name = value ) đi kèm EXCEPTIONS mà thiếu EXPORTING
   V. MESSAGE ... WITH nhận biểu thức thay vì tên biến
   W. Khai báo lại thành phần / method đã có ở lớp cha
@@ -664,6 +665,20 @@ def check_ui(path):
                 report("T", path, i, "FIELDTEXT %d ký tự (tối đa 20): %s"
                        % (len(m.group(1)), m.group(1)))
 
+        # QUICKINFO của STB_BUTTON là C(30)
+        for m in re.finditer(r"quickinfo\s*=\s*'([^']*)'", line, re.I):
+            if len(m.group(1)) > 30:
+                report("T", path, i, "QUICKINFO %d ký tự (tối đa 30): %s"
+                       % (len(m.group(1)), m.group(1)))
+
+        # AA. Thành phần INDEX của LVC_S_ROW là N(10): truyền thẳng vào
+        #     tham số TYPE i thì ADT báo "not compatible with the type I"
+        if re.search(r"\w+\(\s*e_row_id-(?:index|rowid)\s*\)", line, re.I) \
+           or re.search(r"=\s*e_row_id-(?:index|rowid)\s*\)", line, re.I):
+            if "conv" not in line.lower():
+                report("AA", path, i, "truyền E_ROW_ID trực tiếp, bọc "
+                                      "CONV i( ) nếu tham số TYPE i")
+
     # X. Bảng WITH EMPTY KEY truyền vào tham số TABLES của function module cổ
     #    điển: code chuẩn có thể COLLECT / READ WITH KEY -> dump lúc chạy
     text = io.open(path, encoding="utf-8").read()
@@ -830,7 +845,8 @@ KIND = {
     "Q": "Method của class không tồn tại hoặc không PUBLIC",
     "R": "INTO không đứng cuối câu SELECT",
     "S": "PERFORM USING nhận biểu thức",
-    "T": "SVAL-FIELDTEXT dài quá 20 ký tự",
+    "T": "Nhãn UI vượt giới hạn (FIELDTEXT 20 / QUICKINFO 30)",
+    "AA": "E_ROW_ID-INDEX truyền thẳng vào tham số TYPE i",
     "U": "Dạng ngắn name = value đi kèm EXCEPTIONS",
     "V": "MESSAGE ... WITH nhận biểu thức",
     "W": "Khai báo lại thành phần của lớp cha",
