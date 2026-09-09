@@ -211,18 +211,47 @@ layout rỗng, 0200 thì phải có `CC_ITEM` thật, thiếu nó chương trìn
 
 ### 8.2 GUI status ZGOM_HDDT
 
-SE41 → status `ZGOM_HDDT`, Normal screen. Application Toolbar để **trống**,
-chỉ cần bốn mã:
+Thiếu status này thì dòng thông báo hiện `Status ZGOM_HDDT of the user
+interface ZPG_HDDT_INTEGRATION missing` và màn hình 0200 không có nút nào.
 
-| Mã | Vị trí | Nhãn | Icon |
-|---|---|---|---|
-| `SAVE` | Function key F11 + Standard toolbar (Save) | Lưu gom | `ICON_SYSTEM_SAVE` |
-| `ZEDIT` | Function key F5 | Sửa ngày/giờ | `ICON_EDIT_FILE` |
-| `BACK` | Standard toolbar (Back) | Quay lại | |
-| `CANC` | Standard toolbar (Cancel) | Huỷ | |
+**Bước 1.** SE41 → Program `ZPG_HDDT_INTEGRATION` → ô Status điền `ZGOM_HDDT`
+→ nút **Create**.
+
+**Bước 2.** Hộp thoại Short text: `Xem truoc chung tu gom`. Status type chọn
+**Normal screen** (đừng chọn Dialog box, cũng đừng copy từ status chuẩn của
+danh sách — xem mục 7).
+
+**Bước 3.** Bấm **Display Standards** để Standard Toolbar có sẵn Back / Exit /
+Cancel / Save. Ba ô đầu Screen Painter điền `BACK`, `EXIT`, `CANC`; ô Save
+điền `SAVE`.
+
+**Bước 4.** Mở khối **Function Keys**, điền hai mã:
+
+| Ô | Mã | Text |
+|---|---|---|
+| F11 (Save) | `SAVE` | Luu gom |
+| F5 | `ZEDIT` | Sua ngay/gio |
+
+Gán `SAVE` vào F11 để bấm Ctrl+S cũng lưu được.
+
+**Bước 5.** **Application Toolbar để TRỐNG.** Grid dòng hàng đã có toolbar
+riêng của nó, thêm hàng nút nữa chỉ chiếm chỗ. Nếu muốn có nút bấm bằng chuột
+thay vì nhớ F5, đặt đúng hai mã `SAVE` và `ZEDIT` vào Application Toolbar,
+không thêm gì khác.
+
+**Bước 6.** Gán icon cho hai mã: đặt con trỏ vào dòng mã → Goto → Attributes
+→ Icon name `ICON_SYSTEM_SAVE` cho `SAVE`, `ICON_EDIT_FILE` cho `ZEDIT`.
+Bước này chỉ để đẹp, bỏ qua được.
+
+**Bước 7.** Activate status. Không cần activate lại chương trình.
 
 `PAI_0200` nhận cả `SAVE`/`&SAVE`, `ZEDIT`/`EDIT`, `BACK`/`&F03`/`CANC`/`&F12`
-nên gán mã theo kiểu nào cũng chạy — cùng cách xử lý như dynpro 0100.
+nên gán mã theo kiểu nào cũng chạy — cùng cách phòng thân như dynpro 0100.
+
+Nhãn `GV_*_TXT` trống mà giá trị vẫn hiện: `INIT_GOM_LABELS` gán nhãn ở PBO,
+gọi **trước** `SET PF-STATUS`. Nếu bạn còn dùng bản `_F01` cũ chưa có method
+này thì nhãn trống dù `_TOP` đã khai đủ 14 biến — kiểm tra bằng cách tìm
+`init_gom_labels` trong include.
 
 ### 8.3 Vì sao Save mới gom
 

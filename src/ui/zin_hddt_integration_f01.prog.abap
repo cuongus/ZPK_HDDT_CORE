@@ -1287,8 +1287,12 @@ CLASS lcl_app IMPLEMENTATION.
 
   METHOD pbo_0200.
 
-    SET PF-STATUS gc_pfstat_gom.
+    " Gán nhãn TRƯỚC SET PF-STATUS: khi status chưa tạo, runtime báo
+    " "Status ... missing" và các lệnh sau trong module không chắc chạy,
+    " nhãn sẽ trống theo mà tưởng là lỗi khai báo.
     init_gom_labels( ).
+
+    SET PF-STATUS gc_pfstat_gom.
 
     IF mo_grid_it IS BOUND.
       RETURN.
