@@ -220,7 +220,11 @@ vì body là JSON.
 ```
 Adapter: HTTP
   Address                    : {{FPT_BaseURL}}     ← bị CamelHttpUri ghi đè
-  Method                     : Dynamic             ← lấy từ CamelHttpMethod
+  Query                      : để trống
+  Proxy Type                 : Internet
+  Method                     : Dynamic
+  Expression                 : ${header.CamelHttpMethod}   ← bắt buộc khi Dynamic
+  Send Body                  : TICK       ← không tick là POST gửi thân rỗng
   Content-Type               : application/json
   Request Headers            : Content-Type,stax,form,serial,seq,sid,type,fd,td,btax
   Response Headers           : Content-Type
@@ -236,6 +240,20 @@ nhận lỗi ICM chung chung, mất luôn thân lỗi mà Exception Subprocess d
 `Response Headers` đặt `*` thì `Content-Length` và `Content-Encoding` của FPT
 lọt vào message; sau khi Groovy đổi thân, hai header này sai độ dài. Chỉ cần
 `Content-Type`.
+
+Chọn `Method = Dynamic` thì adapter hiện thêm hai ô:
+
+* `Expression` — bắt buộc, viền đỏ khi trống. Điền đúng
+  `${header.CamelHttpMethod}`, tức header mà `GV_Route` đã đặt. Không phải
+  externalized param nên không dùng dấu ngoặc nhọn đôi.
+* `Send Body` — mặc định **không tick**, vì ô này sinh ra cho trường hợp GET.
+  Để nguyên là mọi lệnh POST phát hành hoá đơn gửi thân rỗng và FPT báo thiếu
+  tham số. Phải tick. ABAP không gửi thân cho GET nên nhánh GET chỉ mang
+  `Content-Length: 0`, vô hại.
+
+`Authentication` phải là `None`. Chọn `Client Certificate` là adapter đi tìm
+keystore alias để trình chứng chỉ client, FPT không yêu cầu và cũng không có
+alias nào để trình; tài khoản FPT nằm trong thân payload ở nút `user`.
 
 Bật `Throw Exception on Failure` thì lỗi từ FPT thành exception, client nhận
 `500 ... The MPL ID for the failed message is ...` và mất nội dung lỗi thật.
@@ -455,6 +473,8 @@ Không lưu `clientsecret` trong bảng nào của package: nó nằm ở destin
 | FPT báo sai method ở `search-invoice` | receiver để `Method = POST` cứng | đổi `Dynamic`, `GV_Route` đặt `CamelHttpMethod` |
 | Một nghiệp vụ trả 400 `api khong hop le`, các nghiệp vụ khác chạy | mã đó thiếu trong danh sách `allowed` của `GV_Route` | đối chiếu đủ 11 mã ở Step 2b |
 | Đổi API_PATH xong công ty khác cũng đi CPI | `ZTB_HDDT_ACT` không có cột `CONNID` | tách provider `FPTCPI`, xem mục 3.2 |
+| Chọn Dynamic thì ô `Expression` viền đỏ | Dynamic bắt buộc có biểu thức lấy method | điền `${header.CamelHttpMethod}` |
+| POST phát hành trả lỗi thiếu tham số, Trace thấy body rỗng ở receiver | `Send Body` không tick sau khi đổi sang Dynamic | tick `Send Body` |
 | Deploy xong endpoint vẫn vào iFlow cũ | hai iFlow trùng `urlPath` | đổi Address của một bản trước khi deploy |
 | `401 invalid_client` khi lấy token | lỗi client authentication, không phải grant hay scope | Basic Auth đúng cặp clientid/secret, body `x-www-form-urlencoded`, secret có `$` phải nháy đơn |
 | `consumed the assigned subaccount quota for integration flows` | hết quota iFlow | undeploy iFlow khác hoặc xin tăng quota |
