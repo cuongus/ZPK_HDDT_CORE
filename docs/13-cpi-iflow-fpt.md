@@ -35,29 +35,71 @@ Nếu tenant của bạn nhận sub-path thì dùng `/http/hddt_fpt/create-invoi
 
 ## 2. Dựng iFlow — 7 step
 
-Thứ tự step trên canvas:
+### Sơ đồ iFlow
+
+```mermaid
+flowchart LR
+  SND["SAP_S4<br/>Sender"]
+
+  subgraph proc["Integration Process"]
+    direction LR
+    S(("Start")) --> CM["CM_Init<br/>Content Modifier"]
+    CM --> GR["GV_Route<br/>Groovy"]
+    GR --> RT{"RT_Stop<br/>Router"}
+    RT -->|"Route 2 · Default"| RR["RR_PostJson<br/>Request Reply"]
+    RR --> GV["GV_Response<br/>Groovy"]
+    GV --> E(("End"))
+    RT -->|"Route 1 · p_stop = X"| E
+
+    subgraph exc["Exception Subprocess"]
+      direction LR
+      ES(("Error_Start")) --> GE["GV_Error<br/>Groovy"]
+      GE --> EM(("End_Message"))
+    end
+  end
+
+  RCV["FPT_eInvoice<br/>Receiver"]
+
+  SND -.->|"HTTPS · /hddt_fpt"| S
+  RR -.->|"HTTP · request-reply"| RCV
+```
+
+Bản vẽ đúng theo cách canvas sắp chỗ: Exception Subprocess nằm **trong** khung
+Integration Process nhưng **không có mũi tên** nối vào luồng chính, và `Route 1`
+vòng dưới về đúng element `End` của luồng chính.
+
+Đọc ở editor không dựng được mermaid thì xem bản chữ:
 
 ```
-Sender (HTTPS /hddt_fpt)
-   |
-   v
-[Integration Process]
-   Start                     nhận request từ ABAP
-     |
-   CM_Init (Content Modifier)  property p_fpt_base = {{FPT_BaseURL}}
-     |
-   GV_Route (Groovy)         đọc ?api rồi đặt CamelHttpUri
-     |
-   Router 1 (Non-XML)  --- Route 2 (api sai) ---> End Message (HTTP 400)
-     |  Route 1
-   Request Reply  <---->  Receiver: FPT eInvoice (REST API)
-     |
-   GV_Response (Groovy)      giữ nguyên JSON của FPT
-     |
-   End                       trả response về ABAP
+ SAP_S4 ....HTTPS..>  Start
+                        |
+                     CM_Init         property p_fpt_base = {{FPT_BaseURL}}
+                        |
+                     GV_Route        đọc ?api, dựng CamelHttpUri
+                        |
+                     RT_Stop  --Route 2 (Default)-->  RR_PostJson ....HTTP..> FPT_eInvoice
+                        |                                  |
+                        |                             GV_Response      giữ nguyên JSON của FPT
+                        |                                  |
+                        +--------Route 1 (p_stop = X)--->  End          trả response về ABAP
 
-[Exception Subprocess]  Error Start -> GV_Error -> End Message (HTTP 502)
+ [Exception Subprocess]   Error_Start --> GV_Error --> End_Message      HTTP 502
 ```
+
+| Element trên canvas | Loại | Việc |
+|---|---|---|
+| `SAP_S4` | Participant Sender | nơi ABAP gọi vào, adapter HTTPS `/hddt_fpt` |
+| `Start` | Start event | nhận request từ ABAP |
+| `CM_Init` | Content Modifier | đặt property `p_fpt_base` = `{{FPT_BaseURL}}` |
+| `GV_Route` | Groovy | đọc `?api`, chặn mã lạ, dựng `CamelHttpUri` |
+| `RT_Stop` | Router | tách nhánh lỗi 400 khỏi nhánh gọi FPT |
+| `RR_PostJson` | Request Reply | gọi FPT và chờ response |
+| `FPT_eInvoice` | Participant Receiver | adapter HTTP tới FPT |
+| `GV_Response` | Groovy | giữ nguyên thân JSON, giữ mã HTTP của FPT |
+| `End` | End event | trả response về ABAP |
+| `Error_Start` | Error Start event | bắt lỗi ở bất kỳ step nào |
+| `GV_Error` | Groovy | ghi MPL, dựng thân lỗi, đặt mã 502 |
+| `End_Message` | End Message event | trả thân lỗi về ABAP |
 
 Design → Integrations and APIs → `MAG_Global_EInvoicing` → Edit → Add →
 Integration Flow, tên `HDDT_FPT_Proxy`.
