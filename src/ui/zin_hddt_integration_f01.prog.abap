@@ -497,15 +497,17 @@ CLASS lcl_app IMPLEMENTATION.
       RETURN.
     ENDIF.
 
-    " Docking chiếm gần hết dynpro 0100 (layout của dynpro để rỗng)
+    " Docking chiếm TOÀN BỘ dynpro 0100 (layout của dynpro để rỗng).
+    " Dùng EXTENSION lớn thay cho RATIO: ratio tối đa 95 nên còn dải trống
+    " bên phải màn hình.
     CREATE OBJECT mo_dock
       EXPORTING
-        repid = sy-repid
-        dynnr = sy-dynnr
-        side  = cl_gui_docking_container=>dock_at_left
-        ratio = 95
+        repid     = sy-repid
+        dynnr     = sy-dynnr
+        side      = cl_gui_docking_container=>dock_at_left
+        extension = 9999
       EXCEPTIONS
-        OTHERS = 1.
+        OTHERS    = 1.
     IF sy-subrc <> 0.
       MESSAGE 'Không tạo được docking container cho ALV.' TYPE 'S' DISPLAY LIKE 'E'.
       RETURN.

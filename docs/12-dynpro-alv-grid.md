@@ -142,3 +142,20 @@ SELECT progname, obj_type, obj_code, text FROM rsmptexts
 ```
 
 `OBJ_TYPE = 'C'` là danh sách status, `'F'` là các mã chức năng kèm text.
+
+## 8. Dải trống phía trên grid
+
+Sau khi xoá hết nút khỏi Application Toolbar, vẫn còn một dải xám giữa dòng tiêu
+đề và toolbar của grid. Hai nguồn, xử lý riêng:
+
+- **Dải ngang phía trên**: status vẫn còn khối Application Toolbar (rỗng) nên SAP
+  GUI vẫn vẽ một hàng. Cách chắc chắn: SE41 xoá status rồi tạo lại với
+  **Status type = Normal screen**, bấm Display Standards, không thêm gì vào
+  Application Toolbar. Status kiểu danh sách luôn kèm hàng này.
+- **Chữ `SAP` ở dòng tiêu đề**: chương trình chưa `SET TITLEBAR`. Muốn hiện chữ
+  riêng thì SE41 → Titles → tạo title `T01` với nội dung
+  `Tích hợp hoá đơn điện tử`, rồi thêm `SET TITLEBAR 'T01'.` vào `PBO_0100`.
+  Không tạo cũng không sao, chỉ là mỹ quan.
+- **Dải dọc bên phải**: do docking khai `ratio = 95`, tối đa của ratio là 95 nên
+  luôn còn 5% trống. Đã sửa trong code: dùng `extension = 9999` thay cho `ratio`,
+  container chiếm hết bề ngang.
