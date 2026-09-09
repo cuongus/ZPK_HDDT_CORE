@@ -138,9 +138,17 @@ script không compile. Tránh regex, dùng `split`, `indexOf`, `substring`.
 Hai nhánh, Expression Type **Non-XML** cho mọi nhánh dùng `${property}`:
 
 ```
-Nhánh 1 (Default) : đi tiếp Request Reply
-Nhánh 2           : ${property.p_stop} = 'X'  → End Message (trả lỗi 400)
+Nhánh đi tiếp Request Reply : tick Default Route, để trống Condition
+Nhánh đi End Message (400)  : ${property.p_stop} = 'X', KHÔNG tick Default
 ```
+
+Canvas tự đặt tên `Route 1` / `Route 2` theo thứ tự vẽ, không theo thứ tự trên,
+nên phải mở từng nhánh xem nó nối vào đâu rồi mới điền. Đặt điều kiện
+`p_stop = 'X'` lên nhánh đi Request Reply là lộn ngược: mọi request hợp lệ rơi
+vào nhánh mặc định trả 400, còn request sai `api` lại được gửi sang FPT.
+
+Đúng một nhánh được tick Default Route. Không nhánh nào tick thì request không
+khớp điều kiện sẽ ra `IllegalStateException: no default route`.
 
 Để Expression Type là XML sẽ ra `XPathException: expected "<name>", found "{"`
 vì body là JSON.
@@ -153,10 +161,19 @@ Adapter: HTTP
   Method                     : POST
   Content-Type               : application/json
   Request Headers            : Content-Type,Authorization
+  Response Headers           : Content-Type
   Authentication             : None       ← FPT nhận tài khoản trong thân payload
-  Timeout                    : 90000
+  Timeout                    : 45000      ← phải NHỎ HƠN TIMEOUT của ZTB_HDDT_CONN
   Throw Exception on Failure : BỎ TICK
 ```
+
+`Timeout` của receiver phải nhỏ hơn `TIMEOUT` khai trong `ZTB_HDDT_CONN` (mặc
+định 60 giây). Nếu để bằng hoặc lớn hơn thì khi FPT treo, phía SAP đứt trước và
+nhận lỗi ICM chung chung, mất luôn thân lỗi mà Exception Subprocess dựng.
+
+`Response Headers` đặt `*` thì `Content-Length` và `Content-Encoding` của FPT
+lọt vào message; sau khi Groovy đổi thân, hai header này sai độ dài. Chỉ cần
+`Content-Type`.
 
 Bật `Throw Exception on Failure` thì lỗi từ FPT thành exception, client nhận
 `500 ... The MPL ID for the failed message is ...` và mất nội dung lỗi thật.
@@ -295,6 +312,8 @@ trong file để đổi qua lại nhanh.
 | Receiver báo "You cannot configure dynamic parameters" | dùng `${property}` trong ô Address | dùng externalized `{{...}}` hoặc header `CamelHttpUri` |
 | FPT trả 401 dù Groovy đã set header | ô `Request Headers` của adapter thiếu `Authorization` | điền `Content-Type,Authorization` |
 | Groovy báo `unexpected char: \` | mất dấu gạch chéo khi copy | bỏ escape, dùng `split` / `indexOf` |
+| Request hợp lệ cũng trả 400 `api khong hop le` | điều kiện `p_stop` đặt lên nhánh đi Request Reply | chuyển điều kiện sang nhánh đi End Message, nhánh còn lại tick Default Route |
+| SAP báo timeout nhưng Monitor CPI vẫn `Processing` | `Timeout` receiver ≥ `TIMEOUT` của `ZTB_HDDT_CONN` | hạ Timeout receiver xuống dưới mốc của SAP |
 | Deploy xong endpoint vẫn vào iFlow cũ | hai iFlow trùng `urlPath` | đổi Address của một bản trước khi deploy |
 | `401 invalid_client` khi lấy token | lỗi client authentication, không phải grant hay scope | Basic Auth đúng cặp clientid/secret, body `x-www-form-urlencoded`, secret có `$` phải nháy đơn |
 | `consumed the assigned subaccount quota for integration flows` | hết quota iFlow | undeploy iFlow khác hoặc xin tăng quota |
