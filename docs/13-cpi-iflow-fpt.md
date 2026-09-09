@@ -44,6 +44,8 @@ Sender (HTTPS /hddt_fpt)
 [Integration Process]
    Start                     nhận request từ ABAP
      |
+   CM_Init (Content Modifier)  property p_fpt_base = {{FPT_BaseURL}}
+     |
    GV_Route (Groovy)         đọc ?api rồi đặt CamelHttpUri
      |
    Router 1 (Non-XML)  --- Route 2 (api sai) ---> End Message (HTTP 400)
@@ -73,7 +75,24 @@ Adapter: HTTPS
 
 Start event còn hiện tam giác cam là do thiếu Address hoặc chưa nối message flow.
 
-### Step 2 — Groovy `GV_Route`
+### Step 2a — Content Modifier `CM_Init`
+
+Bắt buộc, đứng ngay sau Start. Tab **Exchange Property** thêm một dòng:
+
+```
+Name   : p_fpt_base
+Source Type : Constant
+Value  : {{FPT_BaseURL}}
+```
+
+Không có step này thì `GV_Route` đọc `p_fpt_base` ra null và `CamelHttpUri`
+thành `null/create-invoice`.
+
+`{{FPT_BaseURL}}` là externalized parameter. Giá trị UAT
+`https://api-uat.einvoice.fpt.com.vn`, **không có dấu gạch chéo ở cuối** vì
+`GV_Route` tự ghép `base + '/' + api`.
+
+### Step 2b — Groovy `GV_Route`
 
 Đọc `api` từ query, kiểm tra nằm trong danh sách cho phép, rồi dựng URL đích.
 Dùng `CamelHttpUri` vì ô Address của receiver không nhận `${property}`.
@@ -176,6 +195,11 @@ Allowed Header(s) : Content-Type,Accept,Authorization
 ```
 
 Thiếu dòng này thì header không tới được receiver.
+
+Ô này nhận **danh sách tên header**, không phải tham số. Đừng đặt
+`{{FPT_BaseURL}}` vào đây: base URL thuộc ô **Address của adapter HTTP** ở
+receiver và property `p_fpt_base` trong `CM_Init`. Externalization chỉ liệt kê
+tham số nào đang được tham chiếu, nên khai ở adapter trước rồi mới sửa ô này.
 
 Save → Deploy. Trạng thái thật xem ở **Monitor → Manage Integration Content**,
 không tin tab Deployment Status của bản draft đang mở.
