@@ -35,6 +35,28 @@ Nếu tenant của bạn nhận sub-path thì dùng `/http/hddt_fpt/create-invoi
 
 ## 2. Dựng iFlow — 7 step
 
+Thứ tự step trên canvas:
+
+```
+Sender (HTTPS /hddt_fpt)
+   |
+   v
+[Integration Process]
+   Start                     nhận request từ ABAP
+     |
+   GV_Route (Groovy)         đọc ?api rồi đặt CamelHttpUri
+     |
+   Router 1 (Non-XML)  --- Route 2 (api sai) ---> End Message (HTTP 400)
+     |  Route 1
+   Request Reply  <---->  Receiver: FPT eInvoice (REST API)
+     |
+   GV_Response (Groovy)      giữ nguyên JSON của FPT
+     |
+   End                       trả response về ABAP
+
+[Exception Subprocess]  Error Start -> GV_Error -> End Message (HTTP 502)
+```
+
 Design → Integrations and APIs → `MAG_Global_EInvoicing` → Edit → Add →
 Integration Flow, tên `HDDT_FPT_Proxy`.
 
