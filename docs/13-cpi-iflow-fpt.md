@@ -99,6 +99,7 @@ Dùng `CamelHttpUri` vì ô Address của receiver không nhận `${property}`.
 
 ```groovy
 import com.sap.gateway.ip.core.customdev.util.Message
+import groovy.json.JsonOutput
 
 def Message processData(Message message) {
     def query = message.getHeaders().get('CamelHttpQuery') ?: ''
@@ -113,7 +114,8 @@ def Message processData(Message message) {
                    'search-invoice', 'create-appr-inv']
     if (!allowed.contains(api)) {
         message.setHeader('CamelHttpResponseCode', 400)
-        message.setBody('{"error":"api khong hop le: ' + api + '"}')
+        message.setHeader('Content-Type', 'application/json')
+        message.setBody(JsonOutput.toJson([ error: 'api khong hop le', api: api ]))
         message.setProperty('p_stop', 'X')
         return message
     }
@@ -183,10 +185,46 @@ tuyệt đối **không đổi cấu trúc JSON**.
 
 ### Step 6 — Exception Subprocess
 
+Ba element, không nối vào Integration Process: `Error_Start` → Groovy `GV_Error`
+→ `End_Message`. Runtime tự nhảy vào đây khi có lỗi ở bất kỳ step nào.
+
+```groovy
+import com.sap.gateway.ip.core.customdev.util.Message
+import groovy.json.JsonOutput
+
+def Message processData(Message message) {
+
+    def ex  = message.getProperty('CamelExceptionCaught')
+    def api = message.getProperty('p_api')
+    def txt = (ex == null) ? 'khong ro nguyen nhan' : ex.toString()
+    def apiTxt = (api == null) ? '' : api.toString()
+
+    // Ghi vào Message Processing Log để tra bằng Monitor
+    def log = messageLogFactory.getMessageLog(message)
+    if (log != null) {
+        log.setStringProperty('HDDT_api', apiTxt)
+        log.setStringProperty('HDDT_error', txt)
+        log.addAttachmentAsString('HDDT_error', txt, 'text/plain')
+    }
+
+    // JsonOutput tự escape nên không cần ký tự thoát trong script
+    def body = JsonOutput.toJson([ error : 'CPI loi khi goi FPT',
+                                   api   : apiTxt,
+                                   detail: txt ])
+
+    message.setBody(body)
+    message.setHeader('Content-Type', 'application/json')
+    message.setHeader('CamelHttpResponseCode', 502)
+    return message
+}
 ```
-Error Start → Groovy GV_Error (ghi log + set CamelHttpResponseCode = 502
-              + body {"error":"..."} ) → End Message
-```
+
+`messageLogFactory` là binding có sẵn của CPI, không phải import. `log` trả về
+null khi log level là None, nên phải kiểm tra trước khi dùng.
+
+Engine HĐĐT đọc mã 502 là lỗi kỹ thuật và ghi `ZTB_HDDT_LOG` với
+`SUCCESS = space`; nội dung `detail` vào `RES_BODY` nên tra được nguyên nhân
+ngay trên SAP mà không cần mở Monitor.
 
 ### Step 7 — Runtime Configuration
 
