@@ -24,6 +24,8 @@
 *                         docking trên dynpro 0100: 12 nút khai trong code
 *                         qua event TOOLBAR, GUI status chỉ cần Back/Exit/
 *                         Cancel. Field catalog lấy từ metadata của SALV.
+* 1.4       09/09/2026    cuongus - CuongUS        abapGit     Cột EXPAND:
+*                         bấm icon mở popup ALV các dòng hàng của chứng từ
 * 1.2       07/09/2026    cuongus - CuongUS        abapGit     FS MAG v0.5:
 *                         8 nút nghiệp vụ, email, gom, sửa ngày/giờ,
 *                         phát hành tự động, kiểm quyền theo chức năng
@@ -107,6 +109,21 @@ CLASS lcl_app DEFINITION FINAL CREATE PUBLIC.
     METHODS do_getfile.
     METHODS show_payload.
     METHODS show_log.
+
+    "! Popup ALV các dòng hàng của một chứng từ trên danh sách
+    METHODS show_items
+      IMPORTING i_row TYPE i.
+
+    "! Nhãn loại dòng hàng theo ZTB_HDDT_MAP kiểu ITEMTYPE
+    METHODS item_type_text
+      IMPORTING i_type        TYPE zde_hddt_itemtype
+      RETURNING VALUE(r_text) TYPE gty_ittext.
+
+    "! Đặt nhãn một cột của popup; bỏ qua khi cấu trúc không có cột đó
+    METHODS set_col
+      IMPORTING io_cols TYPE REF TO cl_salv_columns_table
+                i_field TYPE lvc_fname
+                i_text  TYPE scrtext_m.
 
     METHODS map_light
       IMPORTING i_status      TYPE zde_hddt_status
@@ -321,6 +338,13 @@ CLASS lcl_app IMPLEMENTATION.
         fill_row_from_registry( EXPORTING is_reg = ls_reg CHANGING cs_alv = <fs_alv> ).
       ENDIF.
 
+      " Chỉ hiện icon mở rộng khi chứng từ dựng được dòng hàng
+      IF <fs_req>-invoice-items IS NOT INITIAL.
+        " ICON_EXPAND đã dùng cho nút Huỷ Gom HĐ; cột này lấy icon
+        " mở rộng riêng của ALV để không lẫn ý nghĩa
+        <fs_alv>-expand = icon_alv_expand.
+      ENDIF.
+
       <fs_alv>-status_txt = status_text( <fs_alv>-status ).
       <fs_alv>-light      = map_light( i_status = <fs_alv>-status
                                        i_msgty  = <fs_alv>-msgty ).
@@ -411,8 +435,10 @@ CLASS lcl_app IMPLEMENTATION.
            END OF lty_col.
     DATA lt_col TYPE STANDARD TABLE OF lty_col WITH DEFAULT KEY.
 
-    " flag: I = cột icon · H = cột bấm được (link) · T = cột kỹ thuật, ẩn
+    " flag: I = cột icon · H = cột bấm được (link) · B = icon bấm được
+    "       · T = cột kỹ thuật, ẩn
     lt_col = VALUE #(
+      ( field = 'EXPAND'     short = 'Chi tiết'  medium = 'Dòng hàng'           flag = 'B' )
       ( field = 'LIGHT'      short = 'TT'        medium = 'Trạng thái'          flag = 'I' )
       ( field = 'MAIL_LIGHT' short = 'Email'     medium = 'Trạng thái email'    flag = 'I' )
       ( field = 'BUKRS'      short = 'Công ty'   medium = 'Mã công ty' )
@@ -479,6 +505,9 @@ CLASS lcl_app IMPLEMENTATION.
         WHEN 'I'.
           <fs_fcat>-icon = abap_true.
         WHEN 'H'.
+          <fs_fcat>-hotspot = abap_true.
+        WHEN 'B'.
+          <fs_fcat>-icon    = abap_true.
           <fs_fcat>-hotspot = abap_true.
         WHEN 'T'.
           <fs_fcat>-tech = abap_true.
@@ -650,27 +679,142 @@ CLASS lcl_app IMPLEMENTATION.
 
   METHOD on_hotspot.
 
-    " Nhấn vào link tra cứu hoá đơn -> mở trình duyệt
-    IF e_column_id-fieldname <> 'INV_LINK'.
-      RETURN.
-    ENDIF.
     IF e_row_id-index < 1 OR e_row_id-index > lines( gt_alv ).
       RETURN.
     ENDIF.
 
-    DATA(lv_url) = CONV string( gt_alv[ e_row_id-index ]-inv_link ).
-    IF lv_url IS INITIAL.
+    CASE e_column_id-fieldname.
+
+      WHEN 'EXPAND'.
+        show_items( e_row_id-index ).
+
+      WHEN 'INV_LINK'.
+        " Nhấn vào link tra cứu hoá đơn -> mở trình duyệt
+        DATA(lv_url) = CONV string( gt_alv[ e_row_id-index ]-inv_link ).
+        IF lv_url IS INITIAL.
+          RETURN.
+        ENDIF.
+
+        " Dạng ngắn ( name = value ) không đi kèm được EXCEPTIONS
+        cl_gui_frontend_services=>execute(
+          EXPORTING  document   = lv_url
+          EXCEPTIONS cntl_error = 1
+                     OTHERS     = 2 ).
+        IF sy-subrc <> 0.
+          MESSAGE 'Không mở được link tra cứu hoá đơn.' TYPE 'S' DISPLAY LIKE 'W'.
+        ENDIF.
+
+      WHEN OTHERS.
+
+    ENDCASE.
+
+  ENDMETHOD.
+
+
+  METHOD show_items.
+
+    IF i_row < 1 OR i_row > lines( gt_request ).
       RETURN.
     ENDIF.
 
-    " Dạng ngắn ( name = value ) không đi kèm được EXCEPTIONS
-    cl_gui_frontend_services=>execute(
-      EXPORTING  document   = lv_url
-      EXCEPTIONS cntl_error = 1
-                 OTHERS     = 2 ).
-    IF sy-subrc <> 0.
-      MESSAGE 'Không mở được link tra cứu hoá đơn.' TYPE 'S' DISPLAY LIKE 'W'.
+    DATA(ls_req) = gt_request[ i_row ].
+    IF ls_req-invoice-items IS INITIAL.
+      MESSAGE 'Chứng từ này chưa dựng được dòng hàng nào.'
+              TYPE 'S' DISPLAY LIKE 'W'.
+      RETURN.
     ENDIF.
+
+    DATA lt_item TYPE gty_t_item_alv.
+    LOOP AT ls_req-invoice-items ASSIGNING FIELD-SYMBOL(<fs_it>).
+      APPEND VALUE gty_item_alv(
+        line_no    = <fs_it>-line_no
+        item_type  = <fs_it>-item_type
+        type_txt   = item_type_text( <fs_it>-item_type )
+        item_code  = <fs_it>-item_code
+        item_name  = <fs_it>-item_name
+        unit       = <fs_it>-unit
+        quantity   = <fs_it>-quantity
+        price      = <fs_it>-price
+        amount     = <fs_it>-amount
+        tax_txt    = <fs_it>-tax_rate_txt
+        tax_amount = <fs_it>-tax_amount
+        total      = <fs_it>-total
+        disc_pct   = <fs_it>-disc_percent
+        disc_amt   = <fs_it>-disc_amount
+        note       = <fs_it>-note ) TO lt_item.
+    ENDLOOP.
+
+    DATA lo_pop TYPE REF TO cl_salv_table.
+    TRY.
+        cl_salv_table=>factory( IMPORTING r_salv_table = lo_pop
+                                CHANGING  t_table      = lt_item ).
+
+        " Popup gần kín màn hình vì tên hàng dài
+        lo_pop->set_screen_popup( start_column = 1
+                                  end_column   = 200
+                                  start_line   = 1
+                                  end_line     = 28 ).
+
+        DATA lv_title TYPE lvc_title.
+        lv_title = |Dòng hàng { ls_req-src_type } { ls_req-src_docno }/| &&
+                   |{ ls_req-gjahr } - { lines( lt_item ) } dòng|.
+        lo_pop->get_display_settings( )->set_list_header( lv_title ).
+        lo_pop->get_display_settings( )->set_striped_pattern( abap_true ).
+        lo_pop->get_functions( )->set_all( abap_true ).
+
+        DATA(lo_cols) = lo_pop->get_columns( ).
+        lo_cols->set_optimize( abap_true ).
+        set_col( io_cols = lo_cols i_field = 'LINE_NO'    i_text = 'STT' ).
+        set_col( io_cols = lo_cols i_field = 'ITEM_TYPE'  i_text = 'Mã loại dòng' ).
+        set_col( io_cols = lo_cols i_field = 'TYPE_TXT'   i_text = 'Loại dòng' ).
+        set_col( io_cols = lo_cols i_field = 'ITEM_CODE'  i_text = 'Mã hàng' ).
+        set_col( io_cols = lo_cols i_field = 'ITEM_NAME'  i_text = 'Tên hàng' ).
+        set_col( io_cols = lo_cols i_field = 'UNIT'       i_text = 'Đơn vị tính' ).
+        set_col( io_cols = lo_cols i_field = 'QUANTITY'   i_text = 'Số lượng' ).
+        set_col( io_cols = lo_cols i_field = 'PRICE'      i_text = 'Đơn giá' ).
+        set_col( io_cols = lo_cols i_field = 'AMOUNT'     i_text = 'Thành tiền' ).
+        set_col( io_cols = lo_cols i_field = 'TAX_TXT'    i_text = 'Thuế suất' ).
+        set_col( io_cols = lo_cols i_field = 'TAX_AMOUNT' i_text = 'Tiền thuế' ).
+        set_col( io_cols = lo_cols i_field = 'TOTAL'      i_text = 'Tổng sau thuế' ).
+        set_col( io_cols = lo_cols i_field = 'DISC_PCT'   i_text = 'Chiết khấu %' ).
+        set_col( io_cols = lo_cols i_field = 'DISC_AMT'   i_text = 'Tiền chiết khấu' ).
+        set_col( io_cols = lo_cols i_field = 'NOTE'       i_text = 'Ghi chú' ).
+
+        lo_pop->display( ).
+
+      CATCH cx_salv_error INTO DATA(lx_pop).
+        MESSAGE lx_pop->get_text( ) TYPE 'S' DISPLAY LIKE 'E'.
+    ENDTRY.
+
+  ENDMETHOD.
+
+
+  METHOD item_type_text.
+
+    zcl_hddt_config=>get_instance( )->map_value(
+      EXPORTING i_provider  = space
+                i_map_type  = zif_hddt_types=>gc_map_type-item_type
+                i_sap_value = i_type
+      IMPORTING e_ext_text  = DATA(lv_text) ).
+
+    " Chưa khai ITEMTYPE trong ZTB_HDDT_MAP thì hiện luôn mã
+    r_text = COND #( WHEN lv_text IS INITIAL
+                     THEN |{ i_type }|
+                     ELSE lv_text ).
+
+  ENDMETHOD.
+
+
+  METHOD set_col.
+
+    TRY.
+        DATA(lo_col) = io_cols->get_column( i_field ).
+        lo_col->set_short_text( CONV scrtext_s( i_text ) ).
+        lo_col->set_medium_text( i_text ).
+        lo_col->set_long_text( CONV scrtext_l( i_text ) ).
+      CATCH cx_salv_not_found.
+        " Cột không có trong cấu trúc -> bỏ qua, không chặn popup
+    ENDTRY.
 
   ENDMETHOD.
 

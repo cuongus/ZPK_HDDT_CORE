@@ -14,6 +14,8 @@
 * 1.2       07/09/2026    cuongus - CuongUS        abapGit     FS MAG v0.5:
 *                         tham số CPUDT/SEQ/GOM/loại HĐ/phát hành tự
 *                         động; cột email, tên hàng, gom, loại ĐC, mail
+* 1.3       09/09/2026    cuongus - CuongUS        abapGit     Cột EXPAND
+*                         và cấu trúc dòng hàng cho popup chi tiết
 *=====================================================================
 TYPE-POOLS icon.
 
@@ -23,6 +25,7 @@ TABLES: bkpf, bseg, ztb_hddt_inv.
 * Dòng hiển thị trên ALV (FS mục 3.5)
 *---------------------------------------------------------------------*
 TYPES: BEGIN OF gty_alv,
+         expand      TYPE c LENGTH 4,   " icon mở rộng -> popup dòng hàng
          light       TYPE c LENGTH 4,   " đèn trạng thái HĐĐT
          mail_light  TYPE c LENGTH 4,   " icon trạng thái email
          bukrs       TYPE bukrs,
@@ -80,6 +83,31 @@ DATA gt_request TYPE zif_hddt_types=>ty_t_request.
 TYPES gty_icon    TYPE c LENGTH 4.
 TYPES gty_sttext  TYPE c LENGTH 60.
 TYPES gty_adjcode TYPE c LENGTH 1.
+TYPES gty_ittext  TYPE c LENGTH 30.
+
+*---------------------------------------------------------------------*
+* Dòng hàng hiển thị trong popup khi bấm icon mở rộng
+*---------------------------------------------------------------------*
+" ZIF_HDDT_TYPES=>TY_ITEM có cột kiểu STRING mà ALV không hiển thị được,
+" nên popup dùng cấu trúc phẳng theo data element của package.
+TYPES: BEGIN OF gty_item_alv,
+         line_no    TYPE zde_hddt_lineno,
+         item_type  TYPE zde_hddt_itemtype,
+         type_txt   TYPE gty_ittext,
+         item_code  TYPE c LENGTH 40,
+         item_name  TYPE c LENGTH 250,
+         unit       TYPE c LENGTH 20,
+         quantity   TYPE zde_hddt_qty,
+         price      TYPE zde_hddt_amount,
+         amount     TYPE zde_hddt_amount,
+         tax_txt    TYPE c LENGTH 10,
+         tax_amount TYPE zde_hddt_amount,
+         total      TYPE zde_hddt_amount,
+         disc_pct   TYPE zde_hddt_rate,
+         disc_amt   TYPE zde_hddt_amount,
+         note       TYPE c LENGTH 250,
+       END OF gty_item_alv.
+TYPES gty_t_item_alv TYPE STANDARD TABLE OF gty_item_alv WITH EMPTY KEY.
 
 "! Danh sách loại nguồn dữ liệu đã cấu hình (ZTB_HDDT_SRC)
 TYPES gty_t_srctype TYPE STANDARD TABLE OF zde_hddt_srctype WITH EMPTY KEY.
