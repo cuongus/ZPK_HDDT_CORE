@@ -103,3 +103,42 @@ Bản SALV nằm ở commit trước `9eb8270` trong repo. Hoàn nguyên ba file
 phải sửa ở lần activate đầu: chữ ký `CL_SALV_CONTROLLER_METADATA=>GET_LVC_FIELDCATALOG`,
 tham số `ratio` của docking container, và tên tham số `ET_INDEX_ROWS` của
 `GET_SELECTED_ROWS`.
+
+## 7. Hai lỗi đã gặp khi tạo status (kiểm chứng trên S25 client 300, 09/09/2026)
+
+**Thừa một hàng nút phía trên grid.** Status tạo bằng cách copy chuẩn danh sách
+(`RSMPTEXTS` ghi text `Standard for General List Output`) nên Application Toolbar
+mang theo toàn bộ mã của list: `&ETA` `&EB9` `&ALL` `&SAL` `&OUP` `&ODN` `&ILT`
+`&UMC` `&SUM` `&XPA` `&OMP` `%PC` `%SL` `&ABC` `&OL0` `&OAD` `&AVE` `&LFO`
+`&NFO` `&XXL` `&AQW` `&CRB` `&CRL` `&CRR` `&CRE` `P--` `P-` `P+` `P++`. Grid đã
+có toolbar riêng nên hàng này chỉ gây rối.
+
+Cách sửa nhanh nhất: SE41 xoá status rồi tạo lại với **Status type = Normal
+screen**, bấm Display Standards, để Application Toolbar TRỐNG. Hoặc mở status
+hiện có và xoá hết ô trong Application Toolbar.
+
+**Bấm Back không có tác dụng.** Trong status copy từ chuẩn danh sách, mã của
+Back / Exit / Cancel là `&F03` / `&F15` / `&F12`, không phải `BACK` / `EXIT` /
+`CANC`. Method `PAI_0100` bản đầu chỉ nhận bộ thứ hai nên không khớp nhánh nào.
+Đã sửa: nhận cả ba bộ mã, kể cả `RW` / `RE` của danh sách cổ điển.
+
+```abap
+    CASE i_ucomm.
+      WHEN 'BACK' OR '&F03' OR 'RW'.
+        LEAVE TO SCREEN 0.
+      WHEN 'CANC' OR '&F12' OR 'RE'.
+        LEAVE TO SCREEN 0.
+      WHEN 'EXIT' OR '&F15'.
+        LEAVE PROGRAM.
+      WHEN OTHERS.
+    ENDCASE.
+```
+
+Cách tự kiểm tra mã chức năng của một status bằng MCP hoặc SE16:
+
+```sql
+SELECT progname, obj_type, obj_code, text FROM rsmptexts
+  WHERE progname = 'ZPG_HDDT_INTEGRATION'
+```
+
+`OBJ_TYPE = 'C'` là danh sách status, `'F'` là các mã chức năng kèm text.

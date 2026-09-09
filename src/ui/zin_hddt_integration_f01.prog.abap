@@ -543,9 +543,16 @@ CLASS lcl_app IMPLEMENTATION.
 
   METHOD pai_0100.
 
+    " GUI status copy từ chuẩn danh sách dùng mã &F03 / &F15 / &F12, status
+    " tự tạo thường dùng BACK / EXIT / CANC, danh sách cổ điển dùng RW / RE.
+    " Nhận cả ba bộ để nút Back luôn có tác dụng.
     CASE i_ucomm.
-      WHEN 'BACK' OR 'EXIT' OR 'CANC'.
+      WHEN 'BACK' OR '&F03' OR 'RW'.
         LEAVE TO SCREEN 0.
+      WHEN 'CANC' OR '&F12' OR 'RE'.
+        LEAVE TO SCREEN 0.
+      WHEN 'EXIT' OR '&F15'.
+        LEAVE PROGRAM.
       WHEN OTHERS.
         " Nút của grid đi qua event USER_COMMAND, không qua PAI
     ENDCASE.
