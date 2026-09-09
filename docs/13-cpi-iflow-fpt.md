@@ -247,6 +247,15 @@ tự lo xác thực.
 POST, FPT trả lỗi method. `Dynamic` đọc header `CamelHttpMethod` mà `GV_Route`
 đã đặt.
 
+[Unverified] Nếu bản adapter trên tenant không có mục `Dynamic` trong dropdown
+`Method` thì làm cách hai: thêm nhánh thứ ba vào `RT_Stop` với điều kiện
+`${property.p_api} = 'search-invoice'`, nhánh đó đi một Request Reply riêng
+`RR_GetJson` để `Method = GET`, rồi nhập lại vào `GV_Response`. Tốn một
+element nhưng không phụ thuộc phiên bản adapter.
+
+ABAP không gửi thân cho GET (`ZCL_HDDT_HTTP~send` bỏ `set_cdata` khi method là
+`GET` hoặc `DELETE`), nên body rỗng là đúng, đừng đi tìm payload trong Trace.
+
 `Request Headers` **không nên có `Authorization`**. Tài khoản FPT nằm trong thân
 payload ở nút `user` (xem `ZCL_HDDT_PROV_FPT~add_user_node`), còn header
 `Authorization` mà CPI nhận được là Basic `clientid:clientsecret` của
@@ -419,10 +428,14 @@ Không lưu `clientsecret` trong bảng nào của package: nó nằm ở destin
 1. Postman: `POST https://<cpi-host>/http/hddt_fpt?api=create-invoice`, Basic
    Auth bằng clientid/clientsecret, body là payload FPT thật. Phải nhận đúng
    response của FPT.
-2. `ZFI001` → chọn chứng từ → tick Test run → nút `Xem payload` để soát nội dung.
-3. Bỏ tick Test run → `Tích hợp HĐ`. Xem `ZTB_HDDT_LOG` qua nút `Log`: `FULL_URL`
+2. Postman riêng cho nhánh GET: `GET https://<cpi-host>/http/hddt_fpt?api=search-invoice`,
+   **không có body**, thêm header `stax`, `form`, `serial`, `seq`, `sid`,
+   `type: json`. Trả về đúng hoá đơn thì phần header đã đi xuyên được CPI; trả
+   rỗng là Allowed Header(s) còn thiếu tên header.
+3. `ZFI001` → chọn chứng từ → tick Test run → nút `Xem payload` để soát nội dung.
+4. Bỏ tick Test run → `Tích hợp HĐ`. Xem `ZTB_HDDT_LOG` qua nút `Log`: `FULL_URL`
    phải trỏ CPI, `HTTP_CODE` và `RES_BODY` là của FPT.
-4. Lỗi thì bật Trace: Manage Integration Content → iFlow → Log Configuration →
+5. Lỗi thì bật Trace: Manage Integration Content → iFlow → Log Configuration →
    Trace → gửi lại → Monitor Message Processing → message → Logs → Trace, xem
    Payload từng step. Trace tự hết sau 10 đến 15 phút.
 
