@@ -16,6 +16,8 @@
 *                         động; cột email, tên hàng, gom, loại ĐC, mail
 * 1.3       09/09/2026    cuongus - CuongUS        abapGit     Cột EXPAND
 *                         và cấu trúc dòng hàng cho popup chi tiết
+* 1.4       09/09/2026    cuongus - CuongUS        abapGit     Màn hình
+*                         0200 xem trước chứng từ gom trước khi lưu
 *=====================================================================
 TYPE-POOLS icon.
 
@@ -86,11 +88,25 @@ TYPES gty_adjcode TYPE c LENGTH 1.
 TYPES gty_ittext  TYPE c LENGTH 30.
 
 *---------------------------------------------------------------------*
+* Nhãn cột dùng chung cho field catalog của grid và cột của SALV
+*---------------------------------------------------------------------*
+" flag: I = cột icon · H = cột bấm được · B = icon bấm được
+"       · T = cột kỹ thuật, ẩn
+TYPES: BEGIN OF gty_col,
+         field  TYPE lvc_fname,
+         short  TYPE scrtext_s,
+         medium TYPE scrtext_m,
+         flag   TYPE gty_adjcode,
+       END OF gty_col.
+TYPES gty_t_col TYPE STANDARD TABLE OF gty_col WITH DEFAULT KEY.
+
+*---------------------------------------------------------------------*
 * Dòng hàng hiển thị trong popup khi bấm icon mở rộng
 *---------------------------------------------------------------------*
 " ZIF_HDDT_TYPES=>TY_ITEM có cột kiểu STRING mà ALV không hiển thị được,
 " nên popup dùng cấu trúc phẳng theo data element của package.
 TYPES: BEGIN OF gty_item_alv,
+         src_docno  TYPE zde_hddt_docno,
          line_no    TYPE zde_hddt_lineno,
          item_type  TYPE zde_hddt_itemtype,
          type_txt   TYPE gty_ittext,
@@ -108,6 +124,35 @@ TYPES: BEGIN OF gty_item_alv,
          note       TYPE c LENGTH 250,
        END OF gty_item_alv.
 TYPES gty_t_item_alv TYPE STANDARD TABLE OF gty_item_alv WITH EMPTY KEY.
+
+*---------------------------------------------------------------------*
+* Màn hình 0200 — xem trước chứng từ gom rồi mới lưu
+*---------------------------------------------------------------------*
+" Các field này đặt trên dynpro 0200 (SE51: Goto -> Dict./Program
+" fields -> GS_GOM_H). Tất cả chỉ để xem, trừ ngày/giờ phát hành
+" được sửa qua nút riêng.
+TYPES: BEGIN OF gty_gom_head,
+         src_docno  TYPE zde_hddt_docno,   " số gom, cấp khi lưu
+         cnt_doc    TYPE i,                " số chứng từ thành viên
+         bukrs      TYPE bukrs,
+         gjahr      TYPE gjahr,
+         bldat      TYPE dats,
+         budat      TYPE dats,
+         buyer_code TYPE kunnr,
+         buyer_name TYPE c LENGTH 120,
+         waers      TYPE waers,
+         amount     TYPE zde_hddt_amount,
+         vat_amount TYPE zde_hddt_amount,
+         total      TYPE zde_hddt_amount,
+         inv_date   TYPE dats,
+         inv_time   TYPE uzeit,
+       END OF gty_gom_head.
+
+DATA gs_gom_h    TYPE gty_gom_head.
+DATA gt_gom_item TYPE gty_t_item_alv.
+DATA gt_gom_req  TYPE zif_hddt_types=>ty_t_request.
+DATA gv_gom_text TYPE zde_hddt_name.
+DATA gv_gom_edit TYPE abap_bool.
 
 "! Danh sách loại nguồn dữ liệu đã cấu hình (ZTB_HDDT_SRC)
 TYPES gty_t_srctype TYPE STANDARD TABLE OF zde_hddt_srctype WITH EMPTY KEY.
@@ -139,6 +184,12 @@ CONSTANTS: BEGIN OF gc_fcode,
 " Cancel: 12 nút nghiệp vụ do event TOOLBAR của grid tự thêm.
 CONSTANTS gc_pfstatus TYPE sypfkey VALUE 'ZGRID_HDDT' ##NO_TEXT.
 CONSTANTS gc_dynnr    TYPE sydynnr VALUE '0100' ##NO_TEXT.
+
+" Dynpro 0200: header GS_GOM_H + custom control CC_ITEM chứa ALV
+" dòng hàng. GUI status ZGOM_HDDT cần SAVE / ZEDIT / BACK / CANC.
+CONSTANTS gc_dynnr_gom  TYPE sydynnr VALUE '0200' ##NO_TEXT.
+CONSTANTS gc_pfstat_gom TYPE sypfkey VALUE 'ZGOM_HDDT' ##NO_TEXT.
+CONSTANTS gc_cc_item    TYPE scrfname VALUE 'CC_ITEM' ##NO_TEXT.
 
 " Hoạt động (ACTVT) kiểm quyền theo chức năng — object khai ở tham số
 " AUTH_OBJECT (trống = không kiểm), field BUKRS + ACTVT

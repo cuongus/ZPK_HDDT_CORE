@@ -29,8 +29,10 @@ CLASS zcl_hddt_src_gom DEFINITION
     METHODS zif_hddt_source~select_documents REDEFINITION .
     METHODS zif_hddt_source~get_doc_state    REDEFINITION .
 
-  PROTECTED SECTION.
-
+    "! Gộp nhiều request thành một hoá đơn gom. PUBLIC để màn hình
+    "! xem trước (dynpro 0200) dựng được kết quả gom TRƯỚC khi lưu:
+    "! method thuần tính toán, không đọc/ghi bảng nào.
+    "! I_GOM_NO để trống khi chỉ xem trước.
     METHODS merge
       IMPORTING i_bukrs           TYPE bukrs
                 i_gjahr           TYPE gjahr
@@ -38,6 +40,7 @@ CLASS zcl_hddt_src_gom DEFINITION
                 it_members        TYPE zif_hddt_types=>ty_t_request
       RETURNING VALUE(rs_request) TYPE zif_hddt_types=>ty_request .
 
+  PROTECTED SECTION.
   PRIVATE SECTION.
 ENDCLASS.
 

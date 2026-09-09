@@ -26,6 +26,9 @@
 *                         Cancel. Field catalog lấy từ metadata của SALV.
 * 1.4       09/09/2026    cuongus - CuongUS        abapGit     Cột EXPAND:
 *                         bấm icon mở popup ALV các dòng hàng của chứng từ
+* 1.5       09/09/2026    cuongus - CuongUS        abapGit     Gom HĐ đi
+*                         qua dynpro 0200: xem trước header + dòng hàng của
+*                         chứng từ gom, sửa ngày/giờ, Save mới gom
 * 1.2       07/09/2026    cuongus - CuongUS        abapGit     FS MAG v0.5:
 *                         8 nút nghiệp vụ, email, gom, sửa ngày/giờ,
 *                         phát hành tự động, kiểm quyền theo chức năng
@@ -42,6 +45,11 @@ CLASS lcl_app DEFINITION FINAL CREATE PUBLIC.
     "! PBO / PAI của dynpro 0100 — gọi từ hai module trong include này
     METHODS pbo_0100.
     METHODS pai_0100
+      IMPORTING i_ucomm TYPE syucomm.
+
+    "! PBO / PAI của dynpro 0200 — xem trước chứng từ gom
+    METHODS pbo_0200.
+    METHODS pai_0200
       IMPORTING i_ucomm TYPE syucomm.
 
     "! 12 nút nghiệp vụ thêm vào toolbar của grid (không cần GUI status)
@@ -62,6 +70,11 @@ CLASS lcl_app DEFINITION FINAL CREATE PUBLIC.
     DATA mo_dock    TYPE REF TO cl_gui_docking_container.
     DATA mo_grid    TYPE REF TO cl_gui_alv_grid.
     DATA mt_fcat    TYPE lvc_t_fcat.
+
+    " Grid dòng hàng trong custom control CC_ITEM của dynpro 0200
+    DATA mo_cc      TYPE REF TO cl_gui_custom_container.
+    DATA mo_grid_it TYPE REF TO cl_gui_alv_grid.
+    DATA mt_fcat_it TYPE lvc_t_fcat.
     DATA mo_service TYPE REF TO zcl_hddt_service.
 
     METHODS select_data.
@@ -104,6 +117,10 @@ CLASS lcl_app DEFINITION FINAL CREATE PUBLIC.
     METHODS do_adjust_ref.
     METHODS do_mail.
     METHODS do_gom.
+    "! Save trên dynpro 0200: cấp số gom, lưu ngày/giờ đã sửa
+    METHODS do_gom_save.
+    "! Giải phóng control của dynpro 0200 trước khi rời màn hình
+    METHODS free_item_grid.
     METHODS do_ungom.
     METHODS do_edit.
     METHODS do_getfile.
@@ -114,6 +131,25 @@ CLASS lcl_app DEFINITION FINAL CREATE PUBLIC.
     METHODS show_items
       IMPORTING i_row TYPE i.
 
+    "! Nhãn 16 cột dòng hàng, dùng cho cả popup và grid của dynpro 0200
+    METHODS item_labels
+      RETURNING VALUE(rt_col) TYPE gty_t_col.
+
+    "! Đổ ITEMS của request sang cấu trúc phẳng cho ALV. Dòng của chứng từ
+    "! gom mang SRC_DOCNO trong EXT nên ưu tiên lấy giá trị đó.
+    METHODS to_item_alv
+      IMPORTING it_items       TYPE zif_hddt_types=>ty_t_item
+                i_docno        TYPE zde_hddt_docno
+      RETURNING VALUE(rt_item) TYPE gty_t_item_alv.
+
+    "! Field catalog của grid dòng hàng trên dynpro 0200
+    METHODS build_item_fcat.
+
+    "! Đắp nhãn / cờ icon-hotspot-ẩn lên field catalog đã có
+    METHODS apply_labels
+      IMPORTING it_col  TYPE gty_t_col
+      CHANGING  ct_fcat TYPE lvc_t_fcat.
+
     "! Nhãn loại dòng hàng theo ZTB_HDDT_MAP kiểu ITEMTYPE
     METHODS item_type_text
       IMPORTING i_type        TYPE zde_hddt_itemtype
@@ -122,8 +158,7 @@ CLASS lcl_app DEFINITION FINAL CREATE PUBLIC.
     "! Đặt nhãn một cột của popup; bỏ qua khi cấu trúc không có cột đó
     METHODS set_col
       IMPORTING io_cols TYPE REF TO cl_salv_columns_table
-                i_field TYPE lvc_fname
-                i_text  TYPE scrtext_m.
+                is_col  TYPE gty_col.
 
     METHODS map_light
       IMPORTING i_status      TYPE zde_hddt_status
@@ -427,16 +462,7 @@ CLASS lcl_app IMPLEMENTATION.
         MESSAGE lx_meta->get_text( ) TYPE 'S' DISPLAY LIKE 'W'.
     ENDTRY.
 
-    TYPES: BEGIN OF lty_col,
-             field  TYPE lvc_fname,
-             short  TYPE scrtext_s,
-             medium TYPE scrtext_m,
-             flag   TYPE gty_adjcode,
-           END OF lty_col.
-    DATA lt_col TYPE STANDARD TABLE OF lty_col WITH DEFAULT KEY.
-
-    " flag: I = cột icon · H = cột bấm được (link) · B = icon bấm được
-    "       · T = cột kỹ thuật, ẩn
+    DATA lt_col TYPE gty_t_col.
     lt_col = VALUE #(
       ( field = 'EXPAND'     short = 'Chi tiết'  medium = 'Dòng hàng'           flag = 'B' )
       ( field = 'LIGHT'      short = 'TT'        medium = 'Trạng thái'          flag = 'I' )
@@ -485,12 +511,20 @@ CLASS lcl_app IMPLEMENTATION.
       ( field = 'MSGTY'                                                        flag = 'T' )
       ( field = 'LOG_ID'                                                       flag = 'T' ) ).
 
-    LOOP AT lt_col ASSIGNING FIELD-SYMBOL(<fs_col>).
-      ASSIGN mt_fcat[ fieldname = <fs_col>-field ] TO FIELD-SYMBOL(<fs_fcat>).
+    apply_labels( EXPORTING it_col  = lt_col
+                  CHANGING  ct_fcat = mt_fcat ).
+
+  ENDMETHOD.
+
+
+  METHOD apply_labels.
+
+    LOOP AT it_col ASSIGNING FIELD-SYMBOL(<fs_col>).
+      ASSIGN ct_fcat[ fieldname = <fs_col>-field ] TO FIELD-SYMBOL(<fs_fcat>).
       IF sy-subrc <> 0.
         " Metadata của SALV không có cột này -> thêm dòng tối thiểu
-        APPEND VALUE lvc_s_fcat( fieldname = <fs_col>-field ) TO mt_fcat.
-        ASSIGN mt_fcat[ fieldname = <fs_col>-field ] TO <fs_fcat>.
+        APPEND VALUE lvc_s_fcat( fieldname = <fs_col>-field ) TO ct_fcat.
+        ASSIGN ct_fcat[ fieldname = <fs_col>-field ] TO <fs_fcat>.
         IF sy-subrc <> 0.
           CONTINUE.
         ENDIF.
@@ -514,6 +548,79 @@ CLASS lcl_app IMPLEMENTATION.
         WHEN OTHERS.
       ENDCASE.
     ENDLOOP.
+
+  ENDMETHOD.
+
+
+  METHOD item_labels.
+
+    rt_col = VALUE #(
+      ( field = 'SRC_DOCNO'  short = 'Số CT'     medium = 'Số chứng từ' )
+      ( field = 'LINE_NO'    short = 'STT'       medium = 'STT' )
+      ( field = 'ITEM_TYPE'  short = 'Mã loại'   medium = 'Mã loại dòng' )
+      ( field = 'TYPE_TXT'   short = 'Loại dòng' medium = 'Loại dòng' )
+      ( field = 'ITEM_CODE'  short = 'Mã hàng'   medium = 'Mã hàng' )
+      ( field = 'ITEM_NAME'  short = 'Tên hàng'  medium = 'Tên hàng' )
+      ( field = 'UNIT'       short = 'ĐVT'       medium = 'Đơn vị tính' )
+      ( field = 'QUANTITY'   short = 'SL'        medium = 'Số lượng' )
+      ( field = 'PRICE'      short = 'Đơn giá'   medium = 'Đơn giá' )
+      ( field = 'AMOUNT'     short = 'Tiền hàng' medium = 'Thành tiền' )
+      ( field = 'TAX_TXT'    short = 'Thuế suất' medium = 'Thuế suất' )
+      ( field = 'TAX_AMOUNT' short = 'Tiền thuế' medium = 'Tiền thuế' )
+      ( field = 'TOTAL'      short = 'Tổng'      medium = 'Tổng sau thuế' )
+      ( field = 'DISC_PCT'   short = 'CK %'      medium = 'Chiết khấu %' )
+      ( field = 'DISC_AMT'   short = 'Tiền CK'   medium = 'Tiền chiết khấu' )
+      ( field = 'NOTE'       short = 'Ghi chú'   medium = 'Ghi chú' ) ).
+
+  ENDMETHOD.
+
+
+  METHOD to_item_alv.
+
+    LOOP AT it_items ASSIGNING FIELD-SYMBOL(<fs_it>).
+      " MERGE của ZCL_HDDT_SRC_GOM ghi số chứng từ gốc vào EXT
+      READ TABLE <fs_it>-ext INTO DATA(ls_ext) WITH KEY name = 'SRC_DOCNO'.
+      DATA(lv_docno) = COND zde_hddt_docno( WHEN sy-subrc = 0
+                                            THEN ls_ext-value
+                                            ELSE i_docno ).
+      APPEND VALUE gty_item_alv(
+        src_docno  = lv_docno
+        line_no    = <fs_it>-line_no
+        item_type  = <fs_it>-item_type
+        type_txt   = item_type_text( <fs_it>-item_type )
+        item_code  = <fs_it>-item_code
+        item_name  = <fs_it>-item_name
+        unit       = <fs_it>-unit
+        quantity   = <fs_it>-quantity
+        price      = <fs_it>-price
+        amount     = <fs_it>-amount
+        tax_txt    = <fs_it>-tax_rate_txt
+        tax_amount = <fs_it>-tax_amount
+        total      = <fs_it>-total
+        disc_pct   = <fs_it>-disc_percent
+        disc_amt   = <fs_it>-disc_amount
+        note       = <fs_it>-note ) TO rt_item.
+    ENDLOOP.
+
+  ENDMETHOD.
+
+
+  METHOD build_item_fcat.
+
+    CLEAR mt_fcat_it.
+    DATA lo_meta TYPE REF TO cl_salv_table.
+    TRY.
+        cl_salv_table=>factory( IMPORTING r_salv_table = lo_meta
+                                CHANGING  t_table      = gt_gom_item ).
+        mt_fcat_it = cl_salv_controller_metadata=>get_lvc_fieldcatalog(
+                       r_columns      = lo_meta->get_columns( )
+                       r_aggregations = lo_meta->get_aggregations( ) ).
+      CATCH cx_salv_error INTO DATA(lx_meta).
+        MESSAGE lx_meta->get_text( ) TYPE 'S' DISPLAY LIKE 'W'.
+    ENDTRY.
+
+    apply_labels( EXPORTING it_col  = item_labels( )
+                  CHANGING  ct_fcat = mt_fcat_it ).
 
   ENDMETHOD.
 
@@ -727,25 +834,8 @@ CLASS lcl_app IMPLEMENTATION.
       RETURN.
     ENDIF.
 
-    DATA lt_item TYPE gty_t_item_alv.
-    LOOP AT ls_req-invoice-items ASSIGNING FIELD-SYMBOL(<fs_it>).
-      APPEND VALUE gty_item_alv(
-        line_no    = <fs_it>-line_no
-        item_type  = <fs_it>-item_type
-        type_txt   = item_type_text( <fs_it>-item_type )
-        item_code  = <fs_it>-item_code
-        item_name  = <fs_it>-item_name
-        unit       = <fs_it>-unit
-        quantity   = <fs_it>-quantity
-        price      = <fs_it>-price
-        amount     = <fs_it>-amount
-        tax_txt    = <fs_it>-tax_rate_txt
-        tax_amount = <fs_it>-tax_amount
-        total      = <fs_it>-total
-        disc_pct   = <fs_it>-disc_percent
-        disc_amt   = <fs_it>-disc_amount
-        note       = <fs_it>-note ) TO lt_item.
-    ENDLOOP.
+    DATA(lt_item) = to_item_alv( it_items = ls_req-invoice-items
+                                 i_docno  = ls_req-src_docno ).
 
     DATA lo_pop TYPE REF TO cl_salv_table.
     TRY.
@@ -767,21 +857,10 @@ CLASS lcl_app IMPLEMENTATION.
 
         DATA(lo_cols) = lo_pop->get_columns( ).
         lo_cols->set_optimize( abap_true ).
-        set_col( io_cols = lo_cols i_field = 'LINE_NO'    i_text = 'STT' ).
-        set_col( io_cols = lo_cols i_field = 'ITEM_TYPE'  i_text = 'Mã loại dòng' ).
-        set_col( io_cols = lo_cols i_field = 'TYPE_TXT'   i_text = 'Loại dòng' ).
-        set_col( io_cols = lo_cols i_field = 'ITEM_CODE'  i_text = 'Mã hàng' ).
-        set_col( io_cols = lo_cols i_field = 'ITEM_NAME'  i_text = 'Tên hàng' ).
-        set_col( io_cols = lo_cols i_field = 'UNIT'       i_text = 'Đơn vị tính' ).
-        set_col( io_cols = lo_cols i_field = 'QUANTITY'   i_text = 'Số lượng' ).
-        set_col( io_cols = lo_cols i_field = 'PRICE'      i_text = 'Đơn giá' ).
-        set_col( io_cols = lo_cols i_field = 'AMOUNT'     i_text = 'Thành tiền' ).
-        set_col( io_cols = lo_cols i_field = 'TAX_TXT'    i_text = 'Thuế suất' ).
-        set_col( io_cols = lo_cols i_field = 'TAX_AMOUNT' i_text = 'Tiền thuế' ).
-        set_col( io_cols = lo_cols i_field = 'TOTAL'      i_text = 'Tổng sau thuế' ).
-        set_col( io_cols = lo_cols i_field = 'DISC_PCT'   i_text = 'Chiết khấu %' ).
-        set_col( io_cols = lo_cols i_field = 'DISC_AMT'   i_text = 'Tiền chiết khấu' ).
-        set_col( io_cols = lo_cols i_field = 'NOTE'       i_text = 'Ghi chú' ).
+        DATA(lt_lab) = item_labels( ).
+        LOOP AT lt_lab INTO DATA(ls_lab).
+          set_col( io_cols = lo_cols is_col = ls_lab ).
+        ENDLOOP.
 
         lo_pop->display( ).
 
@@ -811,10 +890,10 @@ CLASS lcl_app IMPLEMENTATION.
   METHOD set_col.
 
     TRY.
-        DATA(lo_col) = io_cols->get_column( i_field ).
-        lo_col->set_short_text( CONV scrtext_s( i_text ) ).
-        lo_col->set_medium_text( i_text ).
-        lo_col->set_long_text( CONV scrtext_l( i_text ) ).
+        DATA(lo_col) = io_cols->get_column( is_col-field ).
+        lo_col->set_short_text( is_col-short ).
+        lo_col->set_medium_text( is_col-medium ).
+        lo_col->set_long_text( CONV scrtext_l( is_col-medium ) ).
       CATCH cx_salv_not_found.
         " Cột không có trong cấu trúc -> bỏ qua, không chặn popup
     ENDTRY.
@@ -1147,7 +1226,8 @@ CLASS lcl_app IMPLEMENTATION.
       RETURN.
     ENDIF.
 
-    DATA lt_req TYPE zif_hddt_types=>ty_t_request.
+    CLEAR: gt_gom_req, gt_gom_item, gs_gom_h, gv_gom_text, gv_gom_edit.
+
     LOOP AT lt_rows INTO DATA(lv_row).
       IF lv_row < 1 OR lv_row > lines( gt_request ).
         CONTINUE.
@@ -1156,19 +1236,189 @@ CLASS lcl_app IMPLEMENTATION.
         MESSAGE s025(zms_hddt) DISPLAY LIKE 'E'.
         RETURN.
       ENDIF.
-      APPEND gt_request[ lv_row ] TO lt_req.
+      APPEND gt_request[ lv_row ] TO gt_gom_req.
     ENDLOOP.
+
+    " Xem trước: gọi đúng MERGE mà ZCL_HDDT_SRC_GOM dùng khi đọc nhóm,
+    " nên nội dung trên màn hình 0200 khớp hoá đơn sẽ phát hành. Chưa có
+    " số gom nên truyền SPACE, số thật cấp lúc Save.
+    TRY.
+        DATA(lo_src)  = zcl_hddt_factory=>get_source(
+                          i_bukrs    = p_bukrs
+                          i_src_type = zcl_hddt_src_gom=>gc_src_type ).
+        DATA(lo_gsrc) = CAST zcl_hddt_src_gom( lo_src ).
+        DATA(ls_prev) = lo_gsrc->merge( i_bukrs    = p_bukrs
+                                        i_gjahr    = p_gjahr
+                                        i_gom_no   = space
+                                        it_members = gt_gom_req ).
+      CATCH zcx_hddt_error INTO DATA(lx_prev).
+        MESSAGE lx_prev->get_text_long( ) TYPE 'S' DISPLAY LIKE 'E'.
+        RETURN.
+      CATCH cx_sy_move_cast_error.
+        MESSAGE 'Lớp đọc nguồn GOM không kế thừa ZCL_HDDT_SRC_GOM.'
+                TYPE 'S' DISPLAY LIKE 'E'.
+        RETURN.
+    ENDTRY.
+
+    gs_gom_h-cnt_doc    = lines( gt_gom_req ).
+    gs_gom_h-bukrs      = p_bukrs.
+    gs_gom_h-gjahr      = p_gjahr.
+    gs_gom_h-bldat      = ls_prev-src_info-bldat.
+    gs_gom_h-budat      = ls_prev-src_info-budat.
+    gs_gom_h-buyer_code = ls_prev-invoice-buyer-code.
+    gs_gom_h-buyer_name = ls_prev-invoice-buyer-legal_name.
+    gs_gom_h-waers      = ls_prev-invoice-header-currency.
+    gs_gom_h-amount     = ls_prev-invoice-summary-amount_wo_tax.
+    gs_gom_h-vat_amount = ls_prev-invoice-summary-tax_amount.
+    gs_gom_h-total      = ls_prev-invoice-summary-total.
+    gs_gom_h-inv_date   = ls_prev-invoice-header-inv_date.
+    gs_gom_h-inv_time   = ls_prev-invoice-header-inv_time.
+
+    gt_gom_item = to_item_alv( it_items = ls_prev-invoice-items
+                               i_docno  = space ).
+    build_item_fcat( ).
+
+    CALL SCREEN 200.
+
+  ENDMETHOD.
+
+
+  METHOD pbo_0200.
+
+    SET PF-STATUS gc_pfstat_gom.
+
+    IF mo_grid_it IS BOUND.
+      RETURN.
+    ENDIF.
+
+    " Custom control CC_ITEM vẽ ở nửa dưới dynpro 0200, phần trên là
+    " các field của GS_GOM_H
+    CREATE OBJECT mo_cc
+      EXPORTING
+        container_name = gc_cc_item
+      EXCEPTIONS
+        OTHERS         = 1.
+    IF sy-subrc <> 0.
+      MESSAGE 'Dynpro 0200 chưa có custom control CC_ITEM.'
+              TYPE 'S' DISPLAY LIKE 'E'.
+      RETURN.
+    ENDIF.
+
+    CREATE OBJECT mo_grid_it
+      EXPORTING
+        i_parent = mo_cc
+      EXCEPTIONS
+        OTHERS   = 1.
+    IF sy-subrc <> 0.
+      MESSAGE 'Không tạo được ALV grid dòng hàng.' TYPE 'S' DISPLAY LIKE 'E'.
+      RETURN.
+    ENDIF.
+
+    DATA ls_layout TYPE lvc_s_layo.
+    ls_layout-grid_title = |Dòng hàng của chứng từ gom - { gs_gom_h-cnt_doc } chứng từ|.
+    ls_layout-zebra      = abap_true.
+    ls_layout-cwidth_opt = abap_true.
+    ls_layout-sel_mode   = 'A'.
+
+    mo_grid_it->set_table_for_first_display(
+      EXPORTING
+        is_layout       = ls_layout
+      CHANGING
+        it_fieldcatalog = mt_fcat_it
+        it_outtab       = gt_gom_item ).
+
+  ENDMETHOD.
+
+
+  METHOD pai_0200.
+
+    CASE i_ucomm.
+
+      WHEN 'ZEDIT' OR 'EDIT'.
+        " Sửa ngày / giờ phát hành của chính hoá đơn gom
+        DATA lv_date TYPE dats.
+        DATA lv_time TYPE uzeit.
+        DATA lv_text TYPE zde_hddt_name.
+        DATA lv_ok   TYPE abap_bool.
+        lv_date = gs_gom_h-inv_date.
+        lv_time = gs_gom_h-inv_time.
+        lv_text = gv_gom_text.
+        PERFORM popup_edit CHANGING lv_date lv_time lv_text lv_ok.
+        IF lv_ok = abap_true.
+          gs_gom_h-inv_date = lv_date.
+          gs_gom_h-inv_time = lv_time.
+          gv_gom_text       = lv_text.
+          gv_gom_edit       = abap_true.
+        ENDIF.
+
+      WHEN 'SAVE' OR '&SAVE'.
+        do_gom_save( ).
+
+      WHEN 'BACK' OR '&F03' OR 'CANC' OR '&F12'.
+        " Thoát mà không gom
+        free_item_grid( ).
+        LEAVE TO SCREEN 0.
+
+      WHEN 'EXIT' OR '&F15'.
+        LEAVE PROGRAM.
+
+      WHEN OTHERS.
+
+    ENDCASE.
+
+  ENDMETHOD.
+
+
+  METHOD free_item_grid.
+
+    " Lệnh FREE của ABAP chỉ xoá tham chiếu; control trên frontend vẫn
+    " còn nên lần vào 0200 sau sẽ báo CC_ITEM đã tồn tại. Phải gọi
+    " FREE( ) của control trước rồi mới CLEAR.
+    IF mo_grid_it IS BOUND.
+      mo_grid_it->free( EXCEPTIONS OTHERS = 0 ).
+      CLEAR mo_grid_it.
+    ENDIF.
+    IF mo_cc IS BOUND.
+      mo_cc->free( EXCEPTIONS OTHERS = 0 ).
+      CLEAR mo_cc.
+    ENDIF.
+
+  ENDMETHOD.
+
+
+  METHOD do_gom_save.
 
     TRY.
         DATA(lo_gom) = NEW zcl_hddt_gom( ).
         DATA(lv_gom) = lo_gom->create( i_bukrs     = p_bukrs
                                        i_gjahr     = p_gjahr
-                                       it_requests = lt_req ).
+                                       it_requests = gt_gom_req ).
+
+        " Ngày/giờ người dùng sửa trên màn hình 0200 phải lưu vào sổ đăng
+        " ký của CHÍNH chứng từ gom, nếu không MERGE sẽ tính lại theo
+        " ZTB_HDDT_DATE ở lần đọc sau.
+        IF gv_gom_edit = abap_true.
+          DATA(ls_greq) = VALUE zif_hddt_types=>ty_request(
+            bukrs     = p_bukrs
+            gjahr     = p_gjahr
+            src_type  = zcl_hddt_src_gom=>gc_src_type
+            src_docno = lv_gom ).
+          NEW zcl_hddt_log( )->save_edit( is_request  = ls_greq
+                                          i_inv_date  = gs_gom_h-inv_date
+                                          i_inv_time  = gs_gom_h-inv_time
+                                          i_item_text = CONV #( gv_gom_text ) ).
+        ENDIF.
+
         COMMIT WORK AND WAIT.
+
         " MESSAGE ... WITH chỉ nhận tên biến / literal, không nhận biểu thức
-        DATA(lv_cnt) = |{ lines( lt_req ) }|.
+        DATA(lv_cnt) = |{ lines( gt_gom_req ) }|.
         MESSAGE s028(zms_hddt) WITH lv_cnt lv_gom.
+
+        free_item_grid( ).
         reload( ).
+        LEAVE TO SCREEN 0.
+
       CATCH zcx_hddt_error INTO DATA(lx).
         ROLLBACK WORK.
         MESSAGE lx->get_text_long( ) TYPE 'S' DISPLAY LIKE 'E'.
@@ -1731,5 +1981,28 @@ ENDMODULE.
 MODULE user_command_0100 INPUT.
 
   go_app->pai_0100( sy-ucomm ).
+
+ENDMODULE.
+
+
+*&---------------------------------------------------------------------*
+*& Module STATUS_0200 OUTPUT
+*&---------------------------------------------------------------------*
+*& Dynpro 0200: phần trên là các field của GS_GOM_H (chỉ xem), phần
+*& dưới là custom control CC_ITEM chứa ALV dòng hàng.
+*&---------------------------------------------------------------------*
+MODULE status_0200 OUTPUT.
+
+  go_app->pbo_0200( ).
+
+ENDMODULE.
+
+
+*&---------------------------------------------------------------------*
+*& Module USER_COMMAND_0200 INPUT
+*&---------------------------------------------------------------------*
+MODULE user_command_0200 INPUT.
+
+  go_app->pai_0200( sy-ucomm ).
 
 ENDMODULE.

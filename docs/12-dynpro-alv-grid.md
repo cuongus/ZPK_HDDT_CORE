@@ -143,7 +143,96 @@ SELECT progname, obj_type, obj_code, text FROM rsmptexts
 
 `OBJ_TYPE = 'C'` là danh sách status, `'F'` là các mã chức năng kèm text.
 
-## 8. Dải trống phía trên grid
+## 8. Dynpro 0200 — xem trước chứng từ gom
+
+Nút **Gom HĐ** không gom ngay nữa: nó dựng kết quả gom rồi mở dynpro 0200 để
+soát, chỉ khi bấm **Save** mới cấp số và ghi bảng.
+
+### 8.1 Tạo dynpro
+
+SE51 → program `ZPG_HDDT_INTEGRATION`, screen `0200`, Screen type **Normal**.
+
+Layout chia hai phần:
+
+```
+Phần trên  : các field của GS_GOM_H, đặt Output only cho tất cả
+Phần dưới  : một Custom Control tên CC_ITEM, kéo hết chiều rộng và
+             chiều cao còn lại
+```
+
+Lấy field cho nhanh: Screen Painter → **Goto → Dict./Program fields** → gõ
+`GS_GOM_H` → Get from program → chọn 14 dòng → dán vào layout. Đừng gõ tay
+tên field, sai một chữ là dynpro không nhận.
+
+| Field | Nhãn gợi ý | Ghi chú |
+|---|---|---|
+| `GS_GOM_H-SRC_DOCNO` | Số chứng từ gom | trống cho tới khi Save |
+| `GS_GOM_H-CNT_DOC` | Số chứng từ gộp | |
+| `GS_GOM_H-BUKRS` | Mã công ty | |
+| `GS_GOM_H-GJAHR` | Năm tài chính | |
+| `GS_GOM_H-BLDAT` | Ngày chứng từ | |
+| `GS_GOM_H-BUDAT` | Ngày ghi sổ | ngày muộn nhất trong nhóm |
+| `GS_GOM_H-BUYER_CODE` | Khách hàng | |
+| `GS_GOM_H-BUYER_NAME` | Tên đơn vị | |
+| `GS_GOM_H-WAERS` | Loại tiền | |
+| `GS_GOM_H-AMOUNT` | Tổng thành tiền | |
+| `GS_GOM_H-VAT_AMOUNT` | Tổng thuế | |
+| `GS_GOM_H-TOTAL` | Tổng tiền | |
+| `GS_GOM_H-INV_DATE` | Ngày phát hành | sửa bằng nút, không gõ trực tiếp |
+| `GS_GOM_H-INV_TIME` | Giờ phát hành | sửa bằng nút, không gõ trực tiếp |
+
+Flow logic đúng bốn dòng:
+
+```abap
+PROCESS BEFORE OUTPUT.
+  MODULE status_0200.
+
+PROCESS AFTER INPUT.
+  MODULE user_command_0200.
+```
+
+Custom control **không** dùng chung với docking của 0100: dynpro 0100 vẫn để
+layout rỗng, 0200 thì phải có `CC_ITEM` thật, thiếu nó chương trình báo
+"Dynpro 0200 chưa có custom control CC_ITEM".
+
+### 8.2 GUI status ZGOM_HDDT
+
+SE41 → status `ZGOM_HDDT`, Normal screen. Application Toolbar để **trống**,
+chỉ cần bốn mã:
+
+| Mã | Vị trí | Nhãn | Icon |
+|---|---|---|---|
+| `SAVE` | Function key F11 + Standard toolbar (Save) | Lưu gom | `ICON_SYSTEM_SAVE` |
+| `ZEDIT` | Function key F5 | Sửa ngày/giờ | `ICON_EDIT_FILE` |
+| `BACK` | Standard toolbar (Back) | Quay lại | |
+| `CANC` | Standard toolbar (Cancel) | Huỷ | |
+
+`PAI_0200` nhận cả `SAVE`/`&SAVE`, `ZEDIT`/`EDIT`, `BACK`/`&F03`/`CANC`/`&F12`
+nên gán mã theo kiểu nào cũng chạy — cùng cách xử lý như dynpro 0100.
+
+### 8.3 Vì sao Save mới gom
+
+`DO_GOM` chỉ dựng dữ liệu để xem: nó gọi đúng method `MERGE` của
+`ZCL_HDDT_SRC_GOM` — cũng là method engine dùng khi đọc nhóm đã gom — nên số
+liệu trên 0200 khớp với hoá đơn sẽ phát hành, không phải tính lại một lần nữa
+trong màn hình. `MERGE` đổi từ PROTECTED sang PUBLIC để làm được việc này;
+nó không đọc ghi bảng nào nên gọi để xem trước là an toàn.
+
+`DO_GOM_SAVE` mới thật sự: `ZCL_HDDT_GOM->CREATE` cấp số gom và ghi
+`ZTB_HDDT_GOM`, rồi nếu người dùng có sửa ngày/giờ thì ghi tiếp
+`ZTB_HDDT_LOG`-registry qua `SAVE_EDIT` cho **chính chứng từ gom**, cuối cùng
+mới `COMMIT WORK AND WAIT`. Không lưu ngày/giờ vào registry thì lần đọc sau
+`MERGE` tính lại theo `ZTB_HDDT_DATE` và mất giá trị người dùng vừa sửa.
+
+Bấm Back / Cancel là thoát, chưa có gì được ghi.
+
+### 8.4 Giải phóng control
+
+`FREE mo_grid_it` của ABAP chỉ xoá tham chiếu, control trên frontend vẫn còn
+nên lần vào 0200 thứ hai báo `CC_ITEM` đã tồn tại. `FREE_ITEM_GRID` gọi
+`free( )` của control rồi mới `CLEAR`, chạy ở cả nhánh Save và nhánh Cancel.
+
+## 9. Dải trống phía trên grid
 
 Sau khi xoá hết nút khỏi Application Toolbar, vẫn còn một dải xám giữa dòng tiêu
 đề và toolbar của grid. Hai nguồn, xử lý riêng:
