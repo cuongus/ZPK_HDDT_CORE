@@ -164,22 +164,36 @@ Lấy field cho nhanh: Screen Painter → **Goto → Dict./Program fields** → 
 `GS_GOM_H` → Get from program → chọn 14 dòng → dán vào layout. Đừng gõ tay
 tên field, sai một chữ là dynpro không nhận.
 
-| Field | Nhãn gợi ý | Ghi chú |
-|---|---|---|
-| `GS_GOM_H-SRC_DOCNO` | Số chứng từ gom | trống cho tới khi Save |
-| `GS_GOM_H-CNT_DOC` | Số chứng từ gộp | |
-| `GS_GOM_H-BUKRS` | Mã công ty | |
-| `GS_GOM_H-GJAHR` | Năm tài chính | |
-| `GS_GOM_H-BLDAT` | Ngày chứng từ | |
-| `GS_GOM_H-BUDAT` | Ngày ghi sổ | ngày muộn nhất trong nhóm |
-| `GS_GOM_H-BUYER_CODE` | Khách hàng | |
-| `GS_GOM_H-BUYER_NAME` | Tên đơn vị | |
-| `GS_GOM_H-WAERS` | Loại tiền | |
-| `GS_GOM_H-AMOUNT` | Tổng thành tiền | |
-| `GS_GOM_H-VAT_AMOUNT` | Tổng thuế | |
-| `GS_GOM_H-TOTAL` | Tổng tiền | |
-| `GS_GOM_H-INV_DATE` | Ngày phát hành | sửa bằng nút, không gõ trực tiếp |
-| `GS_GOM_H-INV_TIME` | Giờ phát hành | sửa bằng nút, không gõ trực tiếp |
+Nhãn cũng là biến chương trình (`GV_*_TXT`, CHAR 20, Output only) nên đổi chữ
+không phải mở Screen Painter; `INIT_GOM_LABELS` gán giá trị ở PBO.
+
+| Field giá trị | Format | Leng | Deci | Nhãn | Ghi chú |
+|---|---|---|---|---|---|
+| `GS_GOM_H-SRC_DOCNO` | CHAR | 20 | | `GV_SRC_DOCNO_TXT` | trống cho tới khi Save |
+| `GS_GOM_H-CNT_DOC` | INT4 | 4 | | `GV_CNT_DOC_TXT` | |
+| `GS_GOM_H-BUKRS` | CHAR | 4 | | `GV_BUKRS_TXT` | |
+| `GS_GOM_H-GJAHR` | NUMC | 4 | | `GV_GJAHR_TXT` | |
+| `GS_GOM_H-BLDAT` | DATS | 8 | | `GV_BLDAT_TXT` | |
+| `GS_GOM_H-BUDAT` | DATS | 8 | | `GV_BUDAT_TXT` | ngày muộn nhất trong nhóm |
+| `GS_GOM_H-BUYER_CODE` | CHAR | 10 | | `GV_BUYER_CODE_TXT` | |
+| `GS_GOM_H-BUYER_NAME` | CHAR | 120 | | `GV_BUYER_NAME_TXT` | |
+| `GS_GOM_H-WAERS` | CUKY | 5 | | `GV_WAERS_TXT` | |
+| `GS_GOM_H-AMOUNT` | DEC | 23 | 6 | `GV_AMOUNT_TXT` | output length ≥ 31 |
+| `GS_GOM_H-VAT_AMOUNT` | DEC | 23 | 6 | `GV_VAT_AMOUNT_TXT` | |
+| `GS_GOM_H-TOTAL` | DEC | 23 | 6 | `GV_TOTAL_TXT` | |
+| `GS_GOM_H-INV_DATE` | DATS | 8 | | `GV_INV_DATE_TXT` | sửa bằng nút, không gõ trực tiếp |
+| `GS_GOM_H-INV_TIME` | TIMS | 6 | | `GV_INV_TIME_TXT` | sửa bằng nút, không gõ trực tiếp |
+
+**Đừng gõ tay tên field rồi tự chọn Format.** Sai một ô Format là dump
+`DYNPRO_FIELD_CONVERSION` với `FX027: Wrong data type` ngay lúc PBO, và dump
+chỉ nêu field đầu tiên nó gặp nên tưởng chỉ sai một field. Cách chắc chắn:
+Element List → xoá hết các dòng `GS_GOM_H-*` → **Goto → Dict./Program fields →
+GS_GOM_H → Get from Program** → dán lại. Screen Painter tự ghi đúng
+Format/Leng/Deci lấy từ bản đã generate của chương trình.
+
+Suy ra: phải activate chương trình **trước** khi vẽ dynpro. Vẽ trước thì
+Screen Painter báo "The field GS_GOM_H does not exist in (the generated
+version of) program".
 
 Flow logic đúng bốn dòng:
 

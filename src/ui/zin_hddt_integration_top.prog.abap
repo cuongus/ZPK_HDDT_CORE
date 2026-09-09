@@ -148,6 +148,28 @@ TYPES: BEGIN OF gty_gom_head,
          inv_time   TYPE uzeit,
        END OF gty_gom_head.
 
+*---------------------------------------------------------------------*
+* Nhãn của dynpro 0200 làm bằng biến chương trình (Output only) thay
+* cho text tĩnh: nhãn nằm trong code nên sửa chữ không phải mở Screen
+* Painter. Giá trị do INIT_GOM_LABELS gán ở PBO.
+*---------------------------------------------------------------------*
+TYPES gty_lbl TYPE c LENGTH 20.
+
+DATA gv_src_docno_txt  TYPE gty_lbl.
+DATA gv_cnt_doc_txt    TYPE gty_lbl.
+DATA gv_bukrs_txt      TYPE gty_lbl.
+DATA gv_gjahr_txt      TYPE gty_lbl.
+DATA gv_bldat_txt      TYPE gty_lbl.
+DATA gv_budat_txt      TYPE gty_lbl.
+DATA gv_buyer_code_txt TYPE gty_lbl.
+DATA gv_buyer_name_txt TYPE gty_lbl.
+DATA gv_waers_txt      TYPE gty_lbl.
+DATA gv_amount_txt     TYPE gty_lbl.
+DATA gv_vat_amount_txt TYPE gty_lbl.
+DATA gv_total_txt      TYPE gty_lbl.
+DATA gv_inv_date_txt   TYPE gty_lbl.
+DATA gv_inv_time_txt   TYPE gty_lbl.
+
 DATA gs_gom_h    TYPE gty_gom_head.
 DATA gt_gom_item TYPE gty_t_item_alv.
 DATA gt_gom_req  TYPE zif_hddt_types=>ty_t_request.

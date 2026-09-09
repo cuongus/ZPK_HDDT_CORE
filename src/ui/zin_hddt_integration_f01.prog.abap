@@ -121,6 +121,8 @@ CLASS lcl_app DEFINITION FINAL CREATE PUBLIC.
     METHODS do_gom_save.
     "! Giải phóng control của dynpro 0200 trước khi rời màn hình
     METHODS free_item_grid.
+    "! Nhãn các field trên dynpro 0200
+    METHODS init_gom_labels.
     METHODS do_ungom.
     METHODS do_edit.
     METHODS do_getfile.
@@ -1286,6 +1288,7 @@ CLASS lcl_app IMPLEMENTATION.
   METHOD pbo_0200.
 
     SET PF-STATUS gc_pfstat_gom.
+    init_gom_labels( ).
 
     IF mo_grid_it IS BOUND.
       RETURN.
@@ -1365,6 +1368,26 @@ CLASS lcl_app IMPLEMENTATION.
       WHEN OTHERS.
 
     ENDCASE.
+
+  ENDMETHOD.
+
+
+  METHOD init_gom_labels.
+
+    gv_src_docno_txt  = 'Số chứng từ gom'.
+    gv_cnt_doc_txt    = 'Số chứng từ gộp'.
+    gv_bukrs_txt      = 'Mã công ty'.
+    gv_gjahr_txt      = 'Năm tài chính'.
+    gv_bldat_txt      = 'Ngày chứng từ'.
+    gv_budat_txt      = 'Ngày ghi sổ'.
+    gv_buyer_code_txt = 'Khách hàng'.
+    gv_buyer_name_txt = 'Tên đơn vị'.
+    gv_waers_txt      = 'Loại tiền'.
+    gv_amount_txt     = 'Tổng thành tiền'.
+    gv_vat_amount_txt = 'Tổng thuế'.
+    gv_total_txt      = 'Tổng tiền'.
+    gv_inv_date_txt   = 'Ngày phát hành'.
+    gv_inv_time_txt   = 'Giờ phát hành'.
 
   ENDMETHOD.
 
