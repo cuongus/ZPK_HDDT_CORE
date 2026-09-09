@@ -417,8 +417,13 @@ CPI không thay thế nó.
 `ZTB_HDDT_ACT` — đổi `API_PATH` của 12 dòng provider `FPT` theo bảng ở mục 1.
 Giữ nguyên `HTTP_METHOD`, kể cả hai dòng `GET`.
 
-`ZTB_HDDT_PARM` — không đổi. Riêng `FPT_USER_IN_BODY` phải để mặc định (khác
-`N`), nếu tắt thì payload mất nút `user` và FPT từ chối.
+`ZTB_HDDT_PARM` — đổi `DEFAULT_CONNID` từ `UAT` sang `CPI`. `get_connection`
+nhận `i_connid = ls_cred-connid`, chỉ khi ô đó trống mới lấy tham số này; đổi cả
+hai chỗ để công ty khai sau mà quên điền `CONNID` vẫn đi CPI thay vì lặng lẽ gọi
+FPT trực tiếp.
+
+Riêng `FPT_USER_IN_BODY` phải để mặc định (khác `N`), nếu tắt thì payload mất
+nút `user` và FPT từ chối. Các tham số còn lại không đổi.
 
 ### 3.2 Cái bẫy của ZTB_HDDT_ACT
 

@@ -64,9 +64,28 @@ Muốn lấy tự động từ `T001` và `ADRC` thay vì gõ tay thì đặt
 
 ### 2.3 `ZTB_HDDT_DATE` — Ngày lập hoá đơn
 
-Một dòng cho mỗi công ty. `DATE_SRC` nhận `1` posting date, `2` entry date,
-`3` ngày hệ thống, `4` document date. `TIME_CUT` là giờ cắt: chứng từ nhập sau
-giờ này thì lấy ngày hôm sau (để trống là không cắt).
+Một dòng cho **mỗi công ty**. Khoá là `MANDT + BUKRS` và `get_date_config` tra
+đúng bằng `mt_date[ bukrs = i_bukrs ]`, **không có dòng mặc định BUKRS trống**.
+Thiếu dòng của công ty nào thì `resolve_invoice_date` rơi vào nhánh `OTHERS` và
+lấy `sy-datum`, không báo lỗi — rất dễ bỏ sót.
+
+| `DATE_SRC` | Lấy ngày | FI | SD | GOM |
+|---|---|---|---|---|
+| `1` | posting date | `BKPF-BUDAT` | `VBRK-FKDAT` | ngày hạch toán muộn nhất nhóm |
+| `2` | entry date | `BKPF-CPUDT` | `VBRK-ERDAT` | `sy-datum` |
+| `3` | ngày hệ thống | `sy-datum` | `sy-datum` | `sy-datum` |
+| `4` | document date | `BKPF-BLDAT` | `VBRK-FKDAT` | ngày hạch toán muộn nhất nhóm |
+
+Khuyến nghị `1`: hoá đơn khớp ngày hạch toán nên sổ sách và HĐĐT cùng kỳ, và
+tham số `INV_DATE_MAX_BACKDAYS` mới có ý nghĩa (đặt `3` thì không bao giờ lùi
+ngày, cái chặn đó thành vô dụng). Với nguồn SD thì `1` và `4` cho cùng kết quả
+vì cả hai đều nhận `VBRK-FKDAT`.
+
+`TIME_CUT` **hiện chưa được engine đọc** — không có chỗ nào trong code tham
+chiếu tới cột này. Để trống.
+
+Giờ phát hành lấy từ tham số `INV_TIME_DEFAULT` (`ZCL_HDDT_SRC_BASE`), không
+phải từ bảng này.
 
 ### 2.4 `ZTB_HDDT_MAP` — Ánh xạ giá trị
 
@@ -92,7 +111,9 @@ Bảng quan trọng nhất về số liệu. Nạp mẫu chỉ có ví dụ, ph�
 `AUTH_MODE = N` vì FPT nhận tài khoản trong thân payload chứ không qua header.
 
 Lên production: thêm dòng `FPT / PRD` với `BASE_URL` thật, rồi đổi `CONNID`
-trong `ZTB_HDDT_CRED` thành `PRD`. Khuyến nghị dùng RFC destination: tạo
+trong `ZTB_HDDT_CRED` thành `PRD`. Đổi luôn tham số `DEFAULT_CONNID` trong
+`ZTB_HDDT_PARM`: `get_connection` chỉ dùng tham số này khi ô `CONNID` của dòng
+`CRED` để trống, nên để nó trỏ môi trường cũ là bẫy cho công ty khai sau này. Khuyến nghị dùng RFC destination: tạo
 destination loại G trong SM59, điền tên vào `RFCDEST` và để trống `BASE_URL`.
 Trước đó phải import chứng chỉ SSL của nhà cung cấp vào STRUST.
 
