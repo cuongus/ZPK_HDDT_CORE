@@ -151,6 +151,56 @@ không có mã thuế trên dòng khách hàng nên bị loại, thay vì hiện
 Kiểm chứng trên S25 client 300 công ty M800 năm 2026 (09/09/2026): mã đầu ra là
 `O1`–`O5`, mã đầu vào là `A*` `B*` `C*` `D*`.
 
+### 2.7 `TAXACCT` — tài khoản thuế GTGT đầu ra
+
+`TAXACCT` cũng làm hai việc, và khác `GLACCT` ở chỗ **để trống là sai hẳn**:
+
+1. Loại các dòng tài khoản thuế khỏi dòng hàng — không có nó thì tiền thuế bị
+   đưa lên hoá đơn thành một dòng hàng
+2. Khi tham số `TAX_SOURCE = GLACCT`, **bảng thuế của hoá đơn dựng từ chính
+   các dòng này**: mỗi dòng `BSEG` có tài khoản khớp `TAXACCT` là một khoản
+   thuế, thuế suất suy từ `MWSKZ`
+
+Hai chỗ trên đều gọi `in_map_list` với `i_default = abap_false`, nên
+`TAXACCT` trống nghĩa là không tài khoản nào được coi là thuế: bảng thuế rỗng
+và hoá đơn ra **không có tiền thuế**.
+
+Khai một dòng là đủ cho hệ thống tài khoản Việt Nam:
+
+| Cột | Giá trị |
+|---|---|
+| `PROVIDER` | để trống |
+| `MAP_TYPE` | `TAXACCT` |
+| `SAP_VALUE` | `3331*` |
+| `EXT_VALUE` | `X` |
+| `EXT_TEXT` | `Thue GTGT dau ra` |
+
+Đừng nới thành `333*`: `3334*` là thuế TNDN, `3335*` thuế TNCN, `3336*`,
+`3337*`… gom vào là tiền thuế của hoá đơn sai. Kiểm chứng trên S25 client 300
+công ty M800 năm 2026 (09/09/2026): chỉ `3331100000` có phát sinh kèm mã thuế
+đầu ra `O1`–`O5`; `3334000000` có phát sinh nhưng không mang mã thuế nào.
+
+Ba điểm cần biết khi dùng đường `TAX_SOURCE = GLACCT`:
+
+**Dấu.** Dòng `SHKZG = 'H'` tính dương, `'S'` tính âm — chứng từ điều chỉnh
+giảm ghi Nợ 3331 nên tự trừ đi, không phải cấu hình gì. Dữ liệu M800 có cả hai
+chiều.
+
+**Thuế suất 0 và KCT / KKKNT.** Đường này suy tiền chưa thuế ra từ
+`tiền thuế × 100 / thuế suất`, nên chỉ chạy được với thuế suất dương. Hoá đơn
+0%, KCT, KKKNT không phát sinh dòng 3331 nên bảng thuế không có dòng nào. Công
+ty nào bán hàng 0% / không chịu thuế thì nên đặt `TAX_SOURCE = BSET`: `BSET`
+giữ cả `FWBAS` của dòng thuế suất 0.
+
+**Vẫn phải khai dù chọn BSET.** Code rẽ nhánh là
+`TAX_SOURCE = 'GLACCT' OR it_bset IS INITIAL`, nghĩa là chứng từ nào không có
+`BSET` vẫn quay về đường `TAXACCT`.
+
+Bảng thuế là bên quyết định: `RECONCILE_TAX` so tổng tiền thuế của các dòng
+hàng với bảng thuế và dồn phần lệch vào **dòng hàng cuối cùng** của thuế suất
+đó. Khai `TAXACCT` khớp một tài khoản không phải thuế đầu ra là làm lệch tiền
+thuế của cả hoá đơn.
+
 ## 3. Bảng kết nối — sửa khi lên môi trường thật
 
 `ZTB_HDDT_CONN` nạp sẵn dòng `FPT / UAT` trỏ tới `https://api-uat.einvoice.fpt.com.vn`,
