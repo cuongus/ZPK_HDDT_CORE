@@ -223,6 +223,9 @@ CLASS zcl_hddt_src_gom IMPLEMENTATION.
     CLEAR: cs_request-invoice-items, cs_request-invoice-taxes,
            cs_request-invoice-summary.
 
+    " ZTB_HDDT_ITEM-TAX_RATE dùng ZDE_HDDT_RATE = P(4,2) còn RATE_TEXT nhận
+    " TY_RATE = P(5,2). Tham số method kiểm kiểu packed rất chặt nên phải
+    " CONV, khác với gán trong VALUE( ) là MOVE bình thường.
     LOOP AT lt_ov ASSIGNING FIELD-SYMBOL(<fs_ov>).
       APPEND VALUE zif_hddt_types=>ty_item(
         line_no      = <fs_ov>-line_no
@@ -234,7 +237,7 @@ CLASS zcl_hddt_src_gom IMPLEMENTATION.
         price        = <fs_ov>-price
         amount       = <fs_ov>-amount
         tax_rate     = <fs_ov>-tax_rate
-        tax_rate_txt = rate_text( <fs_ov>-tax_rate )
+        tax_rate_txt = rate_text( CONV zif_hddt_types=>ty_rate( <fs_ov>-tax_rate ) )
         tax_amount   = <fs_ov>-tax_amount
         total        = <fs_ov>-total
         disc_percent = <fs_ov>-disc_pct
