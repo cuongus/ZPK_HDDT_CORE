@@ -269,7 +269,67 @@ mới `COMMIT WORK AND WAIT`. Không lưu ngày/giờ vào registry thì lần �
 
 Bấm Back / Cancel là thoát, chưa có gì được ghi.
 
-### 8.4 Giải phóng control
+### 8.4 Chế độ sửa
+
+Vào 0200 là **chế độ xem**: mọi field header khoá, grid không cho gõ. Toolbar
+của grid có ba nút do code tạo (không cần sửa GUI status):
+
+| Nút | Mã | Việc |
+|---|---|---|
+| Sửa dòng hàng / Kết thúc sửa | `ZCHG` | bật tắt chế độ sửa |
+| Thêm dòng | `ZINS` | thêm một dòng hàng trống, chỉ bật ở chế độ sửa |
+| Xoá dòng | `ZDEL` | xoá các dòng đang chọn, chỉ bật ở chế độ sửa |
+
+Bật chế độ sửa thì mở đúng hai field `INV_DATE` và `INV_TIME`; các field còn
+lại và nhãn `GV_*_TXT` luôn khoá. Việc khoá do `LOOP AT SCREEN` trong module
+`STATUS_0200` làm, nên **không cần tick Output only trong SE51** — và đó cũng
+là lý do `LOOP AT SCREEN` phải nằm trực tiếp trong module PBO, không đặt trong
+method của lớp.
+
+Cột mở cho sửa: mã loại dòng, mã hàng, tên hàng, đơn vị tính, số lượng, đơn
+giá, thành tiền, thuế suất %, tiền thuế, chiết khấu, ghi chú. Khoá: số chứng
+từ, STT (engine đánh lại khi lưu), chữ loại dòng và chữ thuế suất (suy từ mã),
+tổng sau thuế (bằng thành tiền + tiền thuế).
+
+Grid dùng `EDIT` trong field catalog cộng `SET_READY_FOR_INPUT` làm công tắc
+chung. Trước mỗi lần thêm / xoá / lưu đều gọi `CHECK_CHANGED_DATA` vì ô đang
+gõ mà chưa Enter thì chưa vào bảng nội bộ.
+
+**Không suy thành tiền từ số lượng × đơn giá.** Dòng hàng nguồn FI lấy số tiền
+từ dòng sổ cái, số lượng và đơn giá thường bằng 0 (xem dữ liệu thật của M800),
+nhân lại là mất số. `RECALC_TOTALS` chỉ tính `tổng = thành tiền + tiền thuế`
+rồi cộng lên header.
+
+### 8.5 Dòng hàng đã sửa được lưu ở đâu
+
+Engine dựng dòng hàng của chứng từ gom từ chứng từ nguồn mỗi lần đọc, nên sửa
+tay mà không lưu là mất hết ở lần chạy sau. Cách xử lý:
+
+* Save trên 0200 ghi bộ dòng hàng đang hiển thị vào `ZTB_HDDT_ITEM` bằng
+  `ZCL_HDDT_LOG->SAVE_ITEMS` với khoá `src_type = 'GOM'`, `src_docno` = số gom
+  vừa cấp
+* `ZCL_HDDT_SRC_GOM->LOAD_ITEM_OVERRIDE` đọc ngược bảng đó và **thay** kết quả
+  `MERGE`, rồi để `AGGREGATE_INVOICE` dựng lại bảng thuế và tổng cộng
+
+Điều kiện áp dụng override: sổ đăng ký của chứng từ gom còn ở trạng thái chưa
+gửi. An toàn vì `SAVE_ITEMS` của engine chỉ ghi bảng này **sau khi gửi thành
+công**, nên không có chuyện lẫn giữa bản lưu tay và bản lưu vết.
+
+Cờ đánh dấu đã sửa được bật ngay khi **vào** chế độ sửa, không phải khi thay
+đổi ô: ALV không có cách rẻ để biết một ô đã đổi giá trị hay chưa. Hệ quả cần
+biết: vào chế độ sửa rồi thoát mà không đổi gì, Save vẫn lưu ảnh chụp dòng
+hàng — chứng từ gom đó từ đó không còn tự cập nhật theo chứng từ nguồn nữa.
+Muốn quay lại hành vi tự dựng thì xoá các dòng `ZTB_HDDT_ITEM` của số gom đó.
+
+`ITEM_TEXT` (tên hàng nhập tay ở popup Sửa ngày/giờ) ghi đè tên **mọi** dòng
+hàng trong `APPLY_REGISTRY_EDITS`, nên khi đã sửa dòng hàng thì Save không lưu
+`ITEM_TEXT` nữa — không thì tên vừa sửa bị xoá sạch ở lần đọc sau.
+
+[Unverified] Phần sửa dòng hàng của hoá đơn gom là yêu cầu nghiệp vụ cần cân
+nhắc về thuế: hoá đơn phát hành sẽ không còn khớp dòng hạch toán của chứng từ
+nguồn. Nên chốt với kế toán phạm vi được sửa trước khi mở cho người dùng cuối.
+
+### 8.6 Giải phóng control
 
 `FREE mo_grid_it` của ABAP chỉ xoá tham chiếu, control trên frontend vẫn còn
 nên lần vào 0200 thứ hai báo `CC_ITEM` đã tồn tại. `FREE_ITEM_GRID` gọi
