@@ -169,6 +169,18 @@ CLASS lcl_app DEFINITION FINAL CREATE PUBLIC.
     METHODS item_labels
       RETURNING VALUE(rt_col) TYPE gty_t_col.
 
+    "! Header thông tin chung đặt phía trên bảng dòng hàng của popup
+    "! (SALV: TOP_OF_LIST). Dynpro 0200 không dùng vì đã có field riêng.
+    METHODS item_header
+      IMPORTING is_req         TYPE zif_hddt_types=>ty_request
+      RETURNING VALUE(ro_form) TYPE REF TO cl_salv_form_layout_grid.
+
+    "! Số tiền theo định dạng của loại tiền (VND không có số lẻ)
+    METHODS amt_text
+      IMPORTING i_amount      TYPE zif_hddt_types=>ty_amount
+                i_waers       TYPE waers
+      RETURNING VALUE(r_text) TYPE gty_amttxt.
+
     "! Đổ ITEMS của request sang cấu trúc phẳng cho ALV. Dòng của chứng từ
     "! gom mang SRC_DOCNO trong EXT nên ưu tiên lấy giá trị đó.
     METHODS to_item_alv
@@ -899,6 +911,11 @@ CLASS lcl_app IMPLEMENTATION.
         lo_pop->get_display_settings( )->set_striped_pattern( abap_true ).
         lo_pop->get_functions( )->set_all( abap_true ).
 
+        " Khối thông tin chung phía trên bảng dòng hàng. Phải khai chiều
+        " cao, không thì vùng header bị cắt còn một hai dòng.
+        lo_pop->set_top_of_list( item_header( ls_req ) ).
+        lo_pop->set_top_of_list_height( 8 ).
+
         DATA(lo_cols) = lo_pop->get_columns( ).
         lo_cols->set_optimize( abap_true ).
         DATA(lt_lab) = item_labels( ).
@@ -911,6 +928,75 @@ CLASS lcl_app IMPLEMENTATION.
       CATCH cx_salv_error INTO DATA(lx_pop).
         MESSAGE lx_pop->get_text( ) TYPE 'S' DISPLAY LIKE 'E'.
     ENDTRY.
+
+  ENDMETHOD.
+
+
+  METHOD item_header.
+
+    DATA(ls_inv) = is_req-invoice.
+    DATA(lv_waers) = ls_inv-header-currency.
+
+    " 4 cột: nhãn - giá trị - nhãn - giá trị
+    ro_form = NEW cl_salv_form_layout_grid( columns = 4 ).
+
+    ro_form->create_label( row = 1 column = 1 text = 'Số chứng từ' ).
+    ro_form->create_text(  row = 1 column = 2
+      text = |{ is_req-src_type } { is_req-src_docno }/{ is_req-gjahr }| ).
+    ro_form->create_label( row = 1 column = 3 text = 'Ngày chứng từ' ).
+    ro_form->create_text(  row = 1 column = 4
+      text = |{ is_req-src_info-bldat DATE = USER }| ).
+
+    ro_form->create_label( row = 2 column = 1 text = 'Mã công ty' ).
+    ro_form->create_text(  row = 2 column = 2 text = |{ is_req-bukrs }| ).
+    ro_form->create_label( row = 2 column = 3 text = 'Ngày ghi sổ' ).
+    ro_form->create_text(  row = 2 column = 4
+      text = |{ is_req-src_info-budat DATE = USER }| ).
+
+    ro_form->create_label( row = 3 column = 1 text = 'Khách hàng' ).
+    ro_form->create_text(  row = 3 column = 2
+      text = |{ ls_inv-buyer-code } { ls_inv-buyer-legal_name }| ).
+    ro_form->create_label( row = 3 column = 3 text = 'Ngày phát hành' ).
+    ro_form->create_text(  row = 3 column = 4
+      text = |{ ls_inv-header-inv_date DATE = USER } { ls_inv-header-inv_time TIME = USER }| ).
+
+    ro_form->create_label( row = 4 column = 1 text = 'Mã số thuế' ).
+    ro_form->create_text(  row = 4 column = 2 text = |{ ls_inv-buyer-tax_code }| ).
+    ro_form->create_label( row = 4 column = 3 text = 'Loại tiền' ).
+    ro_form->create_text(  row = 4 column = 4 text = |{ lv_waers }| ).
+
+    ro_form->create_label( row = 5 column = 1 text = 'Tổng thành tiền' ).
+    ro_form->create_text(  row = 5 column = 2
+      text = amt_text( i_amount = ls_inv-summary-amount_wo_tax
+                       i_waers  = lv_waers ) ).
+    ro_form->create_label( row = 5 column = 3 text = 'Tổng thuế' ).
+    ro_form->create_text(  row = 5 column = 4
+      text = amt_text( i_amount = ls_inv-summary-tax_amount
+                       i_waers  = lv_waers ) ).
+
+    ro_form->create_label( row = 6 column = 1 text = 'Tổng tiền' ).
+    ro_form->create_text(  row = 6 column = 2
+      text = amt_text( i_amount = ls_inv-summary-total
+                       i_waers  = lv_waers ) ).
+    ro_form->create_label( row = 6 column = 3 text = 'Số dòng hàng' ).
+    ro_form->create_text(  row = 6 column = 4 text = |{ lines( ls_inv-items ) }| ).
+
+  ENDMETHOD.
+
+
+  METHOD amt_text.
+
+    " WRITE ... CURRENCY tôn trọng số lẻ khai trong TCURX: VND ra số nguyên,
+    " USD ra 2 số lẻ. Không truyền loại tiền thì để string template lo.
+    IF i_waers IS INITIAL.
+      r_text = |{ i_amount NUMBER = USER }|.
+      RETURN.
+    ENDIF.
+
+    DATA lv_c TYPE c LENGTH 30.
+    WRITE i_amount TO lv_c CURRENCY i_waers.
+    CONDENSE lv_c.
+    r_text = lv_c.
 
   ENDMETHOD.
 

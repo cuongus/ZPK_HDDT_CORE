@@ -86,6 +86,7 @@ TYPES gty_icon    TYPE c LENGTH 4.
 TYPES gty_sttext  TYPE c LENGTH 60.
 TYPES gty_adjcode TYPE c LENGTH 1.
 TYPES gty_ittext  TYPE c LENGTH 30.
+TYPES gty_amttxt  TYPE c LENGTH 30.
 
 *---------------------------------------------------------------------*
 * Nhãn cột dùng chung cho field catalog của grid và cột của SALV
