@@ -23,6 +23,7 @@ Soát các lỗi mà ADT / SE24 sẽ báo khi activate:
   S. PERFORM ... USING nhận biểu thức thay vì tên biến
   T. Nhãn UI vượt giới hạn: SVAL-FIELDTEXT 20, STB_BUTTON-QUICKINFO 30
   AA. E_ROW_ID-INDEX (N(10)) truyền thẳng vào tham số TYPE i
+  AB. RETURNING. đứng một mình (gõ nhầm RETURN.)
   U. Dạng ngắn ( name = value ) đi kèm EXCEPTIONS mà thiếu EXPORTING
   V. MESSAGE ... WITH nhận biểu thức thay vì tên biến
   W. Khai báo lại thành phần / method đã có ở lớp cha
@@ -671,6 +672,11 @@ def check_ui(path):
                 report("T", path, i, "QUICKINFO %d ký tự (tối đa 30): %s"
                        % (len(m.group(1)), m.group(1)))
 
+        # AB. RETURNING chỉ hợp lệ trong khai báo tham số; đứng một mình
+        #     là gõ nhầm RETURN và ADT báo lỗi khó hiểu
+        if re.match(r"RETURNING\s*\.\s*$", line.strip(), re.I):
+            report("AB", path, i, "RETURNING. đứng một mình, phải là RETURN.")
+
         # AA. Thành phần INDEX của LVC_S_ROW là N(10): truyền thẳng vào
         #     tham số TYPE i thì ADT báo "not compatible with the type I"
         if re.search(r"\w+\(\s*e_row_id-(?:index|rowid)\s*\)", line, re.I) \
@@ -847,6 +853,7 @@ KIND = {
     "S": "PERFORM USING nhận biểu thức",
     "T": "Nhãn UI vượt giới hạn (FIELDTEXT 20 / QUICKINFO 30)",
     "AA": "E_ROW_ID-INDEX truyền thẳng vào tham số TYPE i",
+    "AB": "RETURNING. đứng một mình (gõ nhầm RETURN.)",
     "U": "Dạng ngắn name = value đi kèm EXCEPTIONS",
     "V": "MESSAGE ... WITH nhận biểu thức",
     "W": "Khai báo lại thành phần của lớp cha",

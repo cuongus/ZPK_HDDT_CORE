@@ -65,6 +65,16 @@ CLASS lcl_app DEFINITION FINAL CREATE PUBLIC.
       FOR EVENT hotspot_click OF cl_gui_alv_grid
       IMPORTING e_row_id e_column_id.
 
+    "! Toolbar riêng của grid dòng hàng trên dynpro 0200. SET HANDLER theo
+    "! từng instance nên hai grid không lẫn nút của nhau.
+    METHODS on_toolbar_it
+      FOR EVENT toolbar OF cl_gui_alv_grid
+      IMPORTING e_object.
+
+    METHODS on_user_command_it
+      FOR EVENT user_command OF cl_gui_alv_grid
+      IMPORTING e_ucomm.
+
   PRIVATE SECTION.
 
     DATA mo_dock    TYPE REF TO cl_gui_docking_container.
@@ -123,6 +133,19 @@ CLASS lcl_app DEFINITION FINAL CREATE PUBLIC.
     METHODS free_item_grid.
     "! Nhãn các field trên dynpro 0200
     METHODS init_gom_labels.
+
+    "! Bật / tắt chế độ sửa của dynpro 0200
+    METHODS toggle_edit.
+    METHODS insert_item_row.
+    METHODS delete_item_rows.
+    METHODS refresh_item_grid.
+
+    "! Đổi bảng hiển thị về ITEMS của request (đánh số lại dòng)
+    METHODS from_item_alv
+      RETURNING VALUE(rt_item) TYPE zif_hddt_types=>ty_t_item.
+
+    "! Tính lại thành tiền sau thuế từng dòng và tổng trên header
+    METHODS recalc_totals.
     METHODS do_ungom.
     METHODS do_edit.
     METHODS do_getfile.
@@ -545,6 +568,8 @@ CLASS lcl_app IMPLEMENTATION.
         WHEN 'B'.
           <fs_fcat>-icon    = abap_true.
           <fs_fcat>-hotspot = abap_true.
+        WHEN 'E'.
+          <fs_fcat>-edit = abap_true.
         WHEN 'T'.
           <fs_fcat>-tech = abap_true.
         WHEN OTHERS.
@@ -556,23 +581,27 @@ CLASS lcl_app IMPLEMENTATION.
 
   METHOD item_labels.
 
+    " flag 'E' = cột cho sửa khi dynpro 0200 ở chế độ sửa. Không cho sửa
+    " SRC_DOCNO / LINE_NO (do engine đánh lại), TYPE_TXT và TAX_TXT (chữ
+    " suy ra từ mã), TOTAL (bằng thành tiền + tiền thuế).
     rt_col = VALUE #(
       ( field = 'SRC_DOCNO'  short = 'Số CT'     medium = 'Số chứng từ' )
       ( field = 'LINE_NO'    short = 'STT'       medium = 'STT' )
-      ( field = 'ITEM_TYPE'  short = 'Mã loại'   medium = 'Mã loại dòng' )
+      ( field = 'ITEM_TYPE'  short = 'Mã loại'   medium = 'Mã loại dòng'  flag = 'E' )
       ( field = 'TYPE_TXT'   short = 'Loại dòng' medium = 'Loại dòng' )
-      ( field = 'ITEM_CODE'  short = 'Mã hàng'   medium = 'Mã hàng' )
-      ( field = 'ITEM_NAME'  short = 'Tên hàng'  medium = 'Tên hàng' )
-      ( field = 'UNIT'       short = 'ĐVT'       medium = 'Đơn vị tính' )
-      ( field = 'QUANTITY'   short = 'SL'        medium = 'Số lượng' )
-      ( field = 'PRICE'      short = 'Đơn giá'   medium = 'Đơn giá' )
-      ( field = 'AMOUNT'     short = 'Tiền hàng' medium = 'Thành tiền' )
+      ( field = 'ITEM_CODE'  short = 'Mã hàng'   medium = 'Mã hàng'       flag = 'E' )
+      ( field = 'ITEM_NAME'  short = 'Tên hàng'  medium = 'Tên hàng'      flag = 'E' )
+      ( field = 'UNIT'       short = 'ĐVT'       medium = 'Đơn vị tính'   flag = 'E' )
+      ( field = 'QUANTITY'   short = 'SL'        medium = 'Số lượng'      flag = 'E' )
+      ( field = 'PRICE'      short = 'Đơn giá'   medium = 'Đơn giá'       flag = 'E' )
+      ( field = 'AMOUNT'     short = 'Tiền hàng' medium = 'Thành tiền'    flag = 'E' )
       ( field = 'TAX_TXT'    short = 'Thuế suất' medium = 'Thuế suất' )
-      ( field = 'TAX_AMOUNT' short = 'Tiền thuế' medium = 'Tiền thuế' )
+      ( field = 'TAX_RATE'   short = 'TS %'      medium = 'Thuế suất %'   flag = 'E' )
+      ( field = 'TAX_AMOUNT' short = 'Tiền thuế' medium = 'Tiền thuế'     flag = 'E' )
       ( field = 'TOTAL'      short = 'Tổng'      medium = 'Tổng sau thuế' )
-      ( field = 'DISC_PCT'   short = 'CK %'      medium = 'Chiết khấu %' )
-      ( field = 'DISC_AMT'   short = 'Tiền CK'   medium = 'Tiền chiết khấu' )
-      ( field = 'NOTE'       short = 'Ghi chú'   medium = 'Ghi chú' ) ).
+      ( field = 'DISC_PCT'   short = 'CK %'      medium = 'Chiết khấu %'  flag = 'E' )
+      ( field = 'DISC_AMT'   short = 'Tiền CK'   medium = 'Tiền chiết khấu' flag = 'E' )
+      ( field = 'NOTE'       short = 'Ghi chú'   medium = 'Ghi chú'       flag = 'E' ) ).
 
   ENDMETHOD.
 
@@ -597,6 +626,7 @@ CLASS lcl_app IMPLEMENTATION.
         price      = <fs_it>-price
         amount     = <fs_it>-amount
         tax_txt    = <fs_it>-tax_rate_txt
+        tax_rate   = <fs_it>-tax_rate
         tax_amount = <fs_it>-tax_amount
         total      = <fs_it>-total
         disc_pct   = <fs_it>-disc_percent
@@ -1228,7 +1258,8 @@ CLASS lcl_app IMPLEMENTATION.
       RETURN.
     ENDIF.
 
-    CLEAR: gt_gom_req, gt_gom_item, gs_gom_h, gv_gom_text, gv_gom_edit.
+    CLEAR: gt_gom_req, gt_gom_item, gs_gom_h, gv_gom_text, gv_gom_edit,
+           gv_gom_mode, gv_gom_itchg.
 
     LOOP AT lt_rows INTO DATA(lv_row).
       IF lv_row < 1 OR lv_row > lines( gt_request ).
@@ -1295,6 +1326,10 @@ CLASS lcl_app IMPLEMENTATION.
     SET PF-STATUS gc_pfstat_gom.
 
     IF mo_grid_it IS BOUND.
+      " Grid đã dựng: chỉ đồng bộ lại chế độ nhập
+      mo_grid_it->set_ready_for_input(
+        i_ready_for_input = COND i( WHEN gv_gom_mode = abap_true
+                                    THEN 1 ELSE 0 ) ).
       RETURN.
     ENDIF.
 
@@ -1327,12 +1362,220 @@ CLASS lcl_app IMPLEMENTATION.
     ls_layout-cwidth_opt = abap_true.
     ls_layout-sel_mode   = 'A'.
 
+    SET HANDLER me->on_toolbar_it      FOR mo_grid_it.
+    SET HANDLER me->on_user_command_it FOR mo_grid_it.
+
     mo_grid_it->set_table_for_first_display(
       EXPORTING
         is_layout       = ls_layout
       CHANGING
         it_fieldcatalog = mt_fcat_it
         it_outtab       = gt_gom_item ).
+
+    " Field catalog đã bật EDIT cho các cột sửa được; READY_FOR_INPUT là
+    " công tắc chung, mặc định 0 nên vào màn hình là chế độ xem.
+    mo_grid_it->set_ready_for_input(
+      i_ready_for_input = COND i( WHEN gv_gom_mode = abap_true
+                                  THEN 1 ELSE 0 ) ).
+
+  ENDMETHOD.
+
+
+  METHOD on_toolbar_it.
+
+    DATA lv_dis TYPE c LENGTH 1.
+    IF gv_gom_mode = abap_true.
+      CLEAR lv_dis.
+    ELSE.
+      lv_dis = 'X'.
+    ENDIF.
+
+    APPEND VALUE #( butn_type = 3 ) TO e_object->mt_toolbar.
+
+    IF gv_gom_mode = abap_true.
+      APPEND VALUE #( function  = gc_fcode-gomchg
+                      icon      = CONV #( icon_display )
+                      text      = 'Kết thúc sửa'
+                      quickinfo = 'Ve che do chi xem' ) TO e_object->mt_toolbar.
+    ELSE.
+      APPEND VALUE #( function  = gc_fcode-gomchg
+                      icon      = CONV #( icon_change )
+                      text      = 'Sửa dòng hàng'
+                      quickinfo = 'Cho sua ngay/gio va dong hang' ) TO e_object->mt_toolbar.
+    ENDIF.
+
+    APPEND VALUE #( function  = gc_fcode-gomins
+                    icon      = CONV #( icon_insert_row )
+                    text      = 'Thêm dòng'
+                    disabled  = lv_dis
+                    quickinfo = 'Them mot dong hang trong' ) TO e_object->mt_toolbar.
+
+    APPEND VALUE #( function  = gc_fcode-gomdel
+                    icon      = CONV #( icon_delete_row )
+                    text      = 'Xoá dòng'
+                    disabled  = lv_dis
+                    quickinfo = 'Xoa cac dong dang chon' ) TO e_object->mt_toolbar.
+
+  ENDMETHOD.
+
+
+  METHOD on_user_command_it.
+
+    CASE e_ucomm.
+      WHEN gc_fcode-gomchg.
+        toggle_edit( ).
+      WHEN gc_fcode-gomins.
+        insert_item_row( ).
+      WHEN gc_fcode-gomdel.
+        delete_item_rows( ).
+      WHEN OTHERS.
+    ENDCASE.
+
+  ENDMETHOD.
+
+
+  METHOD toggle_edit.
+
+    IF gv_gom_mode = abap_true.
+      " Rời chế độ sửa: lấy giá trị người dùng vừa gõ trước khi khoá lại
+      mo_grid_it->check_changed_data( ).
+      recalc_totals( ).
+      CLEAR gv_gom_mode.
+    ELSE.
+      " Vào chế độ sửa nghĩa là có ý sửa dòng hàng, nên Save sẽ lưu đè
+      " ZTB_HDDT_ITEM. Không bật cờ ở đây thì thay đổi trong ô (không
+      " thêm/xoá dòng) không có cách nào nhận biết.
+      gv_gom_mode  = abap_true.
+      gv_gom_itchg = abap_true.
+    ENDIF.
+
+    refresh_item_grid( ).
+
+  ENDMETHOD.
+
+
+  METHOD insert_item_row.
+
+    IF gv_gom_mode = abap_false.
+      RETURN.
+    ENDIF.
+
+    mo_grid_it->check_changed_data( ).
+
+    " Dòng mới mặc định là hàng hoá/dịch vụ; SRC_DOCNO để trống vì không
+    " đến từ chứng từ nào
+    APPEND VALUE gty_item_alv( line_no   = lines( gt_gom_item ) + 1
+                               item_type = '0'
+                               type_txt  = item_type_text( '0' ) )
+           TO gt_gom_item.
+
+    gv_gom_itchg = abap_true.
+    recalc_totals( ).
+    refresh_item_grid( ).
+
+  ENDMETHOD.
+
+
+  METHOD delete_item_rows.
+
+    IF gv_gom_mode = abap_false.
+      RETURN.
+    ENDIF.
+
+    mo_grid_it->check_changed_data( ).
+
+    DATA lt_rows TYPE lvc_t_row.
+    mo_grid_it->get_selected_rows( IMPORTING et_index_rows = lt_rows ).
+    IF lt_rows IS INITIAL.
+      MESSAGE s002(zms_hddt) DISPLAY LIKE 'W'.
+      RETURN.
+    ENDIF.
+
+    " Xoá từ dưới lên để index không bị lệch
+    SORT lt_rows BY index DESCENDING.
+    LOOP AT lt_rows ASSIGNING FIELD-SYMBOL(<fs_row>).
+      DATA(lv_idx) = CONV i( <fs_row>-index ).
+      IF lv_idx >= 1 AND lv_idx <= lines( gt_gom_item ).
+        DELETE gt_gom_item INDEX lv_idx.
+      ENDIF.
+    ENDLOOP.
+
+    gv_gom_itchg = abap_true.
+    recalc_totals( ).
+    refresh_item_grid( ).
+
+  ENDMETHOD.
+
+
+  METHOD refresh_item_grid.
+
+    IF mo_grid_it IS NOT BOUND.
+      RETURN.
+    ENDIF.
+
+    DATA ls_stable TYPE lvc_s_stbl.
+    ls_stable-row = abap_true.
+    ls_stable-col = abap_true.
+    mo_grid_it->refresh_table_display(
+      EXPORTING
+        is_stable = ls_stable
+      EXCEPTIONS
+        OTHERS    = 0 ).
+
+  ENDMETHOD.
+
+
+  METHOD recalc_totals.
+
+    CLEAR: gs_gom_h-amount, gs_gom_h-vat_amount, gs_gom_h-total.
+
+    LOOP AT gt_gom_item ASSIGNING FIELD-SYMBOL(<fs_it>).
+      " Không suy thành tiền từ số lượng x đơn giá: dòng hàng nguồn FI
+      " lấy số tiền từ dòng sổ cái, số lượng thường bằng 0.
+      <fs_it>-total    = <fs_it>-amount + <fs_it>-tax_amount.
+      <fs_it>-type_txt = item_type_text( <fs_it>-item_type ).
+
+      " Dòng ghi chú không tham gia tổng cộng
+      IF <fs_it>-item_type = '3'.
+        CONTINUE.
+      ENDIF.
+      gs_gom_h-amount     = gs_gom_h-amount     + <fs_it>-amount.
+      gs_gom_h-vat_amount = gs_gom_h-vat_amount + <fs_it>-tax_amount.
+      gs_gom_h-total      = gs_gom_h-total      + <fs_it>-total.
+    ENDLOOP.
+
+  ENDMETHOD.
+
+
+  METHOD from_item_alv.
+
+    DATA lv_line TYPE zde_hddt_lineno.
+
+    LOOP AT gt_gom_item ASSIGNING FIELD-SYMBOL(<fs_it>).
+      lv_line = lv_line + 1.
+
+      DATA(lv_txt) = CONV string( <fs_it>-tax_txt ).
+      IF lv_txt IS INITIAL AND <fs_it>-tax_rate > 0.
+        lv_txt = |{ <fs_it>-tax_rate DECIMALS = 0 }%|.
+      ENDIF.
+
+      APPEND VALUE zif_hddt_types=>ty_item(
+        line_no      = lv_line
+        item_type    = <fs_it>-item_type
+        item_code    = <fs_it>-item_code
+        item_name    = <fs_it>-item_name
+        unit         = <fs_it>-unit
+        quantity     = <fs_it>-quantity
+        price        = <fs_it>-price
+        amount       = <fs_it>-amount
+        tax_rate     = <fs_it>-tax_rate
+        tax_rate_txt = lv_txt
+        tax_amount   = <fs_it>-tax_amount
+        total        = <fs_it>-total
+        disc_percent = <fs_it>-disc_pct
+        disc_amount  = <fs_it>-disc_amt
+        note         = <fs_it>-note ) TO rt_item.
+    ENDLOOP.
 
   ENDMETHOD.
 
@@ -1363,6 +1606,7 @@ CLASS lcl_app IMPLEMENTATION.
 
       WHEN 'BACK' OR '&F03' OR 'CANC' OR '&F12'.
         " Thoát mà không gom
+        CLEAR gv_gom_mode.
         free_item_grid( ).
         LEAVE TO SCREEN 0.
 
@@ -1415,6 +1659,12 @@ CLASS lcl_app IMPLEMENTATION.
 
   METHOD do_gom_save.
 
+    " Ô đang gõ chưa Enter thì chưa vào bảng nội bộ
+    IF mo_grid_it IS BOUND.
+      mo_grid_it->check_changed_data( ).
+    ENDIF.
+    recalc_totals( ).
+
     TRY.
         DATA(lo_gom) = NEW zcl_hddt_gom( ).
         DATA(lv_gom) = lo_gom->create( i_bukrs     = p_bukrs
@@ -1424,16 +1674,33 @@ CLASS lcl_app IMPLEMENTATION.
         " Ngày/giờ người dùng sửa trên màn hình 0200 phải lưu vào sổ đăng
         " ký của CHÍNH chứng từ gom, nếu không MERGE sẽ tính lại theo
         " ZTB_HDDT_DATE ở lần đọc sau.
+        DATA(ls_greq) = VALUE zif_hddt_types=>ty_request(
+          bukrs     = p_bukrs
+          gjahr     = p_gjahr
+          src_type  = zcl_hddt_src_gom=>gc_src_type
+          src_docno = lv_gom ).
+        DATA(lo_log) = NEW zcl_hddt_log( ).
+
         IF gv_gom_edit = abap_true.
-          DATA(ls_greq) = VALUE zif_hddt_types=>ty_request(
-            bukrs     = p_bukrs
-            gjahr     = p_gjahr
-            src_type  = zcl_hddt_src_gom=>gc_src_type
-            src_docno = lv_gom ).
-          NEW zcl_hddt_log( )->save_edit( is_request  = ls_greq
-                                          i_inv_date  = gs_gom_h-inv_date
-                                          i_inv_time  = gs_gom_h-inv_time
-                                          i_item_text = CONV #( gv_gom_text ) ).
+          " APPLY_REGISTRY_EDITS ghi ITEM_TEXT lên MỌI dòng hàng, nên khi
+          " người dùng đã tự sửa dòng hàng thì không lưu tên hàng nhập tay
+          " nữa, tránh xoá sạch tên vừa sửa ở lần đọc sau.
+          DATA lv_itxt TYPE string.
+          IF gv_gom_itchg = abap_false.
+            lv_itxt = gv_gom_text.
+          ENDIF.
+          lo_log->save_edit( is_request  = ls_greq
+                             i_inv_date  = gs_gom_h-inv_date
+                             i_inv_time  = gs_gom_h-inv_time
+                             i_item_text = lv_itxt ).
+        ENDIF.
+
+        " Dòng hàng người dùng sửa phải lưu, nếu không lần đọc sau MERGE
+        " dựng lại từ chứng từ nguồn và mất hết. ZCL_HDDT_SRC_GOM đọc
+        " ngược bảng này khi chứng từ chưa gửi thành công lần nào.
+        IF gv_gom_itchg = abap_true.
+          ls_greq-invoice-items = from_item_alv( ).
+          lo_log->save_items( ls_greq ).
         ENDIF.
 
         COMMIT WORK AND WAIT.
@@ -2021,6 +2288,24 @@ ENDMODULE.
 MODULE status_0200 OUTPUT.
 
   go_app->pbo_0200( ).
+
+  " LOOP AT SCREEN chỉ dùng được trực tiếp trong module PBO nên đặt ở đây
+  " thay vì trong method. Chỉ ngày/giờ phát hành mở khi ở chế độ sửa; các
+  " field còn lại luôn chỉ xem nên không cần tick Output only trong SE51.
+  LOOP AT SCREEN.
+    IF screen-name CS 'GS_GOM_H-INV_DATE'
+       OR screen-name CS 'GS_GOM_H-INV_TIME'.
+      IF gv_gom_mode = abap_true.
+        screen-input = '1'.
+      ELSE.
+        screen-input = '0'.
+      ENDIF.
+      MODIFY SCREEN.
+    ELSEIF screen-name CP 'GS_GOM_H-*' OR screen-name CP 'GV_*_TXT'.
+      screen-input = '0'.
+      MODIFY SCREEN.
+    ENDIF.
+  ENDLOOP.
 
 ENDMODULE.
 

@@ -18,6 +18,8 @@
 * 1.0       07/09/2026    cuongus - CuongUS        abapGit     Tạo mới
 * 1.1       09/09/2026    cuongus - CuongUS        abapGit     MERGE thành
 *                         PUBLIC cho màn hình 0200 xem trước chứng từ gom
+* 1.2       10/09/2026    cuongus - CuongUS        abapGit     Đọc lại dòng
+*                         hàng người dùng sửa tay từ ZTB_HDDT_ITEM
 *=====================================================================
 CLASS zcl_hddt_src_gom DEFINITION
   PUBLIC
@@ -43,7 +45,18 @@ CLASS zcl_hddt_src_gom DEFINITION
       RETURNING VALUE(rs_request) TYPE zif_hddt_types=>ty_request .
 
   PROTECTED SECTION.
+
   PRIVATE SECTION.
+
+    "! Dòng hàng người dùng đã sửa trên màn hình gom, lưu ở ZTB_HDDT_ITEM.
+    "! Chỉ áp dụng khi chứng từ chưa gửi thành công lần nào — SAVE_ITEMS
+    "! của engine chỉ ghi bảng này sau khi gửi thành công.
+    METHODS load_item_override
+      IMPORTING i_bukrs    TYPE bukrs
+                i_gjahr    TYPE gjahr
+                i_docno    TYPE zde_hddt_docno
+      CHANGING  cs_request TYPE zif_hddt_types=>ty_request .
+
 ENDCLASS.
 
 
@@ -128,6 +141,15 @@ CLASS zcl_hddt_src_gom IMPLEMENTATION.
                                   i_gjahr    = is_selection-gjahr
                                   i_src_type = gc_src_type
                                   i_docno    = <fs_gom>-gom_no ).
+      " Dòng hàng đã sửa tay ưu tiên hơn kết quả MERGE
+      IF ls_reg-status IS INITIAL
+         OR ls_reg-status = zif_hddt_types=>gc_status-not_sent.
+        load_item_override( EXPORTING i_bukrs    = is_selection-bukrs
+                                      i_gjahr    = is_selection-gjahr
+                                      i_docno    = <fs_gom>-gom_no
+                            CHANGING  cs_request = ls_req ).
+      ENDIF.
+
       IF keep_document( i_reversed   = ls_req-src_info-xreversed
                         is_reg       = ls_reg
                         is_selection = is_selection ) = abap_false.
@@ -178,6 +200,51 @@ CLASS zcl_hddt_src_gom IMPLEMENTATION.
         rs_state-stjah     = ls_st-stjah.
       ENDIF.
     ENDLOOP.
+
+  ENDMETHOD.
+
+
+  METHOD load_item_override.
+
+    SELECT line_no, item_code, item_name, item_type, unit, quantity,
+           price, amount, tax_rate, tax_amount, total, disc_pct,
+           disc_amt, note
+      FROM ztb_hddt_item
+      WHERE bukrs     = @i_bukrs
+        AND gjahr     = @i_gjahr
+        AND src_type  = @gc_src_type
+        AND src_docno = @i_docno
+      ORDER BY line_no
+      INTO TABLE @DATA(lt_ov).
+    IF lt_ov IS INITIAL.
+      RETURN.
+    ENDIF.
+
+    CLEAR: cs_request-invoice-items, cs_request-invoice-taxes,
+           cs_request-invoice-summary.
+
+    LOOP AT lt_ov ASSIGNING FIELD-SYMBOL(<fs_ov>).
+      APPEND VALUE zif_hddt_types=>ty_item(
+        line_no      = <fs_ov>-line_no
+        item_type    = <fs_ov>-item_type
+        item_code    = <fs_ov>-item_code
+        item_name    = <fs_ov>-item_name
+        unit         = <fs_ov>-unit
+        quantity     = <fs_ov>-quantity
+        price        = <fs_ov>-price
+        amount       = <fs_ov>-amount
+        tax_rate     = <fs_ov>-tax_rate
+        tax_rate_txt = rate_text( <fs_ov>-tax_rate )
+        tax_amount   = <fs_ov>-tax_amount
+        total        = <fs_ov>-total
+        disc_percent = <fs_ov>-disc_pct
+        disc_amount  = <fs_ov>-disc_amt
+        note         = <fs_ov>-note ) TO cs_request-invoice-items.
+    ENDLOOP.
+
+    " Bảng thuế và tổng cộng để trống thì AGGREGATE_INVOICE dựng lại từ
+    " dòng hàng vừa nạp, kể cả quy đổi sang tiền ghi sổ.
+    zcl_hddt_service=>aggregate_invoice( CHANGING cs_invoice = cs_request-invoice ).
 
   ENDMETHOD.
 

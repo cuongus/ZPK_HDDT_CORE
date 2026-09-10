@@ -117,6 +117,7 @@ TYPES: BEGIN OF gty_item_alv,
          price      TYPE zde_hddt_amount,
          amount     TYPE zde_hddt_amount,
          tax_txt    TYPE c LENGTH 10,
+         tax_rate   TYPE zde_hddt_rate,
          tax_amount TYPE zde_hddt_amount,
          total      TYPE zde_hddt_amount,
          disc_pct   TYPE zde_hddt_rate,
@@ -176,6 +177,13 @@ DATA gt_gom_req  TYPE zif_hddt_types=>ty_t_request.
 DATA gv_gom_text TYPE zde_hddt_name.
 DATA gv_gom_edit TYPE abap_bool.
 
+" Chế độ sửa của dynpro 0200: bật thì ngày/giờ phát hành và bảng dòng
+" hàng mới cho sửa, tắt thì toàn màn hình chỉ xem.
+DATA gv_gom_mode  TYPE abap_bool.
+
+" Dòng hàng đã sửa/thêm/xoá -> Save phải ghi đè ZTB_HDDT_ITEM
+DATA gv_gom_itchg TYPE abap_bool.
+
 "! Danh sách loại nguồn dữ liệu đã cấu hình (ZTB_HDDT_SRC)
 TYPES gty_t_srctype TYPE STANDARD TABLE OF zde_hddt_srctype WITH EMPTY KEY.
 
@@ -200,6 +208,10 @@ CONSTANTS: BEGIN OF gc_fcode,
              getfile TYPE salv_de_function VALUE 'ZFILE',    " Lấy file PDF/XML
              showjs  TYPE salv_de_function VALUE 'ZJSON',    " Xem payload
              showlog TYPE salv_de_function VALUE 'ZLOG',     " Log
+             " Ba mã của grid dòng hàng trên dynpro 0200
+             gomchg  TYPE salv_de_function VALUE 'ZCHG',    " bật/tắt sửa
+             gomins  TYPE salv_de_function VALUE 'ZINS',    " thêm dòng
+             gomdel  TYPE salv_de_function VALUE 'ZDEL',    " xoá dòng
            END OF gc_fcode.
 
 " GUI status của dynpro 0100 chứa ALV grid. Chỉ cần Back / Exit /
