@@ -134,6 +134,12 @@ CLASS lcl_app DEFINITION FINAL CREATE PUBLIC.
     "! Nhãn các field trên dynpro 0200
     METHODS init_gom_labels.
 
+    "! Chỉ được sửa dòng hàng khi chưa phát hành hoá đơn: trạng thái phải
+    "! là 00 chưa tích hợp hoặc 90 lỗi. Từ 20 trở lên đã có bản nháp trên
+    "! hệ HĐĐT nên sửa ở SAP sẽ lệch với nhà cung cấp.
+    METHODS items_editable
+      RETURNING VALUE(r_ok) TYPE abap_bool.
+
     "! Bật / tắt chế độ sửa của dynpro 0200
     METHODS toggle_edit.
     METHODS insert_item_row.
@@ -1259,7 +1265,7 @@ CLASS lcl_app IMPLEMENTATION.
     ENDIF.
 
     CLEAR: gt_gom_req, gt_gom_item, gs_gom_h, gv_gom_text, gv_gom_edit,
-           gv_gom_mode, gv_gom_itchg.
+           gv_gom_mode, gv_gom_itchg, gv_gom_ro.
 
     LOOP AT lt_rows INTO DATA(lv_row).
       IF lv_row < 1 OR lv_row > lines( gt_request ).
@@ -1269,6 +1275,14 @@ CLASS lcl_app IMPLEMENTATION.
         MESSAGE s025(zms_hddt) DISPLAY LIKE 'E'.
         RETURN.
       ENDIF.
+
+      " Thành viên nào đã gửi đi (từ 10 trở lên, trừ 90 lỗi) thì cả chứng
+      " từ gom chuyển sang chỉ xem: không cho sửa dòng hàng nữa
+      IF gt_alv[ lv_row ]-status <> zif_hddt_types=>gc_status-not_sent
+         AND gt_alv[ lv_row ]-status <> zif_hddt_types=>gc_status-error.
+        gv_gom_ro = abap_true.
+      ENDIF.
+
       APPEND gt_request[ lv_row ] TO gt_gom_req.
     ENDLOOP.
 
@@ -1358,6 +1372,9 @@ CLASS lcl_app IMPLEMENTATION.
 
     DATA ls_layout TYPE lvc_s_layo.
     ls_layout-grid_title = |Dòng hàng của chứng từ gom - { gs_gom_h-cnt_doc } chứng từ|.
+    IF gv_gom_ro = abap_true.
+      ls_layout-grid_title = |{ ls_layout-grid_title } (đã phát hành, chỉ xem)|.
+    ENDIF.
     ls_layout-zebra      = abap_true.
     ls_layout-cwidth_opt = abap_true.
     ls_layout-sel_mode   = 'A'.
@@ -1382,6 +1399,11 @@ CLASS lcl_app IMPLEMENTATION.
 
 
   METHOD on_toolbar_it.
+
+    " Đã phát hành thì không hiện ba nút sửa cho khỏi bấm rồi bị chặn
+    IF items_editable( ) = abap_false.
+      RETURN.
+    ENDIF.
 
     DATA lv_dis TYPE c LENGTH 1.
     IF gv_gom_mode = abap_true.
@@ -1434,7 +1456,40 @@ CLASS lcl_app IMPLEMENTATION.
   ENDMETHOD.
 
 
+  METHOD items_editable.
+
+    IF gv_gom_ro = abap_true.
+      RETURN.
+    ENDIF.
+
+    " Chứng từ gom đã tồn tại (mở lại để xem) thì xét sổ đăng ký của
+    " chính nó; lần gom đầu chưa có số nên bỏ qua đoạn này
+    IF gs_gom_h-src_docno IS NOT INITIAL.
+      DATA(ls_reg) = zcl_hddt_log=>read_invoice(
+                       i_bukrs     = gs_gom_h-bukrs
+                       i_gjahr     = gs_gom_h-gjahr
+                       i_src_type  = zcl_hddt_src_gom=>gc_src_type
+                       i_src_docno = gs_gom_h-src_docno ).
+      IF ls_reg-status IS NOT INITIAL
+         AND ls_reg-status <> zif_hddt_types=>gc_status-not_sent
+         AND ls_reg-status <> zif_hddt_types=>gc_status-error.
+        RETURN.
+      ENDIF.
+    ENDIF.
+
+    r_ok = abap_true.
+
+  ENDMETHOD.
+
+
   METHOD toggle_edit.
+
+    " Chỉ chặn lúc BẬT; tắt chế độ sửa thì luôn cho phép
+    IF gv_gom_mode = abap_false AND items_editable( ) = abap_false.
+      MESSAGE 'Đã phát hành hoá đơn nên không sửa được dòng hàng.'
+              TYPE 'S' DISPLAY LIKE 'W'.
+      RETURN.
+    ENDIF.
 
     IF gv_gom_mode = abap_true.
       " Rời chế độ sửa: lấy giá trị người dùng vừa gõ trước khi khoá lại
@@ -1585,7 +1640,14 @@ CLASS lcl_app IMPLEMENTATION.
     CASE i_ucomm.
 
       WHEN 'ZEDIT' OR 'EDIT'.
-        " Sửa ngày / giờ phát hành của chính hoá đơn gom
+        " Sửa ngày / giờ phát hành của chính hoá đơn gom. Đã phát hành thì
+        " APPLY_REGISTRY_EDITS cũng bỏ qua giá trị mới, nên chặn luôn ở đây
+        " cho khỏi sửa xong tưởng đã đổi.
+        IF items_editable( ) = abap_false.
+          MESSAGE 'Đã phát hành hoá đơn nên không sửa được ngày/giờ.'
+                  TYPE 'S' DISPLAY LIKE 'W'.
+          RETURN.
+        ENDIF.
         DATA lv_date TYPE dats.
         DATA lv_time TYPE uzeit.
         DATA lv_text TYPE zde_hddt_name.
@@ -1698,7 +1760,7 @@ CLASS lcl_app IMPLEMENTATION.
         " Dòng hàng người dùng sửa phải lưu, nếu không lần đọc sau MERGE
         " dựng lại từ chứng từ nguồn và mất hết. ZCL_HDDT_SRC_GOM đọc
         " ngược bảng này khi chứng từ chưa gửi thành công lần nào.
-        IF gv_gom_itchg = abap_true.
+        IF gv_gom_itchg = abap_true AND gv_gom_ro = abap_false.
           ls_greq-invoice-items = from_item_alv( ).
           lo_log->save_items( ls_greq ).
         ENDIF.

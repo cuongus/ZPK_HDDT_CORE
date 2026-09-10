@@ -184,6 +184,9 @@ DATA gv_gom_mode  TYPE abap_bool.
 " Dòng hàng đã sửa/thêm/xoá -> Save phải ghi đè ZTB_HDDT_ITEM
 DATA gv_gom_itchg TYPE abap_bool.
 
+" Có thành viên đã phát hành / đã có nháp trên hệ HĐĐT -> chỉ xem
+DATA gv_gom_ro    TYPE abap_bool.
+
 "! Danh sách loại nguồn dữ liệu đã cấu hình (ZTB_HDDT_SRC)
 TYPES gty_t_srctype TYPE STANDARD TABLE OF zde_hddt_srctype WITH EMPTY KEY.
 

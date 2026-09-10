@@ -300,6 +300,20 @@ từ dòng sổ cái, số lượng và đơn giá thường bằng 0 (xem dữ 
 nhân lại là mất số. `RECALC_TOTALS` chỉ tính `tổng = thành tiền + tiền thuế`
 rồi cộng lên header.
 
+Chỉ được sửa khi **chưa phát hành hoá đơn**. `ITEMS_EDITABLE` cho phép đúng
+hai trạng thái: `00` chưa tích hợp và `90` lỗi. Từ `10` trở lên (`20` chờ cấp
+số đã là có bản nháp bên nhà cung cấp) thì:
+
+* ba nút `ZCHG` / `ZINS` / `ZDEL` không hiện trên toolbar
+* tiêu đề grid ghi thêm "(đã phát hành, chỉ xem)"
+* bấm `ZEDIT` cũng bị chặn, vì `APPLY_REGISTRY_EDITS` bỏ qua ngày/giờ mới khi
+  chứng từ đã gửi — không chặn thì người dùng sửa xong tưởng đã đổi
+* `Save` không ghi `ZTB_HDDT_ITEM`
+
+Cờ chỉ xem tính ngay ở `DO_GOM`: **một** thành viên đã gửi là cả chứng từ gom
+chuyển sang chỉ xem. Lý do không cho sửa từ `20`: bản nháp đã nằm trên hệ HĐĐT,
+sửa dòng hàng ở SAP là hai bên lệch nhau mà không có gì báo.
+
 ### 8.5 Dòng hàng đã sửa được lưu ở đâu
 
 Engine dựng dòng hàng của chứng từ gom từ chứng từ nguồn mỗi lần đọc, nên sửa
