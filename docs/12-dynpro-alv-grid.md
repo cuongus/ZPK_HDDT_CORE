@@ -295,6 +295,21 @@ Grid dùng `EDIT` trong field catalog cộng `SET_READY_FOR_INPUT` làm công t�
 chung. Trước mỗi lần thêm / xoá / lưu đều gọi `CHECK_CHANGED_DATA` vì ô đang
 gõ mà chưa Enter thì chưa vào bảng nội bộ.
 
+**Bấm Sửa nhưng ô vẫn không gõ được.** Đổi cờ chế độ rồi để `PBO` gọi
+`SET_READY_FOR_INPUT` là muộn: lần `REFRESH_TABLE_DISPLAY` cuối đã chạy trước
+đó nên frontend vẫn vẽ grid ở chế độ xem. Phải đổi trạng thái **ngay trong**
+`TOGGLE_EDIT`, theo đúng thứ tự:
+
+```abap
+mo_grid_it->set_frontend_fieldcatalog( it_fieldcatalog = mt_fcat_it ).
+mo_grid_it->set_ready_for_input( i_ready_for_input = 1 ).
+refresh_item_grid( ).
+```
+
+`SET_FRONTEND_FIELDCATALOG` đẩy lại cờ `EDIT` xuống control — cần khi bật/tắt
+nhập lúc grid đã hiển thị, vì `SET_READY_FOR_INPUT` một mình chỉ là công tắc
+chung. Giữ thêm lời gọi trong `PBO` cho lần hiển thị đầu.
+
 **Không suy thành tiền từ số lượng × đơn giá.** Dòng hàng nguồn FI lấy số tiền
 từ dòng sổ cái, số lượng và đơn giá thường bằng 0 (xem dữ liệu thật của M800),
 nhân lại là mất số. `RECALC_TOTALS` chỉ tính `tổng = thành tiền + tiền thuế`

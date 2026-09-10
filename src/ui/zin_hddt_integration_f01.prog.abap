@@ -1504,6 +1504,16 @@ CLASS lcl_app IMPLEMENTATION.
       gv_gom_itchg = abap_true.
     ENDIF.
 
+    " Đổi trạng thái nhập NGAY TẠI ĐÂY rồi mới refresh. Để PBO gọi
+    " SET_READY_FOR_INPUT thì lần refresh cuối đã chạy trước đó nên
+    " frontend vẫn vẽ grid ở chế độ xem: bấm vào ô không gõ được.
+    " SET_FRONTEND_FIELDCATALOG đẩy lại cờ EDIT của field catalog xuống
+    " control, cần khi bật/tắt nhập lúc grid đã hiển thị.
+    mo_grid_it->set_frontend_fieldcatalog( it_fieldcatalog = mt_fcat_it ).
+    mo_grid_it->set_ready_for_input(
+      i_ready_for_input = COND i( WHEN gv_gom_mode = abap_true
+                                  THEN 1 ELSE 0 ) ).
+
     refresh_item_grid( ).
 
   ENDMETHOD.
