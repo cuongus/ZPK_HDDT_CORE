@@ -1446,16 +1446,6 @@ CLASS lcl_app IMPLEMENTATION.
                     disabled  = lv_dis
                     quickinfo = 'Xoa cac dong dang chon' ) TO e_object->mt_toolbar.
 
-    APPEND VALUE #( butn_type = 3 ) TO e_object->mt_toolbar.
-
-    " Nút này trước ở Application Toolbar của GUI status, chuyển vào đây
-    " để dynpro 0200 chỉ còn MỘT hàng nút
-    APPEND VALUE #( function  = gc_fcode-edit
-                    icon      = CONV #( icon_edit_file )
-                    text      = 'Sửa ngày/giờ'
-                    disabled  = lv_dis
-                    quickinfo = 'Sua ngay gio phat hanh' ) TO e_object->mt_toolbar.
-
   ENDMETHOD.
 
 
@@ -1468,8 +1458,6 @@ CLASS lcl_app IMPLEMENTATION.
         insert_item_row( ).
       WHEN gc_fcode-gomdel.
         delete_item_rows( ).
-      WHEN gc_fcode-edit.
-        edit_dates( ).
       WHEN OTHERS.
     ENDCASE.
 

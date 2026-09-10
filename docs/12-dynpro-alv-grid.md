@@ -279,16 +279,9 @@ của grid có ba nút do code tạo (không cần sửa GUI status):
 | Sửa dòng hàng / Kết thúc sửa | `ZCHG` | bật tắt chế độ sửa |
 | Thêm dòng | `ZINS` | thêm một dòng hàng trống, chỉ bật ở chế độ sửa |
 | Xoá dòng | `ZDEL` | xoá các dòng đang chọn, chỉ bật ở chế độ sửa |
-| Sửa ngày/giờ | `ZEDIT` | popup sửa ngày giờ phát hành |
 
-**Chỉ một hàng nút.** `ZEDIT` nằm trong toolbar của grid, không để ở
-Application Toolbar của `ZGOM_HDDT` nữa — hai chỗ là hai hàng nút chồng nhau.
-Xoá `ZEDIT` khỏi Application Toolbar của status (giữ ở Function Keys F5 thì
-vẫn bấm được bằng bàn phím). `PAI_0200` vẫn nhận `ZEDIT` nên gán ở đâu cũng
-chạy, cả hai đường gọi cùng method `EDIT_DATES`.
-
-Cách khác là đặt `NO_TOOLBAR` cho grid rồi dồn hết vào Application Toolbar,
-nhưng như vậy mất luôn sort / filter / tổng / export chuẩn của ALV. Không nên.
+`ZEDIT` (Sửa ngày/giờ) vẫn ở Application Toolbar của GUI status `ZGOM_HDDT`,
+không đưa vào toolbar của grid. `PAI_0200` gọi method `EDIT_DATES`.
 
 Bật chế độ sửa thì mở đúng hai field `INV_DATE` và `INV_TIME`; các field còn
 lại và nhãn `GV_*_TXT` luôn khoá. Việc khoá do `LOOP AT SCREEN` trong module
@@ -319,6 +312,14 @@ refresh_item_grid( ).
 `SET_FRONTEND_FIELDCATALOG` đẩy lại cờ `EDIT` xuống control — cần khi bật/tắt
 nhập lúc grid đã hiển thị, vì `SET_READY_FOR_INPUT` một mình chỉ là công tắc
 chung. Giữ thêm lời gọi trong `PBO` cho lần hiển thị đầu.
+
+**Hai thanh cuộn ngang ở đáy màn hình.** Thanh trên là của grid (17 cột, tổng
+~240 ký tự nên luôn phải cuộn — không bỏ được). Thanh dưới là của **chính
+dynpro**, xuất hiện khi layout rộng hơn cửa sổ: xem SE51 → Screen Attributes →
+dòng `Occupied`, Columns > 120 là có thanh cuộn. Xếp lại các khối theo hàng
+thay vì kéo ngang, giảm `Vis.length` của `BUYER_NAME` xuống 60 (giữ
+`Def.length` 120), và dời khối tổng tiền xuống dưới thay vì để bên phải — chỉ
+sửa layout, không sửa code.
 
 **Bấm Sửa xong cột nhảy độ rộng.** Ở chế độ nhập, ALV tính độ rộng theo **độ
 dài field** chứ không theo nội dung, nên cột `ITEM_NAME` / `NOTE` khai
