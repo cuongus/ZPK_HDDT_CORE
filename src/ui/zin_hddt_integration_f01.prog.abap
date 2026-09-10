@@ -140,6 +140,9 @@ CLASS lcl_app DEFINITION FINAL CREATE PUBLIC.
     METHODS items_editable
       RETURNING VALUE(r_ok) TYPE abap_bool.
 
+    "! Popup sửa ngày / giờ phát hành của hoá đơn gom
+    METHODS edit_dates.
+
     "! Bật / tắt chế độ sửa của dynpro 0200
     METHODS toggle_edit.
     METHODS insert_item_row.
@@ -560,6 +563,9 @@ CLASS lcl_app IMPLEMENTATION.
           CONTINUE.
         ENDIF.
       ENDIF.
+      IF <fs_col>-outlen > 0.
+        <fs_fcat>-outputlen = <fs_col>-outlen.
+      ENDIF.
       IF <fs_col>-medium IS NOT INITIAL.
         <fs_fcat>-scrtext_s = <fs_col>-short.
         <fs_fcat>-scrtext_m = <fs_col>-medium.
@@ -591,23 +597,23 @@ CLASS lcl_app IMPLEMENTATION.
     " SRC_DOCNO / LINE_NO (do engine đánh lại), TYPE_TXT và TAX_TXT (chữ
     " suy ra từ mã), TOTAL (bằng thành tiền + tiền thuế).
     rt_col = VALUE #(
-      ( field = 'SRC_DOCNO'  short = 'Số CT'     medium = 'Số chứng từ' )
-      ( field = 'LINE_NO'    short = 'STT'       medium = 'STT' )
-      ( field = 'ITEM_TYPE'  short = 'Mã loại'   medium = 'Mã loại dòng'  flag = 'E' )
-      ( field = 'TYPE_TXT'   short = 'Loại dòng' medium = 'Loại dòng' )
-      ( field = 'ITEM_CODE'  short = 'Mã hàng'   medium = 'Mã hàng'       flag = 'E' )
-      ( field = 'ITEM_NAME'  short = 'Tên hàng'  medium = 'Tên hàng'      flag = 'E' )
-      ( field = 'UNIT'       short = 'ĐVT'       medium = 'Đơn vị tính'   flag = 'E' )
-      ( field = 'QUANTITY'   short = 'SL'        medium = 'Số lượng'      flag = 'E' )
-      ( field = 'PRICE'      short = 'Đơn giá'   medium = 'Đơn giá'       flag = 'E' )
-      ( field = 'AMOUNT'     short = 'Tiền hàng' medium = 'Thành tiền'    flag = 'E' )
-      ( field = 'TAX_TXT'    short = 'Thuế suất' medium = 'Thuế suất' )
-      ( field = 'TAX_RATE'   short = 'TS %'      medium = 'Thuế suất %'   flag = 'E' )
-      ( field = 'TAX_AMOUNT' short = 'Tiền thuế' medium = 'Tiền thuế'     flag = 'E' )
-      ( field = 'TOTAL'      short = 'Tổng'      medium = 'Tổng sau thuế' )
-      ( field = 'DISC_PCT'   short = 'CK %'      medium = 'Chiết khấu %'  flag = 'E' )
-      ( field = 'DISC_AMT'   short = 'Tiền CK'   medium = 'Tiền chiết khấu' flag = 'E' )
-      ( field = 'NOTE'       short = 'Ghi chú'   medium = 'Ghi chú'       flag = 'E' ) ).
+      ( field = 'SRC_DOCNO'  short = 'Số CT'     medium = 'Số chứng từ'      outlen = 12 )
+      ( field = 'LINE_NO'    short = 'STT'       medium = 'STT'              outlen = 4 )
+      ( field = 'ITEM_TYPE'  short = 'Mã loại'   medium = 'Mã loại dòng'     outlen = 3  flag = 'E' )
+      ( field = 'TYPE_TXT'   short = 'Loại dòng' medium = 'Loại dòng'        outlen = 22 )
+      ( field = 'ITEM_CODE'  short = 'Mã hàng'   medium = 'Mã hàng'          outlen = 18 flag = 'E' )
+      ( field = 'ITEM_NAME'  short = 'Tên hàng'  medium = 'Tên hàng'         outlen = 40 flag = 'E' )
+      ( field = 'UNIT'       short = 'ĐVT'       medium = 'Đơn vị tính'      outlen = 8  flag = 'E' )
+      ( field = 'QUANTITY'   short = 'SL'        medium = 'Số lượng'         outlen = 13 flag = 'E' )
+      ( field = 'PRICE'      short = 'Đơn giá'   medium = 'Đơn giá'          outlen = 15 flag = 'E' )
+      ( field = 'AMOUNT'     short = 'Tiền hàng' medium = 'Thành tiền'       outlen = 17 flag = 'E' )
+      ( field = 'TAX_TXT'    short = 'Thuế suất' medium = 'Thuế suất'        outlen = 9 )
+      ( field = 'TAX_RATE'   short = 'TS %'      medium = 'Thuế suất %'      outlen = 6  flag = 'E' )
+      ( field = 'TAX_AMOUNT' short = 'Tiền thuế' medium = 'Tiền thuế'        outlen = 15 flag = 'E' )
+      ( field = 'TOTAL'      short = 'Tổng'      medium = 'Tổng sau thuế'    outlen = 17 )
+      ( field = 'DISC_PCT'   short = 'CK %'      medium = 'Chiết khấu %'     outlen = 6  flag = 'E' )
+      ( field = 'DISC_AMT'   short = 'Tiền CK'   medium = 'Tiền chiết khấu'  outlen = 13 flag = 'E' )
+      ( field = 'NOTE'       short = 'Ghi chú'   medium = 'Ghi chú'          outlen = 25 flag = 'E' ) ).
 
   ENDMETHOD.
 
@@ -1375,9 +1381,11 @@ CLASS lcl_app IMPLEMENTATION.
     IF gv_gom_ro = abap_true.
       ls_layout-grid_title = |{ ls_layout-grid_title } (đã phát hành, chỉ xem)|.
     ENDIF.
-    ls_layout-zebra      = abap_true.
-    ls_layout-cwidth_opt = abap_true.
-    ls_layout-sel_mode   = 'A'.
+    ls_layout-zebra    = abap_true.
+    ls_layout-sel_mode = 'A'.
+    " KHÔNG bật CWIDTH_OPT: nó tự tối ưu lại mỗi lần refresh, mà ở chế độ
+    " nhập thì tối ưu theo độ dài field nên cột nhảy loạn khi bấm Sửa.
+    " Độ rộng lấy từ OUTPUTLEN trong ITEM_LABELS.
 
     SET HANDLER me->on_toolbar_it      FOR mo_grid_it.
     SET HANDLER me->on_user_command_it FOR mo_grid_it.
@@ -1438,6 +1446,16 @@ CLASS lcl_app IMPLEMENTATION.
                     disabled  = lv_dis
                     quickinfo = 'Xoa cac dong dang chon' ) TO e_object->mt_toolbar.
 
+    APPEND VALUE #( butn_type = 3 ) TO e_object->mt_toolbar.
+
+    " Nút này trước ở Application Toolbar của GUI status, chuyển vào đây
+    " để dynpro 0200 chỉ còn MỘT hàng nút
+    APPEND VALUE #( function  = gc_fcode-edit
+                    icon      = CONV #( icon_edit_file )
+                    text      = 'Sửa ngày/giờ'
+                    disabled  = lv_dis
+                    quickinfo = 'Sua ngay gio phat hanh' ) TO e_object->mt_toolbar.
+
   ENDMETHOD.
 
 
@@ -1450,8 +1468,41 @@ CLASS lcl_app IMPLEMENTATION.
         insert_item_row( ).
       WHEN gc_fcode-gomdel.
         delete_item_rows( ).
+      WHEN gc_fcode-edit.
+        edit_dates( ).
       WHEN OTHERS.
     ENDCASE.
+
+  ENDMETHOD.
+
+
+  METHOD edit_dates.
+
+    " Đã phát hành thì APPLY_REGISTRY_EDITS cũng bỏ qua giá trị mới, nên
+    " chặn luôn ở đây cho khỏi sửa xong tưởng đã đổi.
+    IF items_editable( ) = abap_false.
+      MESSAGE 'Đã phát hành hoá đơn nên không sửa được ngày/giờ.'
+              TYPE 'S' DISPLAY LIKE 'W'.
+      RETURN.
+    ENDIF.
+
+    DATA lv_date TYPE dats.
+    DATA lv_time TYPE uzeit.
+    DATA lv_text TYPE zde_hddt_name.
+    DATA lv_ok   TYPE abap_bool.
+    lv_date = gs_gom_h-inv_date.
+    lv_time = gs_gom_h-inv_time.
+    lv_text = gv_gom_text.
+
+    PERFORM popup_edit CHANGING lv_date lv_time lv_text lv_ok.
+    IF lv_ok = abap_false.
+      RETURN.
+    ENDIF.
+
+    gs_gom_h-inv_date = lv_date.
+    gs_gom_h-inv_time = lv_time.
+    gv_gom_text       = lv_text.
+    gv_gom_edit       = abap_true.
 
   ENDMETHOD.
 
@@ -1650,28 +1701,9 @@ CLASS lcl_app IMPLEMENTATION.
     CASE i_ucomm.
 
       WHEN 'ZEDIT' OR 'EDIT'.
-        " Sửa ngày / giờ phát hành của chính hoá đơn gom. Đã phát hành thì
-        " APPLY_REGISTRY_EDITS cũng bỏ qua giá trị mới, nên chặn luôn ở đây
-        " cho khỏi sửa xong tưởng đã đổi.
-        IF items_editable( ) = abap_false.
-          MESSAGE 'Đã phát hành hoá đơn nên không sửa được ngày/giờ.'
-                  TYPE 'S' DISPLAY LIKE 'W'.
-          RETURN.
-        ENDIF.
-        DATA lv_date TYPE dats.
-        DATA lv_time TYPE uzeit.
-        DATA lv_text TYPE zde_hddt_name.
-        DATA lv_ok   TYPE abap_bool.
-        lv_date = gs_gom_h-inv_date.
-        lv_time = gs_gom_h-inv_time.
-        lv_text = gv_gom_text.
-        PERFORM popup_edit CHANGING lv_date lv_time lv_text lv_ok.
-        IF lv_ok = abap_true.
-          gs_gom_h-inv_date = lv_date.
-          gs_gom_h-inv_time = lv_time.
-          gv_gom_text       = lv_text.
-          gv_gom_edit       = abap_true.
-        ENDIF.
+        " Giữ nhánh này cho ai vẫn gán ZEDIT trong GUI status; nút trên
+        " toolbar của grid gọi cùng method
+        edit_dates( ).
 
       WHEN 'SAVE' OR '&SAVE'.
         do_gom_save( ).

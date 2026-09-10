@@ -97,6 +97,10 @@ TYPES: BEGIN OF gty_col,
          short  TYPE scrtext_s,
          medium TYPE scrtext_m,
          flag   TYPE gty_adjcode,
+         " Độ rộng cột cố định. Bắt buộc với grid cho sửa: bật chế độ nhập
+         " thì ALV lấy độ rộng theo ĐỘ DÀI FIELD chứ không theo nội dung,
+         " cột TYPE c LENGTH 250 phình ra chiếm hết màn hình.
+         outlen TYPE lvc_outlen,
        END OF gty_col.
 TYPES gty_t_col TYPE STANDARD TABLE OF gty_col WITH DEFAULT KEY.
 

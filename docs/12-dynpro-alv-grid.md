@@ -279,6 +279,16 @@ của grid có ba nút do code tạo (không cần sửa GUI status):
 | Sửa dòng hàng / Kết thúc sửa | `ZCHG` | bật tắt chế độ sửa |
 | Thêm dòng | `ZINS` | thêm một dòng hàng trống, chỉ bật ở chế độ sửa |
 | Xoá dòng | `ZDEL` | xoá các dòng đang chọn, chỉ bật ở chế độ sửa |
+| Sửa ngày/giờ | `ZEDIT` | popup sửa ngày giờ phát hành |
+
+**Chỉ một hàng nút.** `ZEDIT` nằm trong toolbar của grid, không để ở
+Application Toolbar của `ZGOM_HDDT` nữa — hai chỗ là hai hàng nút chồng nhau.
+Xoá `ZEDIT` khỏi Application Toolbar của status (giữ ở Function Keys F5 thì
+vẫn bấm được bằng bàn phím). `PAI_0200` vẫn nhận `ZEDIT` nên gán ở đâu cũng
+chạy, cả hai đường gọi cùng method `EDIT_DATES`.
+
+Cách khác là đặt `NO_TOOLBAR` cho grid rồi dồn hết vào Application Toolbar,
+nhưng như vậy mất luôn sort / filter / tổng / export chuẩn của ALV. Không nên.
 
 Bật chế độ sửa thì mở đúng hai field `INV_DATE` và `INV_TIME`; các field còn
 lại và nhãn `GV_*_TXT` luôn khoá. Việc khoá do `LOOP AT SCREEN` trong module
@@ -309,6 +319,16 @@ refresh_item_grid( ).
 `SET_FRONTEND_FIELDCATALOG` đẩy lại cờ `EDIT` xuống control — cần khi bật/tắt
 nhập lúc grid đã hiển thị, vì `SET_READY_FOR_INPUT` một mình chỉ là công tắc
 chung. Giữ thêm lời gọi trong `PBO` cho lần hiển thị đầu.
+
+**Bấm Sửa xong cột nhảy độ rộng.** Ở chế độ nhập, ALV tính độ rộng theo **độ
+dài field** chứ không theo nội dung, nên cột `ITEM_NAME` / `NOTE` khai
+`c LENGTH 250` phình ra chiếm hết màn hình và đẩy các cột khác ra ngoài. Thêm
+`CWIDTH_OPT = X` thì mỗi lần refresh nó tối ưu lại một kiểu khác.
+
+Cách xử lý: **bỏ `CWIDTH_OPT`** cho grid dòng hàng và khai `OUTPUTLEN` cố định
+cho từng cột trong `ITEM_LABELS` (cột `OUTLEN` của `GTY_COL`). Độ rộng khi đó
+giống nhau ở cả chế độ xem và chế độ sửa. Grid danh sách ở dynpro 0100 không
+cho sửa nên vẫn để `CWIDTH_OPT` như cũ.
 
 **Không suy thành tiền từ số lượng × đơn giá.** Dòng hàng nguồn FI lấy số tiền
 từ dòng sổ cái, số lượng và đơn giá thường bằng 0 (xem dữ liệu thật của M800),
