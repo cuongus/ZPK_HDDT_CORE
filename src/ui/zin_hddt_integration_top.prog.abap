@@ -192,6 +192,11 @@ DATA gv_gom_itchg TYPE abap_bool.
 " Có thành viên đã phát hành / đã có nháp trên hệ HĐĐT -> chỉ xem
 DATA gv_gom_ro    TYPE abap_bool.
 
+" FS 3.6.7: đang XEM một hoá đơn gom đã tồn tại (chọn dòng đã gom rồi
+" bấm Gom HĐ) chứ không phải đang dựng nhóm mới. Save của dynpro 0200
+" phải thoát ngay, nếu không sẽ cấp thêm một số gom thứ hai.
+DATA gv_gom_view  TYPE abap_bool.
+
 "! Danh sách loại nguồn dữ liệu đã cấu hình (ZTB_HDDT_SRC)
 TYPES gty_t_srctype TYPE STANDARD TABLE OF zde_hddt_srctype WITH EMPTY KEY.
 
@@ -277,6 +282,11 @@ SELECTION-SCREEN BEGIN OF BLOCK b2 WITH FRAME TITLE TEXT-b02.
   PARAMETERS     p_prov  TYPE zde_hddt_prov.
   " Mẫu hoá đơn phát hành (01GTKT...) — trống = dòng mặc định ZTB_HDDT_CRED
   PARAMETERS     p_ityp  TYPE zde_hddt_invtype.
+  " Dải số (ký hiệu) hoá đơn. Một đơn vị có thể khai nhiều dải số cùng
+  " hiệu lực trong một năm, nên phải chọn rõ dải nào. Màn hình tự điền
+  " dòng tích Mặc định (ZTB_HDDT_CRED-XDEFAULT); F4 liệt kê các dải còn
+  " hiệu lực; để trống thì engine tự lấy dòng Mặc định.
+  PARAMETERS     p_seri  TYPE zde_hddt_serial.
   SELECT-OPTIONS s_stat  FOR gv_status.
   " Mặc định chứng từ đã đảo chỉ hiện khi đã có số HĐĐT (để huỷ)
   PARAMETERS     p_rever AS CHECKBOX.

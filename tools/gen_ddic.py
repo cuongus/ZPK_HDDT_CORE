@@ -242,14 +242,19 @@ TABLES = [
         F("CONT_TYPE", "ZDE_HDDT_PARMVAL"), F("ACCEPT_TYPE", "ZDE_HDDT_PARMVAL"),
         F("DESCR", "ZDE_HDDT_DESCR"), F("XACTIVE", "XFELD"),
     ]),
+    # SERIAL nam trong KHOA: mot don vi co the dung nhieu dai so trong cung
+    # mot nam (moi dai so mot ky hieu). XDEFAULT danh dau dai so duoc man
+    # hinh tham so tu chon; chi duoc phep MOT dong X cho moi
+    # PROVIDER + BUKRS + INV_TYPE con hieu luc.
     ("ZTB_HDDT_CRED", "C", "HDDT: Tai khoan va dai so theo cong ty", [
         K("MANDT", "MANDT"), K("PROVIDER", "ZDE_HDDT_PROV"), K("BUKRS", "BUKRS"),
-        K("INV_TYPE", "ZDE_HDDT_INVTYPE"),
+        K("INV_TYPE", "ZDE_HDDT_INVTYPE"), K("SERIAL", "ZDE_HDDT_SERIAL"),
         F("CONNID", "ZDE_HDDT_CONNID"), F("TAXCODE", "ZDE_HDDT_TAXCODE"),
-        F("TEMPLATE", "ZDE_HDDT_TEMPL"), F("SERIAL", "ZDE_HDDT_SERIAL"),
+        F("TEMPLATE", "ZDE_HDDT_TEMPL"),
         F("APIUSER", "ZDE_HDDT_USER"), F("SECKEY", "ZDE_HDDT_SECKEY"),
         F("APISECRET", "ZDE_HDDT_SECRET"),
-        F("VALID_FROM", "DATS"), F("VALID_TO", "DATS"), F("XACTIVE", "XFELD"),
+        F("VALID_FROM", "DATS"), F("VALID_TO", "DATS"),
+        F("XDEFAULT", "XFELD"), F("XACTIVE", "XFELD"),
     ]),
     ("ZTB_HDDT_STAT", "C", "HDDT: Anh xa trang thai NCC sang SAP", [
         K("MANDT", "MANDT"), K("PROVIDER", "ZDE_HDDT_PROV"), K("ACTION", "ZDE_HDDT_ACTION"),
@@ -410,7 +415,89 @@ for tab, delivery, text, fields in TABLES:
     b += "   </DD03P_TABLE>\n"
     write(tab, "tabl", "LCL_OBJECT_TABL", b)
 
+
+# ---------------------------------------------------------------------------
+# Lock object (ENQU)
+#
+# Ten theo dung quy uoc dang chay tren he MAG S25: "E" + ten bang
+# (EZTB_MM_PO_MAP cho ZTB_MM_PO_MAP), nen o day la EZTB_HDDT_*.
+# Cau truc lay tu mot lock object THAT tren he (DD25L/DD25T/DD26S/DD27S
+# cua EZTB_MM_PO_MAP): mot dong DD26E cho bang goc, moi truong KHOA mot
+# dong DD27P, va MOT dong cuoi FIELDNAME='*' mang ENQMODE='E' = che do
+# khoa ghi (exclusive).
+#
+# Doi so khoa co tinh TIEN TO: de trong cac truong duoi la khoa ca nhom.
+# ENQUEUE_EZTB_HDDT_TOK khong truyen gi = khoa moi dong cua client, dung
+# cho cho DELETE FROM ztb_hddt_tok (xoa ca bang).
+# ---------------------------------------------------------------------------
+LOCKS = [
+    ("EZTB_HDDT_TPL", "ZTB_HDDT_TPL", "HDDT: Khoa mau payload khi nap tu file",
+     [("MANDT", "MANDT"), ("PROVIDER", "ZDE_HDDT_PROV"),
+      ("ACTION", "ZDE_HDDT_ACTION")]),
+    ("EZTB_HDDT_TOK", "ZTB_HDDT_TOK", "HDDT: Khoa bo dem access token",
+     [("MANDT", "MANDT"), ("PROVIDER", "ZDE_HDDT_PROV"),
+      ("CONNID", "ZDE_HDDT_CONNID"), ("BUKRS", "BUKRS"),
+      ("APIUSER", "ZDE_HDDT_USER")]),
+    # Khoa so dang ky hoa don theo TUNG chung tu. Hai nguoi cung bam
+    # "Phat hanh HD" tren mot chung tu ma khong khoa thi ca hai cung doc
+    # trang thai 00, ca hai cung goi API => HAI hoa don cho mot chung tu.
+    ("EZTB_HDDT_INV", "ZTB_HDDT_INV", "HDDT: Khoa so dang ky hoa don",
+     [("MANDT", "MANDT"), ("BUKRS", "BUKRS"), ("GJAHR", "GJAHR"),
+      ("SRC_TYPE", "ZDE_HDDT_SRCTYPE"), ("SRC_DOCNO", "ZDE_HDDT_DOCNO")]),
+    # Khoa chung tu gom. Cap so gom chi can khoa tien to BUKRS + GJAHR
+    # (de trong GOM_NO tro xuong); gom/go gom khoa den tung so gom.
+    ("EZTB_HDDT_GOM", "ZTB_HDDT_GOM", "HDDT: Khoa chung tu gom",
+     [("MANDT", "MANDT"), ("BUKRS", "BUKRS"), ("GJAHR", "GJAHR"),
+      ("GOM_NO", "ZDE_HDDT_DOCNO"), ("SRC_TYPE", "ZDE_HDDT_SRCTYPE"),
+      ("SRC_DOCNO", "ZDE_HDDT_DOCNO")]),
+]
+
+for lock, roottab, text, keys in LOCKS:
+    b = "   <DD25V>\n"
+    b += "    <VIEWNAME>%s</VIEWNAME>\n" % lock
+    b += "    <AGGTYPE>E</AGGTYPE>\n"
+    b += "    <ROOTTAB>%s</ROOTTAB>\n" % roottab
+    b += "    <DDLANGUAGE>E</DDLANGUAGE>\n"
+    b += "    <AUTHCLASS>00</AUTHCLASS>\n"
+    b += "    <DDTEXT>%s</DDTEXT>\n" % esc(text)
+    b += "   </DD25V>\n"
+    b += "   <DD26E_TABLE>\n"
+    b += "    <DD26E>\n"
+    b += "     <VIEWNAME>%s</VIEWNAME>\n" % lock
+    b += "     <TABNAME>%s</TABNAME>\n" % roottab
+    b += "     <TABPOS>0001</TABPOS>\n"
+    b += "     <FORTABNAME>%s</FORTABNAME>\n" % roottab
+    b += "    </DD26E>\n"
+    b += "   </DD26E_TABLE>\n"
+    b += "   <DD27P_TABLE>\n"
+    pos = 0
+    for fname, roll in keys:
+        pos += 1
+        b += "    <DD27P>\n"
+        b += "     <VIEWNAME>%s</VIEWNAME>\n" % lock
+        b += "     <OBJPOS>%04d</OBJPOS>\n" % pos
+        b += "     <VIEWFIELD>%s</VIEWFIELD>\n" % fname
+        b += "     <TABNAME>%s</TABNAME>\n" % roottab
+        b += "     <FIELDNAME>%s</FIELDNAME>\n" % fname
+        b += "     <KEYFLAG>X</KEYFLAG>\n"
+        b += "     <ROLLNAME>%s</ROLLNAME>\n" % roll
+        b += "    </DD27P>\n"
+    # Dong che do khoa: FIELDNAME='*', ENQMODE='E' (khoa ghi)
+    pos += 1
+    b += "    <DD27P>\n"
+    b += "     <VIEWNAME>%s</VIEWNAME>\n" % lock
+    b += "     <OBJPOS>%04d</OBJPOS>\n" % pos
+    b += "     <VIEWFIELD>%s</VIEWFIELD>\n" % keys[-1][0]
+    b += "     <TABNAME>%s</TABNAME>\n" % roottab
+    b += "     <FIELDNAME>*</FIELDNAME>\n"
+    b += "     <ROLLNAME>%s</ROLLNAME>\n" % keys[-1][1]
+    b += "     <ENQMODE>E</ENQMODE>\n"
+    b += "    </DD27P>\n"
+    b += "   </DD27P_TABLE>\n"
+    write(lock, "enqu", "LCL_OBJECT_ENQU", b)
+
 print("domains :", len(DOMAINS))
 print("dtels   :", len(DTELS))
 print("tables  :", len(TABLES))
+print("locks   :", len(LOCKS))
 print("files   :", len(os.listdir(OUT)))

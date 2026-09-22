@@ -25,6 +25,10 @@
 *                         ZTB_HDDT_TPL bằng nạp file JSON, ZTB_HDDT_TOK
 *                         và ZTB_HDDT_LOG bằng đường riêng (SE54 không
 *                         sinh TMG cho field STRING / RAWSTRING)
+* 1.2       21/09/2026    cuongus - CuongUS        abapGit     Lock object
+*                         EZTB_HDDT_TPL / EZTB_HDDT_TOK cho hai đường ghi
+*                         thẳng vào bảng (MODIFY mẫu payload, DELETE bộ
+*                         đệm token) — trước đó không khoá gì
 *=====================================================================
 REPORT zpg_hddt_config MESSAGE-ID zms_hddt.
 
@@ -64,8 +68,18 @@ CLASS lcl_cfg DEFINITION FINAL CREATE PUBLIC.
     "! field kiểu STRING; bảo trì bằng nạp mẫu payload từ file JSON.
     METHODS maintain_tpl.
 
+    "! Phần việc của MAINTAIN_TPL chạy TRONG khoá. Tách riêng để mọi
+    "! đường thoát (RETURN) đều quay về MAINTAIN_TPL và nhả khoá đúng
+    "! một chỗ — ABAP không có finally cho luồng thường.
+    METHODS load_tpl
+      IMPORTING i_provider TYPE zde_hddt_prov
+                i_action   TYPE zde_hddt_action.
+
     "! ZTB_HDDT_TOK là bộ đệm token, chỉ xem và xoá khi cần đăng nhập lại.
     METHODS maintain_tok.
+
+    "! Phần việc của MAINTAIN_TOK chạy TRONG khoá.
+    METHODS clear_tok.
 
     "! ZTB_HDDT_LOG xem bằng chương trình log, không bảo trì tay.
     METHODS maintain_log.
@@ -236,6 +250,51 @@ CLASS lcl_cfg IMPLEMENTATION.
       RETURN.
     ENDIF.
 
+    " Khoá TRƯỚC khi đọc: dưới kia còn SELECT lấy độ dài mẫu hiện có để
+    " hỏi người dùng rồi mới ghi đè. Đọc-để-quyết-định mà không khoá là
+    " hai quản trị viên nạp cùng một mẫu thì người sau ghi đè người
+    " trước, không ai biết mẫu vừa nạp đã bị mất.
+    " _SCOPE = '1': khoá thuộc chương trình hội thoại, không chuyển sang
+    " update task; COMMIT WORK không tự nhả, mình nhả bằng DEQUEUE.
+    CALL FUNCTION 'ENQUEUE_EZTB_HDDT_TPL'
+      EXPORTING
+        mode_ztb_hddt_tpl = 'E'
+        mandt             = sy-mandt
+        provider          = ls_tpl-provider
+        action            = ls_tpl-action
+        _scope            = '1'
+      EXCEPTIONS
+        foreign_lock      = 1
+        system_failure    = 2
+        OTHERS            = 3.
+    IF sy-subrc = 1.
+      MESSAGE e051(zms_hddt) WITH ls_tpl-provider ls_tpl-action sy-msgv1.
+      RETURN.
+    ELSEIF sy-subrc <> 0.
+      MESSAGE e052(zms_hddt) WITH 'ZTB_HDDT_TPL'.
+      RETURN.
+    ENDIF.
+
+    load_tpl( i_provider = ls_tpl-provider
+              i_action   = ls_tpl-action ).
+
+    CALL FUNCTION 'DEQUEUE_EZTB_HDDT_TPL'
+      EXPORTING
+        mode_ztb_hddt_tpl = 'E'
+        mandt             = sy-mandt
+        provider          = ls_tpl-provider
+        action            = ls_tpl-action
+        _scope            = '1'.
+
+  ENDMETHOD.
+
+
+  METHOD load_tpl.
+
+    DATA ls_tpl TYPE ztb_hddt_tpl.
+    ls_tpl-provider = i_provider.
+    ls_tpl-action   = i_action.
+
     SELECT SINGLE tpl_body
       FROM ztb_hddt_tpl
       WHERE provider = @ls_tpl-provider
@@ -329,6 +388,41 @@ CLASS lcl_cfg IMPLEMENTATION.
 
 
   METHOD maintain_tok.
+
+    " Khoá CẢ BẢNG trong client: đối số khoá có tính tiền tố, không
+    " truyền PROVIDER/CONNID/BUKRS/APIUSER nghĩa là khoá mọi dòng. Cần
+    " vậy vì dưới kia là DELETE FROM ztb_hddt_tok (xoá sạch) — trong lúc
+    " xoá mà một job nền vừa ghi token mới thì token đó biến mất ngay,
+    " lần gọi API sau dùng token rỗng.
+    CALL FUNCTION 'ENQUEUE_EZTB_HDDT_TOK'
+      EXPORTING
+        mode_ztb_hddt_tok = 'E'
+        mandt             = sy-mandt
+        _scope            = '1'
+      EXCEPTIONS
+        foreign_lock      = 1
+        system_failure    = 2
+        OTHERS            = 3.
+    IF sy-subrc = 1.
+      MESSAGE e053(zms_hddt) WITH sy-msgv1.
+      RETURN.
+    ELSEIF sy-subrc <> 0.
+      MESSAGE e052(zms_hddt) WITH 'ZTB_HDDT_TOK'.
+      RETURN.
+    ENDIF.
+
+    clear_tok( ).
+
+    CALL FUNCTION 'DEQUEUE_EZTB_HDDT_TOK'
+      EXPORTING
+        mode_ztb_hddt_tok = 'E'
+        mandt             = sy-mandt
+        _scope            = '1'.
+
+  ENDMETHOD.
+
+
+  METHOD clear_tok.
 
     SELECT provider, connid, bukrs, apiuser, valid_to, created_at
       FROM ztb_hddt_tok

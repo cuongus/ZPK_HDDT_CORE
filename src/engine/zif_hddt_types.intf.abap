@@ -304,6 +304,12 @@ INTERFACE zif_hddt_types
                " Phát hành chính bản nháp đã tạo: cấp số + ký duyệt trên cùng
                " sid (FPT issue-invoice). Khác CREATE_INVOICE (tạo mới + cấp số).
                issue_invoice   TYPE zde_hddt_action VALUE 'ISSUE_INVOICE',
+               " FS 3.6.7 / 3.6.8: gom và gỡ gom xử lý nội bộ trên SAP, KHÔNG
+               " gọi API nên không có dòng nào trong ZTB_HDDT_ACT; hai mã này
+               " chỉ dùng làm ACTION của dòng log ZTB_HDDT_LOG để đối soát
+               " ai gom / ai gỡ gom, lúc nào.
+               gom_invoice     TYPE zde_hddt_action VALUE 'GOM_INVOICE',
+               ungom_invoice   TYPE zde_hddt_action VALUE 'UNGOM_INVOICE',
              END OF gc_action.
 
   CONSTANTS: BEGIN OF gc_status,
@@ -397,6 +403,10 @@ INTERFACE zif_hddt_types
                auth_object      TYPE zde_hddt_parmkey VALUE 'AUTH_OBJECT',
                api_version      TYPE zde_hddt_parmkey VALUE 'API_VERSION',
                validate_req     TYPE zde_hddt_parmkey VALUE 'VALIDATE_REQUEST',
+               " Số chứng từ mỗi lô của EXECUTE_MANY: cứ đủ lô là COMMIT
+               " rồi nhả khoá. Job nghìn chứng từ mà giữ nghìn khoá tới
+               " cuối thì tràn bảng enqueue (enque/table_size).
+               many_chunk       TYPE zde_hddt_parmkey VALUE 'EXEC_MANY_CHUNK',
              END OF gc_parm.
 
   " Placeholder được engine thay thế trong ZTB_HDDT_ACT-API_PATH

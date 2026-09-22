@@ -35,6 +35,13 @@
 *                                                             xstring, che
 *                                                             secret, bổ sung
 *                                                             field truy vết
+* 1.2       22/09/2026    cuongus - CuongUS        abapGit     Bộ helper khoá
+*                                                             sổ đăng ký
+*                                                             (LOCK_INVOICE(S) /
+*                                                             KEY_OF); khoá
+*                                                             trong SAVE_EDIT
+*                                                             và MARK_ORIGINAL
+*                                                             (hoá đơn GỐC)
 *=====================================================================
 CLASS zcl_hddt_log DEFINITION
   PUBLIC
@@ -49,6 +56,44 @@ CLASS zcl_hddt_log DEFINITION
                                 VALUE 'UTF-8' ##NO_TEXT.
     CONSTANTS gc_mask           TYPE string
                                 VALUE '********' ##NO_TEXT.
+
+    TYPES: BEGIN OF ty_inv_key,
+             bukrs     TYPE bukrs,
+             gjahr     TYPE gjahr,
+             src_type  TYPE zde_hddt_srctype,
+             src_docno TYPE zde_hddt_docno,
+           END OF ty_inv_key.
+    TYPES ty_t_inv_key TYPE STANDARD TABLE OF ty_inv_key WITH DEFAULT KEY.
+
+    "! Khoá một dòng sổ đăng ký hoá đơn; TY_INV_KEY chính là đối số của
+    "! lock object EZTB_HDDT_INV (BUKRS/GJAHR/SRC_TYPE/SRC_DOCNO).
+    "! Trả về false khi người khác đang giữ; tên người giữ nằm ở
+    "! SY-MSGV1 do ENQUEUE đặt.
+    "! Lớp này là nơi duy nhất ghi ZTB_HDDT_INV nên lời gọi
+    "! ENQUEUE_EZTB_HDDT_INV cũng chỉ nằm ở ĐÂY, không rải mỗi nơi một bản.
+    CLASS-METHODS lock_invoice
+      IMPORTING is_key      TYPE ty_inv_key
+      RETURNING VALUE(r_ok) TYPE abap_bool .
+
+    CLASS-METHODS unlock_invoice
+      IMPORTING is_key TYPE ty_inv_key .
+
+    "! Khoá cả danh sách. Hụt một dòng thì NHẢ LẠI toàn bộ dòng đã lấy
+    "! rồi báo false — không để nửa vời, vì khoá còn treo sẽ chặn người
+    "! khác cho tới hết transaction.
+    CLASS-METHODS lock_invoices
+      IMPORTING it_keys   TYPE ty_t_inv_key
+      EXPORTING e_ok      TYPE abap_bool
+                es_failed TYPE ty_inv_key
+                e_user    TYPE syuname .
+
+    CLASS-METHODS unlock_invoices
+      IMPORTING it_keys TYPE ty_t_inv_key .
+
+    "! Rút khoá sổ đăng ký ra từ một request.
+    CLASS-METHODS key_of
+      IMPORTING is_request    TYPE zif_hddt_types=>ty_request
+      RETURNING VALUE(rs_key) TYPE ty_inv_key .
 
     TYPES: BEGIN OF ty_call_info,
              connid      TYPE zde_hddt_connid,
@@ -100,9 +145,14 @@ CLASS zcl_hddt_log DEFINITION
     "! Đọc sổ đăng ký của 1 chứng từ (dùng cho điều chỉnh/thay thế).
     "! Đánh dấu hoá đơn GỐC đã bị điều chỉnh / thay thế sau khi HĐ điều
     "! chỉnh phát hành thành công (dự án tham chiếu ghi XREF2_HD 06/07).
+    "! @parameter e_ok | ' ' = không khoá được hoá đơn gốc nên KHÔNG đổi
+    "!                    trạng thái. Chỗ gọi phải báo lên cho người dùng,
+    "!                    đừng bỏ qua: hoá đơn gốc sẽ thiếu dấu đã bị
+    "!                    điều chỉnh / thay thế.
     METHODS mark_original
       IMPORTING is_request TYPE zif_hddt_types=>ty_request
-                i_status  TYPE zde_hddt_status .
+                i_status  TYPE zde_hddt_status
+      EXPORTING e_ok       TYPE abap_bool .
 
     "! FS MAG: đánh dấu chứng từ thành viên thuộc hoá đơn gom (trống = gỡ)
     METHODS set_gom_no
@@ -114,7 +164,8 @@ CLASS zcl_hddt_log DEFINITION
       IMPORTING is_request  TYPE zif_hddt_types=>ty_request
                 i_inv_date  TYPE dats
                 i_inv_time  TYPE uzeit
-                i_item_text TYPE string .
+                i_item_text TYPE string
+      RAISING   zcx_hddt_error .
 
     "! FS MAG 3.6.4: gắn (hoặc gỡ khi docno trống) hoá đơn gốc cho chứng từ
     METHODS attach_original
@@ -567,10 +618,97 @@ CLASS zcl_hddt_log IMPLEMENTATION.
   ENDMETHOD.
 
 
+  METHOD key_of.
+
+    rs_key = VALUE #( bukrs     = is_request-bukrs
+                      gjahr     = is_request-gjahr
+                      src_type  = is_request-src_type
+                      src_docno = is_request-src_docno ).
+
+  ENDMETHOD.
+
+
+  METHOD lock_invoice.
+
+    CALL FUNCTION 'ENQUEUE_EZTB_HDDT_INV'
+      EXPORTING
+        mode_ztb_hddt_inv = 'E'
+        mandt             = sy-mandt
+        bukrs             = is_key-bukrs
+        gjahr             = is_key-gjahr
+        src_type          = is_key-src_type
+        src_docno         = is_key-src_docno
+        _scope            = '1'
+      EXCEPTIONS
+        foreign_lock      = 1
+        system_failure    = 2
+        OTHERS            = 3.
+    r_ok = xsdbool( sy-subrc = 0 ).
+
+  ENDMETHOD.
+
+
+  METHOD unlock_invoice.
+
+    " _SCOPE = '1': COMMIT WORK không tự nhả, phải gọi tường minh
+    CALL FUNCTION 'DEQUEUE_EZTB_HDDT_INV'
+      EXPORTING
+        mode_ztb_hddt_inv = 'E'
+        mandt             = sy-mandt
+        bukrs             = is_key-bukrs
+        gjahr             = is_key-gjahr
+        src_type          = is_key-src_type
+        src_docno         = is_key-src_docno
+        _scope            = '1'.
+
+  ENDMETHOD.
+
+
+  METHOD lock_invoices.
+
+    DATA lt_done TYPE ty_t_inv_key.
+
+    CLEAR: e_ok, es_failed, e_user.
+
+    LOOP AT it_keys INTO DATA(ls_key).
+      IF ls_key-src_docno IS INITIAL.
+        CONTINUE.
+      ENDIF.
+      IF lock_invoice( ls_key ) = abap_false.
+        es_failed = ls_key.
+        e_user    = sy-msgv1.
+        " Nhả lại đúng những dòng vừa lấy. Không dùng DEQUEUE_ALL vì nó
+        " nhả cả khoá mà chỗ gọi đang giữ cho việc khác.
+        unlock_invoices( lt_done ).
+        RETURN.
+      ENDIF.
+      APPEND ls_key TO lt_done.
+    ENDLOOP.
+
+    e_ok = abap_true.
+
+  ENDMETHOD.
+
+
+  METHOD unlock_invoices.
+
+    LOOP AT it_keys INTO DATA(ls_key).
+      IF ls_key-src_docno IS INITIAL.
+        CONTINUE.
+      ENDIF.
+      unlock_invoice( ls_key ).
+    ENDLOOP.
+
+  ENDMETHOD.
+
+
   METHOD mark_original.
+
+    CLEAR e_ok.
 
     DATA(ls_adj) = is_request-invoice-adjust.
     IF ls_adj-org_docno IS INITIAL.
+      e_ok = abap_true.            " không có hoá đơn gốc -> không có gì phải đánh dấu
       RETURN.
     ENDIF.
 
@@ -585,6 +723,18 @@ CLASS zcl_hddt_log IMPLEMENTATION.
                                 THEN 'thay thế' ELSE 'điều chỉnh' ) }| &&
              | bởi chứng từ { is_request-src_docno }/{ is_request-gjahr }|.
 
+    " Dòng bị ghi ở đây là hoá đơn GỐC — khoá khác với khoá chứng từ
+    " điều chỉnh mà ZCL_HDDT_SERVICE->EXECUTE đang giữ, nên phải khoá
+    " riêng. Khoá hụt thì KHÔNG ghi: đổi trạng thái hoá đơn gốc trong
+    " lúc người khác đang xử lý chính nó là ghi đè mù.
+    DATA(ls_org_key) = VALUE ty_inv_key( bukrs     = is_request-bukrs
+                                         gjahr     = lv_gjahr
+                                         src_type  = lv_type
+                                         src_docno = ls_adj-org_docno ).
+    IF lock_invoice( ls_org_key ) = abap_false.
+      RETURN.
+    ENDIF.
+
     UPDATE ztb_hddt_inv
       SET status     = @i_status,
           message    = @lv_msg,
@@ -594,6 +744,9 @@ CLASS zcl_hddt_log IMPLEMENTATION.
         AND gjahr     = @lv_gjahr
         AND src_type  = @lv_type
         AND src_docno = @ls_adj-org_docno.
+
+    unlock_invoice( ls_org_key ).
+    e_ok = abap_true.
 
   ENDMETHOD.
 
@@ -629,6 +782,10 @@ CLASS zcl_hddt_log IMPLEMENTATION.
 
   METHOD set_gom_no.
 
+    " KHÔNG khoá ở đây: hai chỗ gọi duy nhất là ZCL_HDDT_GOM->CREATE và
+    " ->CANCEL, cả hai đã khoá sổ đăng ký của toàn bộ thành viên trước
+    " khi gọi. Thêm khoá nữa chỉ dựa vào cơ chế cộng dồn của ENQUEUE mà
+    " không cần thiết.
     DATA(ls_inv) = ensure_row( is_request ).
     ls_inv-gom_no     = i_gom_no.
     ls_inv-changed_by = sy-uname.
@@ -639,6 +796,16 @@ CLASS zcl_hddt_log IMPLEMENTATION.
 
 
   METHOD save_edit.
+
+    " Gọi thẳng từ màn hình (sửa ngày/giờ/tên hàng), không nằm trong khoá
+    " của ZCL_HDDT_SERVICE, mà ENSURE_ROW là đọc-rồi-ghi. Không khoá thì
+    " sửa ngày của người này ghi đè tên hàng người kia vừa lưu.
+    DATA(ls_key) = key_of( is_request ).
+    IF lock_invoice( ls_key ) = abap_false.
+      zcx_hddt_error=>raise_text(
+        |Chứng từ { is_request-src_docno ALPHA = OUT } đang được user | &&
+        |{ sy-msgv1 } xử lý, chưa lưu được ngày/giờ/tên hàng.| ).
+    ENDIF.
 
     DATA(ls_inv) = ensure_row( is_request ).
     IF i_inv_date IS NOT INITIAL.
@@ -651,6 +818,8 @@ CLASS zcl_hddt_log IMPLEMENTATION.
     ls_inv-changed_by = sy-uname.
     GET TIME STAMP FIELD ls_inv-changed_at.
     MODIFY ztb_hddt_inv FROM ls_inv.
+
+    unlock_invoice( ls_key ).
 
   ENDMETHOD.
 

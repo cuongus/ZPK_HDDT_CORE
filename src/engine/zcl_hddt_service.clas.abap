@@ -24,6 +24,17 @@
 * 1.2       07/09/2026    cuongus - CuongUS        abapGit     FS MAG v0.5:
 *                         nháp/phát hành/khôi phục theo tra cứu, gắn HĐ
 *                         gốc, validate, ghi ngược, ký duyệt sau thay thế
+* 1.3       22/09/2026    cuongus - CuongUS        abapGit     Khoá sổ đăng
+*                         ký hoá đơn (EZTB_HDDT_INV) quanh cả EXECUTE để hai
+*                         người cùng phát hành một chứng từ không ra hai hoá đơn
+* 1.4       22/09/2026    cuongus - CuongUS        abapGit     EXECUTE_MANY giữ
+*                         khoá tới sau COMMIT chung (tham số I_LOCKED);
+*                         ATTACH_ORIGINAL khoá chứng từ; báo lên kết quả khi
+*                         không đánh dấu được hoá đơn gốc
+* 1.5       22/09/2026    cuongus - CuongUS        abapGit     EXECUTE_MANY chia
+*                         lô: đủ lô thì COMMIT rồi nhả khoá của lô đó, tránh
+*                         tràn bảng enqueue khi job có vài nghìn chứng từ;
+*                         cỡ lô khai ở ZTB_HDDT_PARM key EXEC_MANY_CHUNK
 *=====================================================================
 CLASS zcl_hddt_service DEFINITION
   PUBLIC
@@ -35,16 +46,25 @@ CLASS zcl_hddt_service DEFINITION
     CONSTANTS gc_parm_log_test_run TYPE zde_hddt_parmkey
                                     VALUE 'LOG_TEST_RUN' ##NO_TEXT.
 
+    "! Cỡ lô mặc định của EXECUTE_MANY khi ZTB_HDDT_PARM chưa khai
+    "! EXEC_MANY_CHUNK. 100 chứng từ = 100 khoá giữ đồng thời, còn rất
+    "! xa mức tràn bảng enqueue của một hệ cấu hình mặc định.
+    CONSTANTS gc_chunk_default     TYPE i VALUE 100 ##NO_TEXT.
+
     CLASS-METHODS get_instance
       RETURNING VALUE(ro_service) TYPE REF TO zcl_hddt_service .
 
     "! Thực hiện một nghiệp vụ HĐĐT. KHÔNG raise exception — mọi lỗi
     "! được gói vào RS_RESULT (status 90, msgty 'E') để chương trình
     "! xử lý hàng loạt không bị dừng giữa danh sách.
+    "! @parameter i_locked | X = chỗ gọi ĐÃ giữ khoá sổ đăng ký của chứng
+    "!                       từ này và sẽ tự nhả (EXECUTE_MANY giữ tới sau
+    "!                       COMMIT). EXECUTE không khoá lại, cũng không nhả.
     METHODS execute
       IMPORTING is_request       TYPE zif_hddt_types=>ty_request
                 i_test_run      TYPE abap_bool DEFAULT abap_false
                 i_commit        TYPE abap_bool DEFAULT abap_true
+                i_locked        TYPE abap_bool DEFAULT abap_false
       RETURNING VALUE(rs_result) TYPE zif_hddt_types=>ty_result .
 
     "! Xử lý hàng loạt; commit một lần ở cuối.
@@ -189,6 +209,37 @@ CLASS zcl_hddt_service DEFINITION
                 i_status         TYPE zde_hddt_status OPTIONAL
       RETURNING VALUE(rs_result) TYPE zif_hddt_types=>ty_result .
 
+    "! Thân của EXECUTE, chạy TRONG khoá EZTB_HDDT_INV. Tách ra vì
+    "! EXECUTE có một đường RETURN sớm (test run) — để DEQUEUE ở cuối
+    "! EXECUTE cũ thì đường đó đi qua mà không nhả khoá.
+    METHODS execute_internal
+      IMPORTING is_request       TYPE zif_hddt_types=>ty_request
+                i_test_run      TYPE abap_bool DEFAULT abap_false
+                i_commit        TYPE abap_bool DEFAULT abap_true
+      RETURNING VALUE(rs_result) TYPE zif_hddt_types=>ty_result .
+
+    "! Thân của ATTACH_ORIGINAL, chạy TRONG khoá EZTB_HDDT_INV. Tách ra
+    "! vì thân có RETURN sớm ở nhánh gỡ hoá đơn gốc.
+    METHODS attach_original_locked
+      IMPORTING is_request       TYPE zif_hddt_types=>ty_request
+                i_org_docno      TYPE zde_hddt_docno
+                i_org_gjahr      TYPE gjahr
+                i_fs_code        TYPE clike
+      RETURNING VALUE(rs_result) TYPE zif_hddt_types=>ty_result .
+
+    "! Cỡ lô của EXECUTE_MANY, đọc từ ZTB_HDDT_PARM key EXEC_MANY_CHUNK;
+    "! không khai hoặc khai sai thì trả GC_CHUNK_DEFAULT.
+    METHODS chunk_size
+      RETURNING VALUE(r_size) TYPE i .
+
+    "! Khoá / nhả sổ đăng ký hoá đơn của MỘT chứng từ nguồn.
+    METHODS lock_registry
+      IMPORTING is_request   TYPE zif_hddt_types=>ty_request
+      RETURNING VALUE(r_ok)  TYPE abap_bool .
+
+    METHODS unlock_registry
+      IMPORTING is_request TYPE zif_hddt_types=>ty_request .
+
     METHODS derive_status
       IMPORTING i_provider TYPE zde_hddt_prov
                 i_action   TYPE zde_hddt_action
@@ -222,6 +273,55 @@ CLASS zcl_hddt_service IMPLEMENTATION.
 
   METHOD execute.
 
+    " Khoá sổ đăng ký của chứng từ TRƯỚC khi đọc trạng thái. CHECK_ACTION
+    " đọc ZTB_HDDT_INV để quyết định được phát hành hay không, rồi cuối
+    " method mới ghi lại — đọc-để-quyết-định. Không khoá thì hai người
+    " cùng bấm "Phát hành HĐ" trên một chứng từ đều thấy trạng thái 00,
+    " đều gọi API, ra HAI hoá đơn cho một chứng từ kế toán.
+    " I_LOCKED: EXECUTE_MANY đã khoá và giữ tới sau COMMIT chung, không
+    " khoá lại ở đây (nhả sớm là mở lại đúng khe đua vừa bịt).
+    IF is_request-src_docno IS INITIAL OR i_locked = abap_true.
+      " Không có chứng từ nguồn (xem mẫu payload, tra cứu tự do) thì
+      " không có gì trong sổ để tranh chấp
+      rs_result = execute_internal( is_request = is_request
+                                    i_test_run = i_test_run
+                                    i_commit   = i_commit ).
+      RETURN.
+    ENDIF.
+
+    IF lock_registry( is_request ) = abap_false.
+      rs_result = error_result(
+        i_message = |Chứng từ { is_request-src_docno ALPHA = OUT } đang được | &&
+                    |user { sy-msgv1 } xử lý, thử lại sau.|
+        i_status  = zif_hddt_types=>gc_status-error ).
+      RETURN.
+    ENDIF.
+
+    rs_result = execute_internal( is_request = is_request
+                                  i_test_run = i_test_run
+                                  i_commit   = i_commit ).
+
+    unlock_registry( is_request ).
+
+  ENDMETHOD.
+
+
+  METHOD lock_registry.
+
+    r_ok = zcl_hddt_log=>lock_invoice( zcl_hddt_log=>key_of( is_request ) ).
+
+  ENDMETHOD.
+
+
+  METHOD unlock_registry.
+
+    zcl_hddt_log=>unlock_invoice( zcl_hddt_log=>key_of( is_request ) ).
+
+  ENDMETHOD.
+
+
+  METHOD execute_internal.
+
     DATA ls_request TYPE zif_hddt_types=>ty_request.
     DATA ls_conn    TYPE ztb_hddt_conn.
     DATA lv_action  TYPE zde_hddt_action.
@@ -254,10 +354,13 @@ CLASS zcl_hddt_service IMPLEMENTATION.
         DATA(ls_act) = mo_config->get_action( i_provider = lv_provider
                                               i_action   = lv_action ).
 
+        " Dải số: người dùng chọn trên màn hình tham số thì đi theo đúng
+        " dải đó; để trống thì lấy dòng tích Mặc định trong ZTB_HDDT_CRED.
         DATA(ls_cred) = mo_config->get_credential(
                           i_provider = lv_provider
                           i_bukrs    = ls_request-bukrs
                           i_inv_type = ls_request-invoice-header-inv_type
+                          i_serial   = ls_request-invoice-header-serial
                           i_date     = ls_request-invoice-header-inv_date ).
 
         ls_conn = mo_config->get_connection( i_provider = lv_provider
@@ -467,14 +570,82 @@ CLASS zcl_hddt_service IMPLEMENTATION.
 
   METHOD execute_many.
 
+    " Test run không ghi sổ đăng ký (chỉ dựng payload + ghi log) nên
+    " không khoá gì, cũng không commit — giữ đúng hành vi cũ.
+    IF i_test_run = abap_true.
+      LOOP AT it_request ASSIGNING FIELD-SYMBOL(<fs_test>).
+        APPEND execute( is_request  = <fs_test>
+                        i_test_run = abap_true
+                        i_commit   = abap_false ) TO rt_result.
+      ENDLOOP.
+      RETURN.
+    ENDIF.
+
+    " Khoá ở MỨC NÀY và giữ tới sau COMMIT: để EXECUTE tự khoá thì mỗi
+    " chứng từ được nhả ngay khi EXECUTE trả về, trong khi dữ liệu chỉ
+    " thật sự vào DB ở COMMIT — còn khe cho người khác đọc trạng thái cũ
+    " rồi phát hành lần nữa.
+    "
+    " Nhưng KHÔNG giữ khoá của cả danh sách tới cuối job: bảng enqueue có
+    " hạn (enque/table_size), job vài nghìn chứng từ sẽ tràn. Nên cứ đủ
+    " một lô là COMMIT rồi nhả khoá lô đó. Cỡ lô khai ở ZTB_HDDT_PARM key
+    " EXEC_MANY_CHUNK, mặc định 100.
+    DATA lt_keys     TYPE zcl_hddt_log=>ty_t_inv_key.
+    DATA lv_in_chunk TYPE i.
+    DATA(lv_chunk)   = chunk_size( ).
+
     LOOP AT it_request ASSIGNING FIELD-SYMBOL(<fs_req>).
+      DATA(ls_key) = zcl_hddt_log=>key_of( <fs_req> ).
+      IF ls_key-src_docno IS NOT INITIAL.
+        IF zcl_hddt_log=>lock_invoice( ls_key ) = abap_false.
+          APPEND error_result(
+            i_message = |Chứng từ { ls_key-src_docno ALPHA = OUT } đang được | &&
+                        |user { sy-msgv1 } xử lý, bỏ qua.|
+            i_status  = zif_hddt_types=>gc_status-error ) TO rt_result.
+          CONTINUE.
+        ENDIF.
+        APPEND ls_key TO lt_keys.
+      ENDIF.
+
       APPEND execute( is_request  = <fs_req>
-                      i_test_run = i_test_run
-                      i_commit   = abap_false ) TO rt_result.
+                      i_test_run = abap_false
+                      i_commit   = abap_false
+                      i_locked   = abap_true ) TO rt_result.
+      lv_in_chunk = lv_in_chunk + 1.
+
+      " Chốt lô. COMMIT trước, nhả khoá sau — đảo thứ tự là mở lại khe đua.
+      IF lv_in_chunk >= lv_chunk.
+        COMMIT WORK AND WAIT.
+        zcl_hddt_log=>unlock_invoices( lt_keys ).
+        CLEAR: lt_keys, lv_in_chunk.
+      ENDIF.
     ENDLOOP.
 
-    IF i_test_run = abap_false.
+    " Lô cuối còn dư. Không có chứng từ nào xử lý được (cả danh sách bị
+    " người khác giữ) thì khỏi COMMIT rỗng.
+    IF lv_in_chunk > 0.
       COMMIT WORK AND WAIT.
+      zcl_hddt_log=>unlock_invoices( lt_keys ).
+    ENDIF.
+
+  ENDMETHOD.
+
+
+  METHOD chunk_size.
+
+    r_size = gc_chunk_default.
+
+    DATA(lv_txt) = zcl_hddt_config=>get_instance( )->get_param(
+                     i_key = zif_hddt_types=>gc_parm-many_chunk ).
+    CONDENSE lv_txt.
+
+    " CO kiểm trước khi gán: gán text không phải số vào I là dump
+    " CX_SY_CONVERSION_NO_NUMBER, cấu hình sai không được làm chết job.
+    IF lv_txt IS NOT INITIAL AND lv_txt CO '0123456789'.
+      r_size = lv_txt.
+    ENDIF.
+    IF r_size < 1.
+      r_size = gc_chunk_default.
     ENDIF.
 
   ENDMETHOD.
@@ -1212,6 +1383,32 @@ CLASS zcl_hddt_service IMPLEMENTATION.
 
   METHOD attach_original.
 
+    " Gọi thẳng từ màn hình (nút HĐ Điều chỉnh), KHÔNG đi qua EXECUTE nên
+    " không có khoá nào. Mà bên dưới là đọc sổ -> quyết định -> ghi sổ.
+    DATA(ls_key) = zcl_hddt_log=>key_of( is_request ).
+    IF ls_key-src_docno IS NOT INITIAL
+       AND zcl_hddt_log=>lock_invoice( ls_key ) = abap_false.
+      rs_result = error_result(
+        i_message = |Chứng từ { ls_key-src_docno ALPHA = OUT } đang được | &&
+                    |user { sy-msgv1 } xử lý, chưa gắn được hoá đơn gốc.|
+        i_status  = zif_hddt_types=>gc_status-error ).
+      RETURN.
+    ENDIF.
+
+    rs_result = attach_original_locked( is_request  = is_request
+                                        i_org_docno = i_org_docno
+                                        i_org_gjahr = i_org_gjahr
+                                        i_fs_code   = i_fs_code ).
+
+    IF ls_key-src_docno IS NOT INITIAL.
+      zcl_hddt_log=>unlock_invoice( ls_key ).
+    ENDIF.
+
+  ENDMETHOD.
+
+
+  METHOD attach_original_locked.
+
     DATA(ls_reg) = zcl_hddt_log=>read_invoice( i_bukrs     = is_request-bukrs
                                                i_gjahr     = is_request-gjahr
                                                i_src_type  = is_request-src_type
@@ -1449,12 +1646,26 @@ CLASS zcl_hddt_service IMPLEMENTATION.
   METHOD post_success.
 
     " (1) HĐ điều chỉnh / thay thế thành công -> đổi trạng thái HĐ gốc
+    DATA lv_mark_ok TYPE abap_bool.
     IF i_action = zif_hddt_types=>gc_action-adjust_invoice.
-      mo_log->mark_original( is_request = is_request
-                             i_status   = zif_hddt_types=>gc_status-adjusted ).
+      mo_log->mark_original( EXPORTING is_request = is_request
+                                       i_status   = zif_hddt_types=>gc_status-adjusted
+                             IMPORTING e_ok       = lv_mark_ok ).
     ELSEIF i_action = zif_hddt_types=>gc_action-replace_invoice.
-      mo_log->mark_original( is_request = is_request
-                             i_status   = zif_hddt_types=>gc_status-replaced ).
+      mo_log->mark_original( EXPORTING is_request = is_request
+                                       i_status   = zif_hddt_types=>gc_status-replaced
+                             IMPORTING e_ok       = lv_mark_ok ).
+    ELSE.
+      lv_mark_ok = abap_true.
+    ENDIF.
+
+    " Hoá đơn mới đã phát hành xong rồi, không rollback được; nhưng hoá
+    " đơn GỐC chưa được đánh dấu thì phải nói ra, không thì sổ sai mà
+    " người dùng thấy toàn màu xanh.
+    IF lv_mark_ok = abap_false.
+      cs_result-msgty   = 'W'.
+      cs_result-message = |{ cs_result-message } | &&
+                          |(HĐ gốc đang bị giữ, chưa đổi trạng thái - bấm Cập nhật HĐ)|.
     ENDIF.
 
     " (2) Xoá nháp thành công -> về chưa tích hợp, xoá sid/số (FS 3.6.2)

@@ -17,6 +17,14 @@ CLASS zcl_hddt_config DEFINITION
 
   PUBLIC SECTION.
 
+    "! Danh sách dải số. Khoá có SERIAL vì một công ty được khai nhiều
+    "! dải số cho cùng một loại hoá đơn; thiếu SERIAL là SELECT ... INTO
+    "! TABLE dump ngay vì trùng khoá.
+    "! Khai TRƯỚC các method: ABAP đòi kiểu phải có trước chỗ dùng, để
+    "! sau thì báo 'Type TY_T_CRED is unknown'.
+    TYPES ty_t_cred TYPE SORTED TABLE OF ztb_hddt_cred
+                    WITH UNIQUE KEY provider bukrs inv_type serial .
+
     CLASS-METHODS get_instance
       RETURNING VALUE(ro_config) TYPE REF TO zcl_hddt_config .
 
@@ -46,13 +54,36 @@ CLASS zcl_hddt_config DEFINITION
       RETURNING VALUE(rs_act)  TYPE ztb_hddt_act
       RAISING   zcx_hddt_error .
 
+    "! Tài khoản + dải số của một công ty.
+    "! Một đơn vị có thể khai NHIỀU dải số cùng hiệu lực trong một năm,
+    "! nên thứ tự chọn là: khớp đúng I_SERIAL -> dòng đánh dấu XDEFAULT
+    "! -> dòng đầu tiên còn hiệu lực.
     METHODS get_credential
       IMPORTING i_provider     TYPE zde_hddt_prov
                 i_bukrs        TYPE bukrs
                 i_inv_type     TYPE zde_hddt_invtype OPTIONAL
+                i_serial       TYPE zde_hddt_serial OPTIONAL
                 i_date         TYPE dats OPTIONAL
       RETURNING VALUE(rs_cred)  TYPE ztb_hddt_cred
       RAISING   zcx_hddt_error .
+
+    "! Danh sách dải số còn hiệu lực của một công ty, để màn hình tham số
+    "! dựng F4 và để kiểm tra giá trị người dùng gõ tay.
+    METHODS get_cred_list
+      IMPORTING i_provider     TYPE zde_hddt_prov OPTIONAL
+                i_bukrs        TYPE bukrs
+                i_inv_type     TYPE zde_hddt_invtype OPTIONAL
+                i_date         TYPE dats OPTIONAL
+      RETURNING VALUE(rt_cred) TYPE ty_t_cred .
+
+    "! Dải số mặc định (XDEFAULT = 'X') để màn hình tham số tự điền.
+    "! Không có dòng nào đánh dấu thì trả về rỗng — KHÔNG tự đoán.
+    METHODS get_default_serial
+      IMPORTING i_provider       TYPE zde_hddt_prov OPTIONAL
+                i_bukrs          TYPE bukrs
+                i_inv_type       TYPE zde_hddt_invtype OPTIONAL
+                i_date           TYPE dats OPTIONAL
+      RETURNING VALUE(r_serial)  TYPE zde_hddt_serial .
 
     "! Đổi giá trị SAP sang giá trị của nhà cung cấp.
     "! Không có cấu hình => trả lại chính giá trị SAP (fail-safe).
@@ -128,8 +159,6 @@ CLASS zcl_hddt_config DEFINITION
                     WITH UNIQUE KEY provider connid .
     TYPES ty_t_act  TYPE SORTED TABLE OF ztb_hddt_act
                     WITH UNIQUE KEY provider action .
-    TYPES ty_t_cred TYPE SORTED TABLE OF ztb_hddt_cred
-                    WITH UNIQUE KEY provider bukrs inv_type .
     TYPES ty_t_stat TYPE SORTED TABLE OF ztb_hddt_stat
                     WITH UNIQUE KEY provider action rc_code .
     TYPES ty_t_map  TYPE SORTED TABLE OF ztb_hddt_map
@@ -350,6 +379,61 @@ CLASS zcl_hddt_config IMPLEMENTATION.
   ENDMETHOD.
 
 
+  METHOD get_cred_list.
+
+    load_buffer( ).
+
+    DATA lv_date TYPE dats.
+    lv_date = COND #( WHEN i_date IS INITIAL THEN sy-datum ELSE i_date ).
+
+    LOOP AT mt_cred ASSIGNING FIELD-SYMBOL(<fs_cred>)
+         WHERE bukrs   = i_bukrs
+           AND xactive = abap_true.
+
+      IF i_provider IS NOT INITIAL AND <fs_cred>-provider <> i_provider.
+        CONTINUE.
+      ENDIF.
+      " INV_TYPE để trống trong cấu hình = dòng dùng chung cho mọi loại
+      IF i_inv_type IS NOT INITIAL
+         AND <fs_cred>-inv_type IS NOT INITIAL
+         AND <fs_cred>-inv_type <> i_inv_type.
+        CONTINUE.
+      ENDIF.
+      IF <fs_cred>-valid_from IS NOT INITIAL AND <fs_cred>-valid_from > lv_date.
+        CONTINUE.
+      ENDIF.
+      IF <fs_cred>-valid_to IS NOT INITIAL AND <fs_cred>-valid_to < lv_date.
+        CONTINUE.
+      ENDIF.
+
+      INSERT <fs_cred> INTO TABLE rt_cred.
+    ENDLOOP.
+
+  ENDMETHOD.
+
+
+  METHOD get_default_serial.
+
+    DATA(lt_cred) = get_cred_list( i_provider = i_provider
+                                   i_bukrs    = i_bukrs
+                                   i_inv_type = i_inv_type
+                                   i_date     = i_date ).
+
+    LOOP AT lt_cred ASSIGNING FIELD-SYMBOL(<fs_cred>)
+         WHERE xdefault = abap_true.
+      r_serial = <fs_cred>-serial.
+      EXIT.
+    ENDLOOP.
+
+    " Chỉ có đúng một dải số còn hiệu lực thì không cần tích Mặc định:
+    " không có lựa chọn nào khác để nhầm.
+    IF r_serial IS INITIAL AND lines( lt_cred ) = 1.
+      r_serial = lt_cred[ 1 ]-serial.
+    ENDIF.
+
+  ENDMETHOD.
+
+
   METHOD get_credential.
 
     load_buffer( ).
@@ -357,8 +441,12 @@ CLASS zcl_hddt_config IMPLEMENTATION.
     DATA lv_date TYPE dats.
     lv_date = COND #( WHEN i_date IS INITIAL THEN sy-datum ELSE i_date ).
 
-    " Khớp chính xác loại hoá đơn được ưu tiên; nếu không có thì dùng
-    " dòng mặc định (INV_TYPE để trống).
+    DATA ls_default TYPE ztb_hddt_cred.
+    DATA lv_ndef    TYPE i.
+
+    " Ba mức ưu tiên: khớp đúng dải số người dùng chọn -> dòng đánh dấu
+    " XDEFAULT -> dòng đầu tiên còn hiệu lực. Trong mỗi mức, khớp đúng
+    " INV_TYPE vẫn hơn dòng dùng chung (INV_TYPE để trống).
     LOOP AT mt_cred ASSIGNING FIELD-SYMBOL(<fs_cred>)
          WHERE provider = i_provider
            AND bukrs    = i_bukrs
@@ -374,13 +462,44 @@ CLASS zcl_hddt_config IMPLEMENTATION.
         CONTINUE.
       ENDIF.
 
-      IF <fs_cred>-inv_type = i_inv_type AND i_inv_type IS NOT INITIAL.
+      IF i_serial IS NOT INITIAL AND <fs_cred>-serial = i_serial.
         rs_cred = <fs_cred>.
-        EXIT.                        " khớp chính xác -> dừng ngay
-      ELSEIF rs_cred IS INITIAL.
-        rs_cred = <fs_cred>.         " giữ dòng mặc định làm dự phòng
+        IF <fs_cred>-inv_type = i_inv_type AND i_inv_type IS NOT INITIAL.
+          EXIT.                      " khớp cả dải số lẫn loại HĐ -> dừng
+        ENDIF.
+        CONTINUE.
+      ENDIF.
+
+      IF <fs_cred>-xdefault = abap_true.
+        lv_ndef = lv_ndef + 1.
+        IF ls_default IS INITIAL
+           OR ( <fs_cred>-inv_type = i_inv_type AND i_inv_type IS NOT INITIAL ).
+          ls_default = <fs_cred>.
+        ENDIF.
+      ENDIF.
+
+      IF ls_default IS INITIAL AND rs_cred IS INITIAL.
+        rs_cred = <fs_cred>.         " dự phòng: dòng còn hiệu lực đầu tiên
       ENDIF.
     ENDLOOP.
+
+    " Người dùng chọn một dải số không có trong cấu hình thì phải báo,
+    " không được âm thầm phát hành bằng dải số khác.
+    IF i_serial IS NOT INITIAL AND rs_cred-serial <> i_serial.
+      zcx_hddt_error=>raise_text(
+        |Dải số { i_serial } chưa cấu hình (hoặc hết hiệu lực) cho | &&
+        |{ i_provider } / công ty { i_bukrs } / loại HĐ { i_inv_type }.| ).
+    ENDIF.
+
+    IF i_serial IS INITIAL AND ls_default IS NOT INITIAL.
+      IF lv_ndef > 1.
+        zcx_hddt_error=>raise_text(
+          |Công ty { i_bukrs } đang có { lv_ndef } dải số cùng tích Mặc định | &&
+          |cho loại HĐ { i_inv_type }. Chỉ được để MỘT dòng XDEFAULT trong | &&
+          |ZTB_HDDT_CRED.| ).
+      ENDIF.
+      rs_cred = ls_default.
+    ENDIF.
 
     IF rs_cred IS INITIAL.
       zcx_hddt_error=>raise_text(

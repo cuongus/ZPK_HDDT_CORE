@@ -32,6 +32,11 @@
 * 1.2       07/09/2026    cuongus - CuongUS        abapGit     FS MAG v0.5:
 *                         8 nút nghiệp vụ, email, gom, sửa ngày/giờ,
 *                         phát hành tự động, kiểm quyền theo chức năng
+* 1.6       14/09/2026    cuongus - CuongUS        abapGit     FS 3.6.7/3.6.8:
+*                         bảng điều kiện trạng thái cho Gom HĐ và Huỷ Gom HĐ
+*                         (ZCL_HDDT_GOM=>CHECK_STATUS) chặn ngay lúc bấm nút;
+*                         chọn dòng đã gom thì mở dynpro 0200 ở chế độ xem
+*                         (SHOW_GOM), hai số gom khác nhau thì báo lỗi
 *=====================================================================
 
 CLASS lcl_app DEFINITION FINAL CREATE PUBLIC.
@@ -127,6 +132,9 @@ CLASS lcl_app DEFINITION FINAL CREATE PUBLIC.
     METHODS do_adjust_ref.
     METHODS do_mail.
     METHODS do_gom.
+    "! FS 3.6.7: mở dynpro 0200 ở chế độ XEM cho một hoá đơn gom đã có
+    METHODS show_gom
+      IMPORTING i_gom_no TYPE zde_hddt_docno.
     "! Save trên dynpro 0200: cấp số gom, lưu ngày/giờ đã sửa
     METHODS do_gom_save.
     "! Giải phóng control của dynpro 0200 trước khi rời màn hình
@@ -417,6 +425,15 @@ CLASS lcl_app IMPLEMENTATION.
                     src_docno = <fs_req>-src_docno.
       IF sy-subrc = 0.
         fill_row_from_registry( EXPORTING is_reg = ls_reg CHANGING cs_alv = <fs_alv> ).
+      ENDIF.
+
+      " Dải số chọn trên màn hình tham số đi theo chứng từ khi phát hành.
+      " Chứng từ ĐÃ có ký hiệu trong sổ đăng ký thì giữ nguyên: hoá đơn
+      " đã cấp số mà đổi sang dải mới là sai số hoá đơn đã phát hành.
+      IF p_seri IS NOT INITIAL AND <fs_alv>-serial IS INITIAL.
+        <fs_req>-invoice-header-serial = p_seri.
+      ELSEIF <fs_alv>-serial IS NOT INITIAL.
+        <fs_req>-invoice-header-serial = <fs_alv>-serial.
       ENDIF.
 
       " Chỉ hiện icon mở rộng khi chứng từ dựng được dòng hàng
@@ -1351,29 +1368,66 @@ CLASS lcl_app IMPLEMENTATION.
       RETURN.
     ENDIF.
     DATA(lt_rows) = get_selected( ).
+    IF lt_rows IS INITIAL.
+      MESSAGE s046(zms_hddt) DISPLAY LIKE 'W'.
+      RETURN.
+    ENDIF.
+
+    " FS 3.6.7: dòng đã gom thì nút này là nút XEM nhóm đó. Chọn nhiều
+    " dòng của cùng một số gom vẫn xem được; hai số gom khác nhau, hoặc
+    " trộn dòng đã gom với dòng chưa gom, thì không có nghĩa gì.
+    DATA lv_view_gom TYPE zde_hddt_docno.
+    DATA lv_plain    TYPE i.
+    LOOP AT lt_rows INTO DATA(lv_sel).
+      IF lv_sel < 1 OR lv_sel > lines( gt_alv ).
+        CONTINUE.
+      ENDIF.
+      DATA(ls_sel) = gt_alv[ lv_sel ].
+      DATA(lv_gomno) = COND zde_hddt_docno(
+        WHEN ls_sel-src_type = zcl_hddt_gom=>gc_src_type
+        THEN ls_sel-src_docno ELSE ls_sel-gom_no ).
+      IF lv_gomno IS INITIAL.
+        lv_plain = lv_plain + 1.
+      ELSEIF lv_view_gom IS INITIAL.
+        lv_view_gom = lv_gomno.
+      ELSEIF lv_view_gom <> lv_gomno.
+        MESSAGE s047(zms_hddt) DISPLAY LIKE 'E'.
+        RETURN.
+      ENDIF.
+    ENDLOOP.
+
+    IF lv_view_gom IS NOT INITIAL.
+      IF lv_plain > 0.
+        MESSAGE s025(zms_hddt) DISPLAY LIKE 'E'.
+        RETURN.
+      ENDIF.
+      show_gom( lv_view_gom ).
+      RETURN.
+    ENDIF.
+
     IF lines( lt_rows ) < 2.
       MESSAGE s024(zms_hddt) DISPLAY LIKE 'W'.
       RETURN.
     ENDIF.
 
     CLEAR: gt_gom_req, gt_gom_item, gs_gom_h, gv_gom_text, gv_gom_edit,
-           gv_gom_mode, gv_gom_itchg, gv_gom_ro.
+           gv_gom_mode, gv_gom_itchg, gv_gom_ro, gv_gom_view.
 
     LOOP AT lt_rows INTO DATA(lv_row).
       IF lv_row < 1 OR lv_row > lines( gt_request ).
         CONTINUE.
       ENDIF.
-      IF gt_alv[ lv_row ]-gom_no IS NOT INITIAL.
-        MESSAGE s025(zms_hddt) DISPLAY LIKE 'E'.
-        RETURN.
-      ENDIF.
 
-      " Thành viên nào đã gửi đi (từ 10 trở lên, trừ 90 lỗi) thì cả chứng
-      " từ gom chuyển sang chỉ xem: không cho sửa dòng hàng nữa
-      IF gt_alv[ lv_row ]-status <> zif_hddt_types=>gc_status-not_sent
-         AND gt_alv[ lv_row ]-status <> zif_hddt_types=>gc_status-error.
-        gv_gom_ro = abap_true.
-      ENDIF.
+      " Bảng điều kiện trạng thái FS 3.6.7. Chặn NGAY lúc bấm nút chứ
+      " không đợi tới Save: người dùng không phải nhập lại màn hình gom.
+      TRY.
+          zcl_hddt_gom=>check_status( i_status = gt_alv[ lv_row ]-status
+                                      i_gom_no = gt_alv[ lv_row ]-gom_no
+                                      i_docno  = gt_alv[ lv_row ]-src_docno ).
+        CATCH zcx_hddt_error INTO DATA(lx_st).
+          MESSAGE lx_st->get_text_long( ) TYPE 'S' DISPLAY LIKE 'E'.
+          RETURN.
+      ENDTRY.
 
       APPEND gt_request[ lv_row ] TO gt_gom_req.
     ENDLOOP.
@@ -1414,6 +1468,65 @@ CLASS lcl_app IMPLEMENTATION.
     gs_gom_h-inv_time   = ls_prev-invoice-header-inv_time.
 
     gt_gom_item = to_item_alv( it_items = ls_prev-invoice-items
+                               i_docno  = space ).
+    build_item_fcat( ).
+
+    CALL SCREEN 200.
+
+  ENDMETHOD.
+
+
+*---------------------------------------------------------------------*
+* Xem một hoá đơn gom đã tồn tại (FS 3.6.7)
+*---------------------------------------------------------------------*
+  METHOD show_gom.
+
+    " Hoá đơn gom đã có dòng riêng trong danh sách (ZCL_HDDT_SRC_GOM
+    " dựng sẵn), nên không MERGE lại: lấy thẳng request của dòng đó để
+    " màn hình khớp đúng dữ liệu đang lưu.
+    DATA lv_idx TYPE i.
+    LOOP AT gt_alv ASSIGNING FIELD-SYMBOL(<fs_a>).
+      IF <fs_a>-src_type = zcl_hddt_gom=>gc_src_type
+         AND <fs_a>-src_docno = i_gom_no.
+        lv_idx = sy-tabix.
+        EXIT.
+      ENDIF.
+    ENDLOOP.
+
+    IF lv_idx = 0 OR lv_idx > lines( gt_request ).
+      MESSAGE s048(zms_hddt) WITH i_gom_no DISPLAY LIKE 'W'.
+      RETURN.
+    ENDIF.
+
+    CLEAR: gt_gom_req, gt_gom_item, gs_gom_h, gv_gom_text, gv_gom_edit,
+           gv_gom_mode, gv_gom_itchg.
+
+    " Xem thì khoá cả header lẫn dòng hàng. Sửa nội dung một nhóm đã gom
+    " là nghiệp vụ khác (gỡ gom rồi gom lại), không làm ở màn hình này.
+    gv_gom_ro   = abap_true.
+    gv_gom_view = abap_true.
+
+    DATA(ls_gom) = gt_request[ lv_idx ].
+    DATA(lt_mem) = zcl_hddt_gom=>members( i_bukrs  = p_bukrs
+                                          i_gjahr  = p_gjahr
+                                          i_gom_no = i_gom_no ).
+
+    gs_gom_h-src_docno  = i_gom_no.
+    gs_gom_h-cnt_doc    = lines( lt_mem ).
+    gs_gom_h-bukrs      = p_bukrs.
+    gs_gom_h-gjahr      = p_gjahr.
+    gs_gom_h-bldat      = ls_gom-src_info-bldat.
+    gs_gom_h-budat      = ls_gom-src_info-budat.
+    gs_gom_h-buyer_code = ls_gom-invoice-buyer-code.
+    gs_gom_h-buyer_name = ls_gom-invoice-buyer-legal_name.
+    gs_gom_h-waers      = ls_gom-invoice-header-currency.
+    gs_gom_h-amount     = ls_gom-invoice-summary-amount_wo_tax.
+    gs_gom_h-vat_amount = ls_gom-invoice-summary-tax_amount.
+    gs_gom_h-total      = ls_gom-invoice-summary-total.
+    gs_gom_h-inv_date   = ls_gom-invoice-header-inv_date.
+    gs_gom_h-inv_time   = ls_gom-invoice-header-inv_time.
+
+    gt_gom_item = to_item_alv( it_items = ls_gom-invoice-items
                                i_docno  = space ).
     build_item_fcat( ).
 
@@ -1784,7 +1897,7 @@ CLASS lcl_app IMPLEMENTATION.
 
       WHEN 'BACK' OR '&F03' OR 'CANC' OR '&F12'.
         " Thoát mà không gom
-        CLEAR gv_gom_mode.
+        CLEAR: gv_gom_mode, gv_gom_view.
         free_item_grid( ).
         LEAVE TO SCREEN 0.
 
@@ -1836,6 +1949,14 @@ CLASS lcl_app IMPLEMENTATION.
 
 
   METHOD do_gom_save.
+
+    " Màn hình đang mở để XEM một nhóm đã gom: Save ở đây mà chạy tiếp
+    " sẽ cấp thêm một số gom thứ hai cho cùng bộ chứng từ.
+    IF gv_gom_view = abap_true.
+      CLEAR gv_gom_view.
+      free_item_grid( ).
+      LEAVE TO SCREEN 0.
+    ENDIF.
 
     " Ô đang gõ chưa Enter thì chưa vào bảng nội bộ
     IF mo_grid_it IS BOUND.
@@ -1925,6 +2046,20 @@ CLASS lcl_app IMPLEMENTATION.
         MESSAGE s029(zms_hddt) DISPLAY LIKE 'E'.
         RETURN.
       ENDIF.
+
+      " Bảng điều kiện trạng thái FS 3.6.8, chặn ngay trên dòng người
+      " dùng chọn. ZCL_HDDT_GOM->CANCEL còn kiểm lại toàn bộ thành viên
+      " của nhóm, kể cả dòng không hiển thị trên màn hình.
+      TRY.
+          zcl_hddt_gom=>check_status( i_status = ls_alv-status
+                                      i_gom_no = lv_gom
+                                      i_docno  = ls_alv-src_docno
+                                      i_ungom  = abap_true ).
+        CATCH zcx_hddt_error INTO DATA(lx_st).
+          MESSAGE lx_st->get_text_long( ) TYPE 'S' DISPLAY LIKE 'E'.
+          RETURN.
+      ENDTRY.
+
       INSERT lv_gom INTO TABLE lt_gom.
     ENDLOOP.
 
@@ -1973,6 +2108,7 @@ CLASS lcl_app IMPLEMENTATION.
 
     DATA(lo_log) = NEW zcl_hddt_log( ).
     DATA lv_cnt TYPE i.
+    DATA lv_err TYPE string.
     LOOP AT lt_rows INTO DATA(lv_row).
       IF lv_row < 1 OR lv_row > lines( gt_request ).
         CONTINUE.
@@ -1981,14 +2117,27 @@ CLASS lcl_app IMPLEMENTATION.
          AND gt_alv[ lv_row ]-status <> zif_hddt_types=>gc_status-error.
         CONTINUE.                      " đã có nháp/hoá đơn -> không sửa
       ENDIF.
-      lo_log->save_edit( is_request  = gt_request[ lv_row ]
-                         i_inv_date  = lv_date
-                         i_inv_time  = lv_time
-                         i_item_text = CONV #( lv_text ) ).
-      lv_cnt = lv_cnt + 1.
+      " Chứng từ đang bị người khác giữ khoá thì bỏ qua đúng dòng đó,
+      " các dòng còn lại vẫn lưu — chọn 20 dòng không thể vì một dòng
+      " mà mất cả 20
+      TRY.
+          lo_log->save_edit( is_request  = gt_request[ lv_row ]
+                             i_inv_date  = lv_date
+                             i_inv_time  = lv_time
+                             i_item_text = CONV #( lv_text ) ).
+          lv_cnt = lv_cnt + 1.
+        CATCH zcx_hddt_error INTO DATA(lx_edit).
+          lv_err = COND #( WHEN lv_err IS INITIAL
+                           THEN lx_edit->get_text_long( )
+                           ELSE |{ lv_err } / { lx_edit->get_text_long( ) }| ).
+      ENDTRY.
     ENDLOOP.
     COMMIT WORK AND WAIT.
-    MESSAGE s034(zms_hddt) WITH lv_cnt.
+    IF lv_err IS NOT INITIAL.
+      MESSAGE lv_err TYPE 'S' DISPLAY LIKE 'W'.
+    ELSE.
+      MESSAGE s034(zms_hddt) WITH lv_cnt.
+    ENDIF.
     reload( ).
 
   ENDMETHOD.
@@ -2366,6 +2515,68 @@ FORM popup_edit CHANGING c_date TYPE dats
     ENDCASE.
   ENDLOOP.
   c_ok = abap_true.
+
+ENDFORM.
+
+*&---------------------------------------------------------------------*
+*& Form F4_SERIAL
+*&---------------------------------------------------------------------*
+*& F4 cho tham số dải số (p_seri): liệt kê các dải còn hiệu lực của công
+*& ty đang chọn, kèm cột Mặc định để người dùng biết dòng nào sẽ được tự
+*& điền. Không có cấu hình thì báo và để người dùng gõ tay.
+*&---------------------------------------------------------------------*
+FORM f4_serial.
+
+  TYPES: BEGIN OF lty_f4,
+           serial   TYPE zde_hddt_serial,
+           template TYPE zde_hddt_templ,
+           inv_type TYPE zde_hddt_invtype,
+           xdefault TYPE xfeld,
+           valid_to TYPE dats,
+           provider TYPE zde_hddt_prov,
+         END OF lty_f4.
+
+  " DEFAULT KEY chứ không EMPTY KEY: bảng truyền vào tham số TABLES của
+  " FM cổ điển, EMPTY KEY không hợp lệ ở đó
+  DATA lt_f4 TYPE STANDARD TABLE OF lty_f4 WITH DEFAULT KEY.
+  DATA lt_rt TYPE STANDARD TABLE OF ddshretval WITH DEFAULT KEY.
+
+  DATA(lt_cred) = zcl_hddt_config=>get_instance( )->get_cred_list(
+                    i_provider = p_prov
+                    i_bukrs    = p_bukrs
+                    i_inv_type = p_ityp ).
+
+  IF lt_cred IS INITIAL.
+    MESSAGE s049(zms_hddt) WITH p_bukrs DISPLAY LIKE 'W'.
+    RETURN.
+  ENDIF.
+
+  LOOP AT lt_cred ASSIGNING FIELD-SYMBOL(<fs_c>).
+    APPEND VALUE #( serial   = <fs_c>-serial
+                    template = <fs_c>-template
+                    inv_type = <fs_c>-inv_type
+                    xdefault = <fs_c>-xdefault
+                    valid_to = <fs_c>-valid_to
+                    provider = <fs_c>-provider ) TO lt_f4.
+  ENDLOOP.
+
+  CALL FUNCTION 'F4IF_INT_TABLE_VALUE_REQUEST'
+    EXPORTING
+      retfield        = 'SERIAL'
+      dynpprog        = sy-repid
+      dynpnr          = sy-dynnr
+      dynprofield     = 'P_SERI'
+      value_org       = 'S'
+    TABLES
+      value_tab       = lt_f4
+      return_tab      = lt_rt
+    EXCEPTIONS
+      parameter_error = 1
+      no_values_found = 2
+      OTHERS          = 3.
+  IF sy-subrc <> 0.
+    RETURN.
+  ENDIF.
 
 ENDFORM.
 

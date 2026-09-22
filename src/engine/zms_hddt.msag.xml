@@ -284,6 +284,54 @@
      <MSGNR>045</MSGNR>
      <TEXT>Chứng từ gốc phải ở trạng thái đã phát hành hoặc đã được CQT cấp mã</TEXT>
     </T100>
+    <T100>
+     <SPRSL>E</SPRSL>
+     <ARBGB>ZMS_HDDT</ARBGB>
+     <MSGNR>046</MSGNR>
+     <TEXT>Chọn các chứng từ cần gom</TEXT>
+    </T100>
+    <T100>
+     <SPRSL>E</SPRSL>
+     <ARBGB>ZMS_HDDT</ARBGB>
+     <MSGNR>047</MSGNR>
+     <TEXT>Không thể xem 2 hoá đơn gom cùng lúc</TEXT>
+    </T100>
+    <T100>
+     <SPRSL>E</SPRSL>
+     <ARBGB>ZMS_HDDT</ARBGB>
+     <MSGNR>048</MSGNR>
+     <TEXT>Hoá đơn gom &amp;1 không có trong danh sách đang hiển thị</TEXT>
+    </T100>
+    <T100>
+     <SPRSL>E</SPRSL>
+     <ARBGB>ZMS_HDDT</ARBGB>
+     <MSGNR>049</MSGNR>
+     <TEXT>Chưa khai dải số hoá đơn còn hiệu lực cho công ty &amp;1</TEXT>
+    </T100>
+    <T100>
+     <SPRSL>E</SPRSL>
+     <ARBGB>ZMS_HDDT</ARBGB>
+     <MSGNR>050</MSGNR>
+     <TEXT>Dải số &amp;1 chưa khai hoặc hết hiệu lực cho công ty &amp;2</TEXT>
+    </T100>
+    <T100>
+     <SPRSL>E</SPRSL>
+     <ARBGB>ZMS_HDDT</ARBGB>
+     <MSGNR>051</MSGNR>
+     <TEXT>Mẫu payload &amp;1 / &amp;2 đang được user &amp;3 bảo trì</TEXT>
+    </T100>
+    <T100>
+     <SPRSL>E</SPRSL>
+     <ARBGB>ZMS_HDDT</ARBGB>
+     <MSGNR>052</MSGNR>
+     <TEXT>Không khoá được bảng &amp;1, thử lại sau</TEXT>
+    </T100>
+    <T100>
+     <SPRSL>E</SPRSL>
+     <ARBGB>ZMS_HDDT</ARBGB>
+     <MSGNR>053</MSGNR>
+     <TEXT>Bộ đệm token đang được user &amp;1 xử lý</TEXT>
+    </T100>
    </T100_TEXTS>
   </asx:values>
  </asx:abap>

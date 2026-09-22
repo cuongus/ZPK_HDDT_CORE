@@ -19,6 +19,11 @@
 * Version   Ngày          Người sửa                Transport   Mô tả
 *=====================================================================
 * 1.0       28/08/2026    cuongus - CuongUS        abapGit     Tạo mới
+* 1.1       22/09/2026    cuongus - CuongUS        abapGit     Nạp mặc định
+*                         EXEC_MANY_CHUNK = 100; sửa 9 warning cắt chuỗi:
+*                         COND # suy kiểu C(6) từ nhánh đầu nên 'TAO MOI'
+*                         bị cắt thành 'TAO MO' -> COND string; rút gọn 2
+*                         dòng DESCR vượt 60 ký tự
 *=====================================================================
 REPORT zpg_hddt_setup MESSAGE-ID zms_hddt.
 
@@ -246,7 +251,7 @@ CLASS lcl_setup IMPLEMENTATION.
     " --- FS MAG v0.5 (docs/10) ---
     put_parm( VALUE #( parm_key = zif_hddt_types=>gc_parm-writeback_class
                        parm_val = ''
-                       descr    = 'Lop ghi nguoc chung tu: ZCL_HDDT_WRITEBACK_FI (trong = khong ghi)' ) ).
+                       descr    = 'Lop ghi nguoc chung tu FI (trong = khong ghi nguoc)' ) ).
     put_parm( VALUE #( parm_key = zif_hddt_types=>gc_parm-log_sink_class
                        parm_val = ''
                        descr    = 'Lop day log sang bang dung chung (ZIF_HDDT_LOG_SINK)' ) ).
@@ -267,10 +272,13 @@ CLASS lcl_setup IMPLEMENTATION.
                        descr    = 'Email nguoi gui (trong = user dang nhap)' ) ).
     put_parm( VALUE #( parm_key = zif_hddt_types=>gc_parm-auth_object
                        parm_val = ''
-                       descr    = 'Authorization object rieng (field BUKRS, ACTVT); trong = khong kiem' ) ).
+                       descr    = 'Auth object rieng (BUKRS, ACTVT); trong = khong kiem' ) ).
     put_parm( VALUE #( parm_key = zif_hddt_types=>gc_parm-validate_req
                        parm_val = 'X'
                        descr    = 'Kiem tra truong bat buoc truoc khi goi API (N = tat)' ) ).
+    put_parm( VALUE #( parm_key = zif_hddt_types=>gc_parm-many_chunk
+                       parm_val = '100'
+                       descr    = 'So chung tu moi lo cua job phat hanh (COMMIT theo lo)' ) ).
 
     " Mã thuế đầu ra được phát hành HĐĐT (mẫu CP) — như dự án tham chiếu
     put_map( VALUE #( map_type  = zif_hddt_types=>gc_map_type-tax_code
@@ -613,7 +621,7 @@ CLASS lcl_setup IMPLEMENTATION.
     ENDIF.
     MODIFY ztb_hddt_prov FROM is_row.
     log( i_tab = 'ZTB_HDDT_PROV' i_key = is_row-provider
-         i_action = COND #( WHEN lv_ex = abap_true THEN 'GHI DE' ELSE 'TAO MOI' )
+         i_action = COND string( WHEN lv_ex = abap_true THEN 'GHI DE' ELSE 'TAO MOI' )
          i_info = is_row-classname ).
 
   ENDMETHOD.
@@ -633,7 +641,7 @@ CLASS lcl_setup IMPLEMENTATION.
     MODIFY ztb_hddt_conn FROM is_row.
     log( i_tab = 'ZTB_HDDT_CONN'
          i_key = |{ is_row-provider }/{ is_row-connid }|
-         i_action = COND #( WHEN lv_ex = abap_true THEN 'GHI DE' ELSE 'TAO MOI' )
+         i_action = COND string( WHEN lv_ex = abap_true THEN 'GHI DE' ELSE 'TAO MOI' )
          i_info = is_row-base_url ).
 
   ENDMETHOD.
@@ -653,7 +661,7 @@ CLASS lcl_setup IMPLEMENTATION.
     MODIFY ztb_hddt_act FROM is_row.
     log( i_tab = 'ZTB_HDDT_ACT'
          i_key = |{ is_row-provider }/{ is_row-action }|
-         i_action = COND #( WHEN lv_ex = abap_true THEN 'GHI DE' ELSE 'TAO MOI' )
+         i_action = COND string( WHEN lv_ex = abap_true THEN 'GHI DE' ELSE 'TAO MOI' )
          i_info = is_row-api_path ).
 
   ENDMETHOD.
@@ -673,7 +681,7 @@ CLASS lcl_setup IMPLEMENTATION.
     MODIFY ztb_hddt_parm FROM is_row.
     log( i_tab = 'ZTB_HDDT_PARM'
          i_key = |{ is_row-provider }/{ is_row-parm_key }|
-         i_action = COND #( WHEN lv_ex = abap_true THEN 'GHI DE' ELSE 'TAO MOI' )
+         i_action = COND string( WHEN lv_ex = abap_true THEN 'GHI DE' ELSE 'TAO MOI' )
          i_info = is_row-parm_val ).
 
   ENDMETHOD.
@@ -691,7 +699,7 @@ CLASS lcl_setup IMPLEMENTATION.
     MODIFY ztb_hddt_map FROM is_row.
     log( i_tab = 'ZTB_HDDT_MAP'
          i_key = |{ is_row-map_type }/{ is_row-sap_value }|
-         i_action = COND #( WHEN lv_ex = abap_true THEN 'GHI DE' ELSE 'TAO MOI' )
+         i_action = COND string( WHEN lv_ex = abap_true THEN 'GHI DE' ELSE 'TAO MOI' )
          i_info = |{ is_row-ext_value } { is_row-ext_text }| ).
 
   ENDMETHOD.
@@ -709,7 +717,7 @@ CLASS lcl_setup IMPLEMENTATION.
     MODIFY ztb_hddt_stat FROM is_row.
     log( i_tab = 'ZTB_HDDT_STAT'
          i_key = |{ is_row-provider }/{ is_row-rc_code }|
-         i_action = COND #( WHEN lv_ex = abap_true THEN 'GHI DE' ELSE 'TAO MOI' )
+         i_action = COND string( WHEN lv_ex = abap_true THEN 'GHI DE' ELSE 'TAO MOI' )
          i_info = |-> { is_row-sap_status } { is_row-msg_text }| ).
 
   ENDMETHOD.
@@ -727,7 +735,7 @@ CLASS lcl_setup IMPLEMENTATION.
     ENDIF.
     MODIFY ztb_hddt_src FROM is_row.
     log( i_tab = 'ZTB_HDDT_SRC' i_key = is_row-src_type
-         i_action = COND #( WHEN lv_ex = abap_true THEN 'GHI DE' ELSE 'TAO MOI' )
+         i_action = COND string( WHEN lv_ex = abap_true THEN 'GHI DE' ELSE 'TAO MOI' )
          i_info = is_row-classname ).
 
   ENDMETHOD.

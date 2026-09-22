@@ -28,6 +28,9 @@
 *                         là lấy mọi loại đã cấu hình
 *              p_prov   - Nhà cung cấp (để trống = theo cấu hình)
 *              p_ityp   - Mẫu hoá đơn phát hành (01GTKT...)
+*              p_seri   - Dải số (ký hiệu) hoá đơn; tự điền dòng tích
+*                         Mặc định trong ZTB_HDDT_CRED, F4 liệt kê các
+*                         dải còn hiệu lực của công ty
 *              s_stat   - Trạng thái HĐĐT cần lọc
 *              p_rever  - Lấy cả chứng từ đã đảo / billing đã huỷ
 *              p_test   - Test run: chỉ dựng payload, không gọi API
@@ -42,6 +45,10 @@
 * 1.2       07/09/2026    cuongus - CuongUS        abapGit     FS MAG v0.5:
 *                         8 nút chức năng, phát hành tự động (job),
 *                         kiểm quyền theo chức năng
+* 1.3       16/09/2026    cuongus - CuongUS        abapGit     Nhiều dải số
+*                         trong một năm cho một đơn vị: tham số p_seri,
+*                         tự điền theo cờ Mặc định (ZTB_HDDT_CRED-XDEFAULT),
+*                         F4 danh sách dải số, kiểm tra giá trị gõ tay
 *=====================================================================
 REPORT zpg_hddt_integration MESSAGE-ID zms_hddt.
 
@@ -73,6 +80,34 @@ AT SELECTION-SCREEN ON p_prov.
     INTO @DATA(lv_exists).
   IF lv_exists <> abap_true.
     MESSAGE e005(zms_hddt) WITH p_prov.
+  ENDIF.
+
+AT SELECTION-SCREEN OUTPUT.
+  " Một đơn vị có thể khai nhiều dải số hoá đơn cùng hiệu lực trong một
+  " năm, nên màn hình tự điền dải đã tích Mặc định trong ZTB_HDDT_CRED.
+  " CHỈ điền khi ô còn trống: người dùng xoá đi để chọn dải khác thì
+  " không được đè lại, nếu không họ không bao giờ đổi được dải số.
+  IF p_seri IS INITIAL AND p_bukrs IS NOT INITIAL.
+    p_seri = zcl_hddt_config=>get_instance( )->get_default_serial(
+               i_provider = p_prov
+               i_bukrs    = p_bukrs
+               i_inv_type = p_ityp ).
+  ENDIF.
+
+AT SELECTION-SCREEN ON VALUE-REQUEST FOR p_seri.
+  PERFORM f4_serial.
+
+AT SELECTION-SCREEN ON p_seri.
+  " Gõ tay một dải số không có trong cấu hình thì chặn ngay tại màn hình
+  " tham số, đừng để chạy tới lúc gọi API mới báo.
+  IF p_seri IS NOT INITIAL AND p_bukrs IS NOT INITIAL.
+    DATA(lt_cred) = zcl_hddt_config=>get_instance( )->get_cred_list(
+                      i_provider = p_prov
+                      i_bukrs    = p_bukrs
+                      i_inv_type = p_ityp ).
+    IF NOT line_exists( lt_cred[ serial = p_seri ] ).
+      MESSAGE e050(zms_hddt) WITH p_seri p_bukrs.
+    ENDIF.
   ENDIF.
 
 START-OF-SELECTION.
