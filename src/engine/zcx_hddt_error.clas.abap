@@ -9,6 +9,11 @@
 * Version   Ngày          Người sửa                Transport   Mô tả
 *=====================================================================
 * 1.0       28/08/2026    cuongus - CuongUS        abapGit     Tạo mới
+* 1.1       30/09/2026    cuongus - CuongUS        DS4K900172  Constructor
+*                         cắt text vào MSGV1..4 không còn dump khi text
+*                         không tròn bội số 50 ký tự; GET_TEXT trả text
+*                         đầy đủ (trước đó ghép MSGV1..4 bằng khoảng
+*                         trắng -> chữ bị tách "trên h ệ thống")
 *=====================================================================
 CLASS zcx_hddt_error DEFINITION
   PUBLIC
@@ -64,6 +69,12 @@ CLASS zcx_hddt_error DEFINITION
     METHODS get_text_long
       RETURNING VALUE(r_text) TYPE string .
 
+*   >>> Begin of change 20260930_04 F-CUONGUS TR DS4K900172 - GET_TEXT trả text đầy đủ
+    " Text tự do thì trả nguyên văn MV_TEXT. Bản chuẩn ghép message 000
+    " "&1 &2 &3 &4" nên chèn khoảng trắng giữa mỗi 50 ký tự, cắt đôi chữ.
+    METHODS if_message~get_text REDEFINITION .
+*   <<< End of change 20260930_04
+
   PROTECTED SECTION.
   PRIVATE SECTION.
 ENDCLASS.
@@ -90,19 +101,33 @@ CLASS ZCX_HDDT_ERROR IMPLEMENTATION.
     " Không truyền msgv nhưng có text -> tự cắt text thành 4 biến
     IF i_msgv1 IS INITIAL AND i_text IS NOT INITIAL.
       lv_rest = i_text.
-      me->mv_msgv1 = lv_rest(50).
+*   >>> Begin of change 20260930_03 F-CUONGUS TR DS4K900172 - Cắt text vào MSGV không dump
+*      me->mv_msgv1 = lv_rest(50).
+*      SHIFT lv_rest LEFT BY 50 PLACES.
+*      IF lv_rest IS NOT INITIAL.
+*        me->mv_msgv2 = lv_rest(50).
+*        SHIFT lv_rest LEFT BY 50 PLACES.
+*      ENDIF.
+*      IF lv_rest IS NOT INITIAL.
+*        me->mv_msgv3 = lv_rest(50).
+*        SHIFT lv_rest LEFT BY 50 PLACES.
+*      ENDIF.
+*      IF lv_rest IS NOT INITIAL.
+*        me->mv_msgv4 = lv_rest(50).
+*      ENDIF.
+      " LV_REST(50) trên STRING ngắn hơn 50 ký tự là CX_SY_RANGE_OUT_OF_BOUNDS
+      " (không khai trong RAISING -> CX_SY_NO_HANDLER, người gọi CATCH
+      " ZCX_HDDT_ERROR không bắt được -> dump). Kiểm trên DS4 30/09/2026:
+      " text 30 / 65 / 115 ký tự đều dump, chỉ 50 / 100 / >= 200 là qua.
+      " Gán STRING vào SYMSGV (CHAR 50) thì hệ tự cắt, không vượt biên.
+      me->mv_msgv1 = lv_rest.
       SHIFT lv_rest LEFT BY 50 PLACES.
-      IF lv_rest IS NOT INITIAL.
-        me->mv_msgv2 = lv_rest(50).
-        SHIFT lv_rest LEFT BY 50 PLACES.
-      ENDIF.
-      IF lv_rest IS NOT INITIAL.
-        me->mv_msgv3 = lv_rest(50).
-        SHIFT lv_rest LEFT BY 50 PLACES.
-      ENDIF.
-      IF lv_rest IS NOT INITIAL.
-        me->mv_msgv4 = lv_rest(50).
-      ENDIF.
+      me->mv_msgv2 = lv_rest.
+      SHIFT lv_rest LEFT BY 50 PLACES.
+      me->mv_msgv3 = lv_rest.
+      SHIFT lv_rest LEFT BY 50 PLACES.
+      me->mv_msgv4 = lv_rest.
+*   <<< End of change 20260930_03
     ENDIF.
 
     IF textid IS INITIAL.
@@ -110,6 +135,19 @@ CLASS ZCX_HDDT_ERROR IMPLEMENTATION.
     ELSE.
       if_t100_message~t100key = textid.
     ENDIF.
+
+  ENDMETHOD.
+
+
+  METHOD if_message~get_text.
+
+*   >>> Begin of change 20260930_04 F-CUONGUS TR DS4K900172 - GET_TEXT trả text đầy đủ
+    IF mv_text IS NOT INITIAL.
+      result = mv_text.
+    ELSE.
+      result = super->if_message~get_text( ).
+    ENDIF.
+*   <<< End of change 20260930_04
 
   ENDMETHOD.
 

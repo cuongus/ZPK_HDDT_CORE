@@ -67,6 +67,13 @@
 *                                                             SET_GOM_NO_MULTI
 *                                                             (CREATE_INTERNAL,
 *                                                             CANCEL_INTERNAL)
+* 1.6       30/09/2026    cuongus - CuongUS        DS4K900172  CREATE chặn
+*                                                             chứng từ chọn
+*                                                             trùng (trước đó
+*                                                             INSERT dump trùng
+*                                                             khoá); số chứng
+*                                                             từ trong message
+*                                                             bỏ khoảng trắng
 *=====================================================================
 CLASS zcl_hddt_gom DEFINITION
   PUBLIC
@@ -244,9 +251,15 @@ CLASS ZCL_HDDT_GOM IMPLEMENTATION.
                                            e_user    = DATA(lv_user) ).
     IF lv_ok = abap_false.
       unlock_gom( i_bukrs = i_bukrs i_gjahr = i_gjahr i_gom_no = i_gom_no ).
+*   >>> Begin of change 20260930_04 F-CUONGUS TR DS4K900172 - Số chứng từ trong message không thừa khoảng trắng
+      " ALPHA = OUT trên CHAR 20 giữ khoảng trắng đuôi -> "1800000006     ."
+*      zcx_hddt_error=>raise_text(
+*        |Chứng từ { ls_failed-src_docno ALPHA = OUT } đang được user { lv_user } | &&
+*        |xử lý, chưa gỡ gom được.| ).
       zcx_hddt_error=>raise_text(
-        |Chứng từ { ls_failed-src_docno ALPHA = OUT } đang được user { lv_user } | &&
+        |Chứng từ { condense( |{ ls_failed-src_docno ALPHA = OUT }| ) } đang được user { lv_user } | &&
         |xử lý, chưa gỡ gom được.| ).
+*   <<< End of change 20260930_04
     ENDIF.
 
     " CLEANUP chạy khi exception bay ra khỏi TRY, nên khoá được nhả cả
@@ -473,6 +486,22 @@ CLASS ZCL_HDDT_GOM IMPLEMENTATION.
       zcx_hddt_error=>raise_text( `Chọn ít nhất 2 chứng từ cần gom.` ).
     ENDIF.
 
+*   >>> Begin of change 20260930_04 F-CUONGUS TR DS4K900172 - Chặn chứng từ chọn trùng
+    " Cùng một chứng từ xuất hiện hai lần thì INSERT ZTB_HDDT_GOM FROM TABLE
+    " ở CREATE_INTERNAL gặp trùng khoá -> CX_SY_OPEN_SQL_DB -> dump (kiểm
+    " trên DS4 30/09/2026). Chặn trước khi khoá / đọc gì.
+    DATA lt_dup TYPE SORTED TABLE OF zcl_hddt_log=>ty_inv_key
+                WITH UNIQUE KEY bukrs gjahr src_type src_docno.
+    LOOP AT it_requests ASSIGNING FIELD-SYMBOL(<fs_dup>).
+      INSERT zcl_hddt_log=>key_of( <fs_dup> ) INTO TABLE lt_dup.
+      IF sy-subrc <> 0.
+        zcx_hddt_error=>raise_text(
+          |Chứng từ { condense( |{ <fs_dup>-src_docno ALPHA = OUT }| ) } được chọn | &&
+          |hai lần, bỏ bớt một dòng rồi gom lại.| ).
+      ENDIF.
+    ENDLOOP.
+*   <<< End of change 20260930_04
+
     " CREATE_INTERNAL đọc trạng thái + số gom của TỪNG thành viên rồi mới
     " ghi GOM_NO lên chúng, nên phải giữ khoá sổ đăng ký của cả nhóm suốt
     " thao tác. Khoá hụt một chứng từ thì LOCK_INVOICES nhả lại những cái
@@ -487,9 +516,15 @@ CLASS ZCL_HDDT_GOM IMPLEMENTATION.
                                            es_failed = DATA(ls_failed)
                                            e_user    = DATA(lv_user) ).
     IF lv_ok = abap_false.
+*   >>> Begin of change 20260930_04 F-CUONGUS TR DS4K900172 - Số chứng từ trong message không thừa khoảng trắng
+      " ALPHA = OUT trên CHAR 20 giữ khoảng trắng đuôi -> "1800000006     ."
+*      zcx_hddt_error=>raise_text(
+*        |Chứng từ { ls_failed-src_docno ALPHA = OUT } đang được user { lv_user } | &&
+*        |xử lý, chưa gom được.| ).
       zcx_hddt_error=>raise_text(
-        |Chứng từ { ls_failed-src_docno ALPHA = OUT } đang được user { lv_user } | &&
+        |Chứng từ { condense( |{ ls_failed-src_docno ALPHA = OUT }| ) } đang được user { lv_user } | &&
         |xử lý, chưa gom được.| ).
+*   <<< End of change 20260930_04
     ENDIF.
 
     TRY.
@@ -565,8 +600,13 @@ CLASS ZCL_HDDT_GOM IMPLEMENTATION.
                     i_docno  = <fs_req>-src_docno ).
 
       IF <fs_req>-src_info-xreversed = abap_true OR <fs_req>-src_info-xcancel = abap_true.
+*   >>> Begin of change 20260930_04 F-CUONGUS TR DS4K900172 - Số chứng từ trong message không thừa khoảng trắng
+      " ALPHA = OUT trên CHAR 20 giữ khoảng trắng đuôi -> "1800000006     ."
+*        zcx_hddt_error=>raise_text(
+*          |Không thể gom chứng từ đã đảo/huỷ { <fs_req>-src_docno ALPHA = OUT }.| ).
         zcx_hddt_error=>raise_text(
-          |Không thể gom chứng từ đã đảo/huỷ { <fs_req>-src_docno ALPHA = OUT }.| ).
+          |Không thể gom chứng từ đã đảo/huỷ { condense( |{ <fs_req>-src_docno ALPHA = OUT }| ) }.| ).
+*   <<< End of change 20260930_04
       ENDIF.
 
       IF lv_kunnr IS INITIAL.
