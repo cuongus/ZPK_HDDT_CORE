@@ -12,6 +12,8 @@
 * Version   Ngày          Người sửa                Transport   Mô tả
 *=====================================================================
 * 1.0       28/08/2026    cuongus - CuongUS        abapGit     Tạo mới
+* 1.1       25/09/2026    F-DUBV                   S25K900131  Review S25: GET_TOKEN khoa
+*                                                                  EZTB_HDDT_TOK quanh dang nhap
 *=====================================================================
 CLASS zcl_hddt_token DEFINITION
   PUBLIC
@@ -61,7 +63,8 @@ ENDCLASS.
 
 
 
-CLASS zcl_hddt_token IMPLEMENTATION.
+CLASS ZCL_HDDT_TOKEN IMPLEMENTATION.
+
 
   METHOD get_token.
 
@@ -73,72 +76,85 @@ CLASS zcl_hddt_token IMPLEMENTATION.
       ENDIF.
     ENDIF.
 
-    r_token = login( io_provider = io_provider
-                      is_conn     = is_conn
-                      is_cred     = is_cred
-                      i_secret   = i_secret ).
+*   >>> Begin of change 20260925_01 F-DUBV TR S25K900131 - Review S25 25/09 (khoa)
+*   Hai phien cung het cache se cung dang nhap; nha cung cap cap token moi
+*   co the vo hieu token cu -> phien kia nhan 401. Khoa theo dung khoa cache
+*   (cho toi da ENQUEUE/DELAY_TIME), doc lai cache: phien truoc vua dang nhap
+*   xong thi dung luon token do. Khong lay duoc khoa thi van dang nhap nhu
+*   cu (khong chan phat hanh hoa don), chi mat tinh tuan tu.
+    DATA lv_locked TYPE abap_bool.
 
-    IF r_token IS INITIAL.
-      zcx_hddt_error=>raise_text(
-        |Đăng nhập { is_conn-provider } thành công nhưng không bóc được| &&
-        | access token từ response. Kiểm tra EXTRACT_TOKEN của adapter.| ).
+    CALL FUNCTION 'ENQUEUE_EZTB_HDDT_TOK'
+      EXPORTING
+        mode_ztb_hddt_tok = 'E'
+        provider          = is_conn-provider
+        connid            = is_conn-connid
+        bukrs             = is_cred-bukrs
+        apiuser           = is_cred-apiuser
+        _scope            = '1'
+        _wait             = abap_true
+      EXCEPTIONS
+        foreign_lock      = 1
+        system_failure    = 2
+        OTHERS            = 3.
+    lv_locked = xsdbool( sy-subrc = 0 ).
+
+    IF lv_locked = abap_true AND i_force_new = abap_false.
+      r_token = read_cache( is_conn = is_conn
+                             is_cred = is_cred ).
+      IF r_token IS NOT INITIAL.
+        CALL FUNCTION 'DEQUEUE_EZTB_HDDT_TOK'
+          EXPORTING
+            mode_ztb_hddt_tok = 'E'
+            provider          = is_conn-provider
+            connid            = is_conn-connid
+            bukrs             = is_cred-bukrs
+            apiuser           = is_cred-apiuser
+            _scope            = '1'.
+        RETURN.
+      ENDIF.
     ENDIF.
 
-    write_cache( is_conn  = is_conn
-                 is_cred  = is_cred
-                 i_token = r_token ).
+    TRY.
+        r_token = login( io_provider = io_provider
+                          is_conn     = is_conn
+                          is_cred     = is_cred
+                          i_secret   = i_secret ).
 
-  ENDMETHOD.
+        IF r_token IS INITIAL.
+          zcx_hddt_error=>raise_text(
+            |Đăng nhập { is_conn-provider } thành công nhưng không bóc được| &&
+            | access token từ response. Kiểm tra EXTRACT_TOKEN của adapter.| ).
+        ENDIF.
 
+        write_cache( is_conn  = is_conn
+                     is_cred  = is_cred
+                     i_token = r_token ).
 
-  METHOD read_cache.
+      CLEANUP.
+        IF lv_locked = abap_true.
+          CALL FUNCTION 'DEQUEUE_EZTB_HDDT_TOK'
+            EXPORTING
+              mode_ztb_hddt_tok = 'E'
+              provider          = is_conn-provider
+              connid            = is_conn-connid
+              bukrs             = is_cred-bukrs
+              apiuser           = is_cred-apiuser
+              _scope            = '1'.
+        ENDIF.
+    ENDTRY.
 
-    DATA lv_now TYPE timestampl.
-
-    GET TIME STAMP FIELD lv_now.
-
-    SELECT SINGLE token, valid_to
-      FROM ztb_hddt_tok
-      WHERE provider = @is_conn-provider
-        AND connid   = @is_conn-connid
-        AND bukrs    = @is_cred-bukrs
-        AND apiuser  = @is_cred-apiuser
-      INTO @DATA(ls_tok).
-    IF sy-subrc <> 0.
-      RETURN.
+    IF lv_locked = abap_true.
+      CALL FUNCTION 'DEQUEUE_EZTB_HDDT_TOK'
+        EXPORTING
+          mode_ztb_hddt_tok = 'E'
+          provider          = is_conn-provider
+          connid            = is_conn-connid
+          bukrs             = is_cred-bukrs
+          apiuser           = is_cred-apiuser
+          _scope            = '1'.
     ENDIF.
-
-    IF ls_tok-valid_to > lv_now.
-      r_token = ls_tok-token.
-    ENDIF.
-
-  ENDMETHOD.
-
-
-  METHOD write_cache.
-
-    DATA ls_tok TYPE ztb_hddt_tok.
-    DATA lv_now TYPE timestamp.
-    DATA lv_ttl TYPE i.
-
-    GET TIME STAMP FIELD lv_now.
-
-    lv_ttl = is_conn-token_ttl.
-    IF lv_ttl <= 0.
-      lv_ttl = gc_default_ttl.
-    ENDIF.
-
-    ls_tok-provider   = is_conn-provider.
-    ls_tok-connid     = is_conn-connid.
-    ls_tok-bukrs      = is_cred-bukrs.
-    ls_tok-apiuser    = is_cred-apiuser.
-    ls_tok-token      = i_token.
-    ls_tok-created_at = lv_now.
-    ls_tok-valid_to   = cl_abap_tstmp=>add( tstmp = lv_now
-                                            secs  = lv_ttl ).
-
-    MODIFY ztb_hddt_tok FROM ls_tok.
-    COMMIT WORK AND WAIT.
+*   <<< End of change 20260925_01
 
   ENDMETHOD.
 
@@ -194,4 +210,55 @@ CLASS zcl_hddt_token IMPLEMENTATION.
 
   ENDMETHOD.
 
+
+  METHOD read_cache.
+
+    DATA lv_now TYPE timestampl.
+
+    GET TIME STAMP FIELD lv_now.
+
+    SELECT SINGLE token, valid_to
+      FROM ztb_hddt_tok
+      INTO @DATA(ls_tok)
+      WHERE provider = @is_conn-provider
+        AND connid   = @is_conn-connid
+        AND bukrs    = @is_cred-bukrs
+        AND apiuser  = @is_cred-apiuser.
+    IF sy-subrc <> 0.
+      RETURN.
+    ENDIF.
+
+    IF ls_tok-valid_to > lv_now.
+      r_token = ls_tok-token.
+    ENDIF.
+
+  ENDMETHOD.
+
+
+  METHOD write_cache.
+
+    DATA ls_tok TYPE ztb_hddt_tok.
+    DATA lv_now TYPE timestamp.
+    DATA lv_ttl TYPE i.
+
+    GET TIME STAMP FIELD lv_now.
+
+    lv_ttl = is_conn-token_ttl.
+    IF lv_ttl <= 0.
+      lv_ttl = gc_default_ttl.
+    ENDIF.
+
+    ls_tok-provider   = is_conn-provider.
+    ls_tok-connid     = is_conn-connid.
+    ls_tok-bukrs      = is_cred-bukrs.
+    ls_tok-apiuser    = is_cred-apiuser.
+    ls_tok-token      = i_token.
+    ls_tok-created_at = lv_now.
+    ls_tok-valid_to   = cl_abap_tstmp=>add( tstmp = lv_now
+                                            secs  = lv_ttl ).
+
+    MODIFY ztb_hddt_tok FROM ls_tok.
+    COMMIT WORK AND WAIT.
+
+  ENDMETHOD.
 ENDCLASS.

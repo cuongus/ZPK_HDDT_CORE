@@ -44,7 +44,8 @@ ENDCLASS.
 
 
 
-CLASS zcl_hddt_platform IMPLEMENTATION.
+CLASS ZCL_HDDT_PLATFORM IMPLEMENTATION.
+
 
   METHOD get.
 
@@ -96,5 +97,4 @@ CLASS zcl_hddt_platform IMPLEMENTATION.
     CLEAR mo_platform.
 
   ENDMETHOD.
-
 ENDCLASS.

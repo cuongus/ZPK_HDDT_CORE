@@ -12,8 +12,6 @@
 *              Placeholder {taxcode} {serial} {seq} ... trong API_PATH
 *              được thay bằng bảng symbol do adapter cung cấp.
 * Tham Số    : SEND( is_call ) -> ty_response
-* Kiểu       : TY_CALL - thông tin kỹ thuật của một lần gọi, gom lại
-*              để chữ ký method không phình ra 20 tham số.
 *=====================================================================
 * Version   Ngày          Người sửa                Transport   Mô tả
 *=====================================================================
@@ -87,22 +85,48 @@ ENDCLASS.
 
 
 
-CLASS zcl_hddt_http IMPLEMENTATION.
+CLASS ZCL_HDDT_HTTP IMPLEMENTATION.
 
-  METHOD resolve_path.
 
-    r_path = |{ i_path }|.
-    CONDENSE r_path.
+  METHOD apply_auth.
 
-    LOOP AT it_symbols ASSIGNING FIELD-SYMBOL(<fs_sym>).
-      REPLACE ALL OCCURRENCES OF |\{{ <fs_sym>-name }\}|
-              IN r_path WITH <fs_sym>-value.
-    ENDLOOP.
+    DATA(lv_mode) = is_call-auth_mode.
+    IF lv_mode IS INITIAL.
+      lv_mode = is_call-conn-auth_mode.
+    ENDIF.
 
-    " Placeholder còn sót (không được adapter cung cấp) -> bỏ đi để
-    " không gửi chuỗi '{taxcode}' lên nhà cung cấp.
-    REPLACE ALL OCCURRENCES OF PCRE '\{[A-Za-z_0-9]+\}'
-            IN r_path WITH ``.
+    CASE lv_mode.
+
+      WHEN zif_hddt_types=>gc_auth-basic.
+        io_client->request->set_authorization(
+          username = is_call-username
+          password = is_call-secret ).
+
+      WHEN zif_hddt_types=>gc_auth-header.
+        " Một số nhà cung cấp (Viettel) nhận user/pass qua header riêng
+        " ĐỒNG THỜI vẫn kiểm tra Basic -> gửi cả hai cho chắc.
+        io_client->request->set_header_field( name  = 'username'
+                                             value = is_call-username ).
+        io_client->request->set_header_field( name  = 'password'
+                                             value = is_call-secret ).
+        io_client->request->set_authorization(
+          username = is_call-username
+          password = is_call-secret ).
+
+      WHEN zif_hddt_types=>gc_auth-token
+        OR zif_hddt_types=>gc_auth-oauth2.
+        IF is_call-bearer IS NOT INITIAL.
+          io_client->request->set_header_field(
+            name  = 'Authorization'
+            value = |Bearer { is_call-bearer }| ).
+        ENDIF.
+
+      WHEN zif_hddt_types=>gc_auth-none.
+        " Destination hoặc reverse proxy tự gắn Authorization
+
+      WHEN OTHERS.
+        " Không cấu hình -> không gắn gì, để destination quyết định
+    ENDCASE.
 
   ENDMETHOD.
 
@@ -182,49 +206,6 @@ CLASS zcl_hddt_http IMPLEMENTATION.
   ENDMETHOD.
 
 
-  METHOD apply_auth.
-
-    DATA(lv_mode) = is_call-auth_mode.
-    IF lv_mode IS INITIAL.
-      lv_mode = is_call-conn-auth_mode.
-    ENDIF.
-
-    CASE lv_mode.
-
-      WHEN zif_hddt_types=>gc_auth-basic.
-        io_client->request->set_authorization(
-          username = is_call-username
-          password = is_call-secret ).
-
-      WHEN zif_hddt_types=>gc_auth-header.
-        " Một số nhà cung cấp (Viettel) nhận user/pass qua header riêng
-        " ĐỒNG THỜI vẫn kiểm tra Basic -> gửi cả hai cho chắc.
-        io_client->request->set_header_field( name  = 'username'
-                                             value = is_call-username ).
-        io_client->request->set_header_field( name  = 'password'
-                                             value = is_call-secret ).
-        io_client->request->set_authorization(
-          username = is_call-username
-          password = is_call-secret ).
-
-      WHEN zif_hddt_types=>gc_auth-token
-        OR zif_hddt_types=>gc_auth-oauth2.
-        IF is_call-bearer IS NOT INITIAL.
-          io_client->request->set_header_field(
-            name  = 'Authorization'
-            value = |Bearer { is_call-bearer }| ).
-        ENDIF.
-
-      WHEN zif_hddt_types=>gc_auth-none.
-        " Destination hoặc reverse proxy tự gắn Authorization
-
-      WHEN OTHERS.
-        " Không cấu hình -> không gắn gì, để destination quyết định
-    ENDCASE.
-
-  ENDMETHOD.
-
-
   METHOD header_text.
 
     LOOP AT it_fields ASSIGNING FIELD-SYMBOL(<fs_f>).
@@ -233,6 +214,24 @@ CLASS zcl_hddt_http IMPLEMENTATION.
       ENDIF.
       r_text = r_text && |{ <fs_f>-name }: { <fs_f>-value }|.
     ENDLOOP.
+
+  ENDMETHOD.
+
+
+  METHOD resolve_path.
+
+    r_path = |{ i_path }|.
+    CONDENSE r_path.
+
+    LOOP AT it_symbols ASSIGNING FIELD-SYMBOL(<fs_sym>).
+      REPLACE ALL OCCURRENCES OF |\{{ <fs_sym>-name }\}|
+              IN r_path WITH <fs_sym>-value.
+    ENDLOOP.
+
+    " Placeholder còn sót (không được adapter cung cấp) -> bỏ đi để
+    " không gửi chuỗi '{taxcode}' lên nhà cung cấp.
+    REPLACE ALL OCCURRENCES OF REGEX '\{[A-Za-z_0-9]+\}'
+            IN r_path WITH ``.
 
   ENDMETHOD.
 
@@ -328,5 +327,4 @@ CLASS zcl_hddt_http IMPLEMENTATION.
     lo_client->close( EXCEPTIONS OTHERS = 0 ).
 
   ENDMETHOD.
-
 ENDCLASS.

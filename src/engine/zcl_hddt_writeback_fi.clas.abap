@@ -43,6 +43,17 @@ CLASS zcl_hddt_writeback_fi DEFINITION
 
     TYPES ty_t_accchg TYPE STANDARD TABLE OF accchg WITH EMPTY KEY .
 
+*   >>> Begin of change 20260927_01 F-DUBV TR S25K900131 - Review S25 (SELECT trong vong lap)
+*   BKPF cua moi chung tu can ghi nguoc, doc 1 lan trong WRITE truoc vong lap.
+    TYPES: BEGIN OF ty_bkpf_buf,
+             belnr    TYPE bkpf-belnr,
+             gjahr    TYPE bkpf-gjahr,
+             xblnr    TYPE bkpf-xblnr,
+             xref2_hd TYPE bkpf-xref2_hd,
+           END OF ty_bkpf_buf.
+    DATA mt_bkpf TYPE SORTED TABLE OF ty_bkpf_buf WITH UNIQUE KEY belnr gjahr.
+*   <<< End of change 20260927_01
+
     METHODS change_header
       IMPORTING i_bukrs TYPE bukrs
                 i_belnr TYPE belnr_d
@@ -56,7 +67,56 @@ ENDCLASS.
 
 
 
-CLASS zcl_hddt_writeback_fi IMPLEMENTATION.
+CLASS ZCL_HDDT_WRITEBACK_FI IMPLEMENTATION.
+
+
+  METHOD change_header.
+
+*   >>> Begin of change 20260927_01 F-DUBV TR S25K900131 - Review S25 (SELECT trong vong lap)
+*   BKPF da doc 1 lan cho ca danh sach chung tu o WRITE (MT_BKPF).
+    READ TABLE mt_bkpf INTO DATA(ls_bkpf)
+         WITH TABLE KEY belnr = i_belnr gjahr = i_gjahr.
+*   <<< End of change 20260927_01
+    IF sy-subrc <> 0.
+      RETURN.
+    ENDIF.
+
+    DATA lt_chg TYPE ty_t_accchg.
+    IF ls_bkpf-xblnr <> i_xblnr.
+      APPEND VALUE #( fdname = 'XBLNR' oldval = ls_bkpf-xblnr newval = i_xblnr ) TO lt_chg.
+    ENDIF.
+    IF i_set_xref2 = abap_true AND ls_bkpf-xref2_hd <> i_xref2.
+      APPEND VALUE #( fdname = 'XREF2_HD' oldval = ls_bkpf-xref2_hd newval = i_xref2 ) TO lt_chg.
+    ENDIF.
+    IF lt_chg IS INITIAL.
+      RETURN.                          " không sinh change document thừa
+    ENDIF.
+
+    DATA(lv_aworg) = |{ i_bukrs }{ i_gjahr }|.
+    CALL FUNCTION 'FI_DOCUMENT_CHANGE'
+      EXPORTING
+        i_awtyp              = 'BKPF'
+        i_awref              = CONV awref( i_belnr )
+        i_aworg              = CONV aworg( lv_aworg )
+        i_bukrs              = i_bukrs
+        i_belnr              = i_belnr
+        i_gjahr              = i_gjahr
+      TABLES
+        t_accchg             = lt_chg
+      EXCEPTIONS
+        no_reference         = 1
+        no_document          = 2
+        many_documents       = 3
+        wrong_input          = 4
+        overwrite_creditcard = 5
+        OTHERS               = 6.
+    IF sy-subrc <> 0.
+      zcx_hddt_error=>raise_text(
+        |Không ghi ngược được chứng từ { i_belnr }/{ i_gjahr } (FI_DOCUMENT_CHANGE rc { sy-subrc }).| ).
+    ENDIF.
+
+  ENDMETHOD.
+
 
   METHOD invoice_ref.
 
@@ -145,6 +205,20 @@ CLASS zcl_hddt_writeback_fi IMPLEMENTATION.
         RETURN.                        " billing SD không có BKPF
     ENDCASE.
 
+*   >>> Begin of change 20260927_01 F-DUBV TR S25K900131 - Review S25 (SELECT trong vong lap)
+*   Doc BKPF 1 lan cho moi chung tu (thay SELECT SINGLE trong CHANGE_HEADER).
+    CLEAR mt_bkpf.
+    IF lt_doc IS NOT INITIAL.
+      SELECT belnr, gjahr, xblnr, xref2_hd
+        FROM bkpf
+        FOR ALL ENTRIES IN @lt_doc
+        WHERE bukrs = @is_request-bukrs
+          AND belnr = @lt_doc-belnr
+          AND gjahr = @lt_doc-gjahr
+        INTO CORRESPONDING FIELDS OF TABLE @mt_bkpf.
+    ENDIF.
+*   <<< End of change 20260927_01
+
     LOOP AT lt_doc ASSIGNING FIELD-SYMBOL(<fs_doc>).
       change_header( i_bukrs     = is_request-bukrs
                      i_belnr     = <fs_doc>-belnr
@@ -155,54 +229,4 @@ CLASS zcl_hddt_writeback_fi IMPLEMENTATION.
     ENDLOOP.
 
   ENDMETHOD.
-
-
-  METHOD change_header.
-
-    SELECT SINGLE xblnr, xref2_hd, awtyp, awkey
-      FROM bkpf
-      WHERE bukrs = @i_bukrs
-        AND belnr = @i_belnr
-        AND gjahr = @i_gjahr
-      INTO @DATA(ls_bkpf).
-    IF sy-subrc <> 0.
-      RETURN.
-    ENDIF.
-
-    DATA lt_chg TYPE ty_t_accchg.
-    IF ls_bkpf-xblnr <> i_xblnr.
-      APPEND VALUE #( fdname = 'XBLNR' oldval = ls_bkpf-xblnr newval = i_xblnr ) TO lt_chg.
-    ENDIF.
-    IF i_set_xref2 = abap_true AND ls_bkpf-xref2_hd <> i_xref2.
-      APPEND VALUE #( fdname = 'XREF2_HD' oldval = ls_bkpf-xref2_hd newval = i_xref2 ) TO lt_chg.
-    ENDIF.
-    IF lt_chg IS INITIAL.
-      RETURN.                          " không sinh change document thừa
-    ENDIF.
-
-    DATA(lv_aworg) = |{ i_bukrs }{ i_gjahr }|.
-    CALL FUNCTION 'FI_DOCUMENT_CHANGE'
-      EXPORTING
-        i_awtyp              = 'BKPF'
-        i_awref              = i_belnr
-        i_aworg              = CONV aworg( lv_aworg )
-        i_bukrs              = i_bukrs
-        i_belnr              = i_belnr
-        i_gjahr              = i_gjahr
-      TABLES
-        t_accchg             = lt_chg
-      EXCEPTIONS
-        no_reference         = 1
-        no_document          = 2
-        many_documents       = 3
-        wrong_input          = 4
-        overwrite_creditcard = 5
-        OTHERS               = 6.
-    IF sy-subrc <> 0.
-      zcx_hddt_error=>raise_text(
-        |Không ghi ngược được chứng từ { i_belnr }/{ i_gjahr } (FI_DOCUMENT_CHANGE rc { sy-subrc }).| ).
-    ENDIF.
-
-  ENDMETHOD.
-
 ENDCLASS.

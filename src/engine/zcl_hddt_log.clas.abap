@@ -42,6 +42,21 @@
 *                                                             trong SAVE_EDIT
 *                                                             và MARK_ORIGINAL
 *                                                             (hoá đơn GỐC)
+* 1.3       22/09/2026    cuongus - CuongUS        abapGit     SET_ADMIN điền
+*                                                             CREATED_BY/AT +
+*                                                             CHANGED_BY/AT cho
+*                                                             mọi bảng; SAVE_ITEMS
+*                                                             dùng nó
+* 1.4       28/09/2026    F-DUBV                   S25K900131  20260928_30 R06:
+*                                                             them
+*                                                             SET_GOM_NO_MULTI,
+*                                                             SAVE_EDIT_MULTI,
+*                                                             RETIRE_INVOICE_MULTI
+*                                                             (1 lan doc FAE +
+*                                                             1 MODIFY FROM TABLE
+*                                                             thay cho doc/ghi
+*                                                             tung dong trong
+*                                                             vong lap)
 *=====================================================================
 CLASS zcl_hddt_log DEFINITION
   PUBLIC
@@ -94,6 +109,24 @@ CLASS zcl_hddt_log DEFINITION
     CLASS-METHODS key_of
       IMPORTING is_request    TYPE zif_hddt_types=>ty_request
       RETURNING VALUE(rs_key) TYPE ty_inv_key .
+
+    "! Điền 4 trường vết CREATED_BY / CREATED_AT / CHANGED_BY /
+    "! CHANGED_AT cho MỘT dòng bảng bất kỳ của package. Dùng ASSIGN
+    "! COMPONENT nên nhận mọi kiểu dòng, bảng nào không có các trường
+    "! này thì lặng lẽ bỏ qua — khỏi phải viết lại ở 11 chỗ.
+    "! Timestamp là TIMESTAMPL giờ UTC (GET TIME STAMP), không phải
+    "! SY-DATUM/SY-UZEIT giờ máy chủ.
+    "! CỐ Ý giữ UTC, ĐừNG đổi sang giờ VN ở đây: cùng bốn cột này còn
+    "! được routine event 01 của SM30 ghi, lệch quy ước giữa hai nơi là
+    "! hỏng dữ liệu. Đổi múi giờ ở chỗ HIỂN THỊ (xem ZPG_HDDT_LOG:
+    "! CONVERT TIME STAMP ... TIME ZONE sy-zonlo).
+    "! @parameter i_new | X = dòng mới (điền CREATED_*), ' ' = sửa dòng
+    "!                    cũ (chỉ điền CHANGED_*)
+    "! generic OK: CS_ROW phải TYPE any vì 11 bảng có kiểu dòng khác
+    "! nhau, thân method dò trường bằng ASSIGN COMPONENT.
+    CLASS-METHODS set_admin
+      IMPORTING i_new  TYPE abap_bool DEFAULT abap_true
+      CHANGING  cs_row TYPE any .
 
     TYPES: BEGIN OF ty_call_info,
              connid      TYPE zde_hddt_connid,
@@ -180,6 +213,59 @@ CLASS zcl_hddt_log DEFINITION
       IMPORTING is_request TYPE zif_hddt_types=>ty_request
                 i_status   TYPE zde_hddt_mailst .
 
+    "! Ghi thẳng trạng thái và thông báo cho một chứng từ, không gọi API.
+    "! Dùng khi nghiệp vụ dừng giữa chừng ở phía SAP - ví dụ FS v0.17 mục
+    "! 3.6.5: huỷ chứng từ gốc bằng FB08/MR8M lỗi nên không phát hành hoá
+    "! đơn thay thế, bản ghi phải chuyển sang Lỗi tích hợp để người dùng
+    "! thấy và xử lý lại.
+    METHODS set_status
+      IMPORTING is_request TYPE zif_hddt_types=>ty_request
+                i_status   TYPE zde_hddt_status
+                i_message  TYPE clike OPTIONAL .
+
+    "! Xoá thông tin hoá đơn (mẫu, ký hiệu, số, mã tra cứu, link) nhưng
+    "! đặt trạng thái cho trước - khác RESET_REGISTRY luôn về 'chưa tích
+    "! hợp'. FS v0.17 mục 3.6.5: thay thế hoá đơn gom thì các chứng từ
+    "! thành phần chuyển 08 và bị xoá thông tin hoá đơn.
+    METHODS retire_invoice
+      IMPORTING is_request TYPE zif_hddt_types=>ty_request
+                i_status   TYPE zde_hddt_status
+                i_message  TYPE clike OPTIONAL .
+
+*   >>> Begin of change 20260928_30 F-DUBV TR S25K900131 - Review S25 R06 (DB trong vong lap)
+    "! Ban nhieu dong cua SET_GOM_NO: doc so dang ky cua ca danh sach 1
+    "! lan (FOR ALL ENTRIES), tao dong toi thieu cho chung tu chua co dong
+    "! so (nhu ENSURE_ROW), ghi 1 lan MODIFY FROM TABLE. KHONG khoa - cung
+    "! quy uoc voi SET_GOM_NO: ZCL_HDDT_GOM->CREATE / ->CANCEL da khoa so
+    "! dang ky cua toan bo thanh vien truoc khi goi.
+    METHODS set_gom_no_multi
+      IMPORTING it_requests TYPE zif_hddt_types=>ty_t_request
+                i_gom_no    TYPE zde_hddt_docno .
+
+    "! Ban nhieu dong cua SAVE_EDIT (nut Sua ngay/gio/ten hang). Khoa tung
+    "! chung tu nhu SAVE_EDIT; chung tu dang bi nguoi khac giu thi bo qua
+    "! dung dong do va noi message (cung van ban cu, ngan cach ' / ') vao
+    "! E_ERROR; cac dong con lai: 1 lan doc FAE, 1 MODIFY FROM TABLE, roi
+    "! nha khoa - nha TRUOC COMMIT cua cho goi, giong SAVE_EDIT hien tai.
+    "! @parameter e_count | so dong da ghi (= so lan SAVE_EDIT thanh cong)
+    "! @parameter e_error | message cac dong khong khoa duoc
+    METHODS save_edit_multi
+      IMPORTING it_requests TYPE zif_hddt_types=>ty_t_request
+                i_inv_date  TYPE dats
+                i_inv_time  TYPE uzeit
+                i_item_text TYPE string
+      EXPORTING e_count     TYPE i
+                e_error     TYPE string .
+
+    "! Ban nhieu dong cua RETIRE_INVOICE (thanh vien hoa don gom bi thay
+    "! the). KHONG khoa - giong RETIRE_INVOICE (cho goi duy nhat
+    "! ZCL_HDDT_SERVICE->MARK_GOM_REPLACED khong khoa thanh vien).
+    METHODS retire_invoice_multi
+      IMPORTING it_keys    TYPE ty_t_inv_key
+                i_status   TYPE zde_hddt_status
+                i_message  TYPE clike OPTIONAL .
+*   <<< End of change 20260928_30
+
     "! Đưa chứng từ về 'chưa tích hợp' (huỷ nháp thành công / NCC không
     "! còn hoá đơn): xoá số, ký hiệu, link, trạng thái NCC.
     METHODS reset_registry
@@ -208,6 +294,11 @@ CLASS zcl_hddt_log DEFINITION
   PROTECTED SECTION.
   PRIVATE SECTION.
 
+*   >>> Begin of change 20260928_30 F-DUBV TR S25K900131 - Review S25 R06 (DB trong vong lap)
+    TYPES ty_t_inv_hash TYPE HASHED TABLE OF ztb_hddt_inv
+                        WITH UNIQUE KEY bukrs gjahr src_type src_docno.
+*   <<< End of change 20260928_30
+
     "! Thẻ mặc định cần che nếu chưa khai LOG_MASK_TAGS.
     "! Gồm cả tên thẻ của FPT (password), VNPT (acpass) và chuẩn OAuth.
     CONSTANTS gc_default_tags TYPE string
@@ -224,6 +315,20 @@ CLASS zcl_hddt_log DEFINITION
     METHODS ensure_row
       IMPORTING is_request    TYPE zif_hddt_types=>ty_request
       RETURNING VALUE(rs_inv) TYPE ztb_hddt_inv .
+
+*   >>> Begin of change 20260928_30 F-DUBV TR S25K900131 - Review S25 R06 (DB trong vong lap)
+    "! Dong so toi thieu cho chung tu chua co dong (phan sau SELECT cua
+    "! ENSURE_ROW, tach ra de cac ban *_MULTI dung chung, khong doc DB).
+    METHODS init_row
+      IMPORTING is_request    TYPE zif_hddt_types=>ty_request
+      RETURNING VALUE(rs_inv) TYPE ztb_hddt_inv .
+
+    "! Doc so dang ky cua ca danh sach khoa trong 1 lan FOR ALL ENTRIES.
+    "! Chi goi NGOAI vong lap.
+    METHODS read_rows
+      IMPORTING it_keys       TYPE ty_t_inv_key
+      RETURNING VALUE(rt_inv) TYPE ty_t_inv_hash .
+*   <<< End of change 20260928_30
 
     METHODS object_type_of
       IMPORTING i_action      TYPE zde_hddt_action
@@ -244,76 +349,113 @@ ENDCLASS.
 
 
 
-CLASS zcl_hddt_log IMPLEMENTATION.
+CLASS ZCL_HDDT_LOG IMPLEMENTATION.
 
-  METHOD new_guid.
 
+  METHOD attach_original.
+
+    DATA(ls_inv) = ensure_row( is_request ).
+    ls_inv-ref_docno   = i_org_docno.
+    ls_inv-ref_gjahr   = COND #( WHEN i_org_docno IS INITIAL THEN space ELSE i_org_gjahr ).
+    ls_inv-ref_srctype = COND #( WHEN i_org_docno IS INITIAL THEN space ELSE i_org_srctype ).
+    ls_inv-adj_type    = COND #( WHEN i_org_docno IS INITIAL THEN space ELSE i_adj_type ).
+    ls_inv-adj_dir     = COND #( WHEN i_org_docno IS INITIAL THEN space ELSE i_adj_dir ).
+    ls_inv-changed_by  = sy-uname.
+    GET TIME STAMP FIELD ls_inv-changed_at.
+    MODIFY ztb_hddt_inv FROM ls_inv.
+
+  ENDMETHOD.
+
+
+  METHOD call_sink.
+
+    " Lớp sink của khách hàng (vd ánh xạ sang ZTB_INT_LOG của MAG).
+    " Lỗi ở sink không được làm hỏng nghiệp vụ -> bắt hết.
+    DATA(lv_class) = zcl_hddt_config=>get_instance( )->get_param(
+                       i_key = zif_hddt_types=>gc_parm-log_sink_class
+                       i_bukrs = is_request-bukrs ).
+    CONDENSE lv_class.
+    IF lv_class IS INITIAL.
+      RETURN.
+    ENDIF.
     TRY.
-        r_guid = cl_system_uuid=>create_uuid_c32_static( ).
-      CATCH cx_uuid_error.
-        " Rất khó xảy ra; dự phòng bằng timestamp + user
-        DATA lv_ts TYPE timestampl.
-        GET TIME STAMP FIELD lv_ts.
-        r_guid = |{ lv_ts }{ sy-uname }|.
-        TRANSLATE r_guid TO UPPER CASE.
+        DATA(lo_sink) = CAST zif_hddt_log_sink(
+                          zcl_hddt_factory=>create_object( CONV #( lv_class ) ) ).
+        lo_sink->write( is_log = is_log is_request = is_request is_result = is_result ).
+      CATCH cx_root.
+        " bỏ qua có chủ ý
     ENDTRY.
 
   ENDMETHOD.
 
 
-  METHOD mask_secrets.
+  METHOD count_attempts.
 
-    r_text = i_text.
-    IF r_text IS INITIAL.
-      RETURN.
-    ENDIF.
+    SELECT COUNT( * )
+      FROM ztb_hddt_log
+      WHERE bukrs     = @is_request-bukrs
+        AND gjahr     = @is_request-gjahr
+        AND src_type  = @is_request-src_type
+        AND src_docno = @is_request-src_docno
+        AND action    = @i_action
+        AND test_run  = @space
+      INTO @DATA(lv_count).
 
-    DATA(lv_tags) = |{ zcl_hddt_config=>get_instance( )->get_param( gc_parm_mask_tags ) }|.
-    CONDENSE lv_tags NO-GAPS.
-    IF lv_tags IS INITIAL.
-      lv_tags = gc_default_tags.
-    ENDIF.
-
-    SPLIT lv_tags AT ',' INTO TABLE DATA(lt_tags).
-
-    LOOP AT lt_tags INTO DATA(lv_tag).
-      CONDENSE lv_tag NO-GAPS.
-      IF lv_tag IS INITIAL.
-        CONTINUE.
-      ENDIF.
-
-      " (1) JSON:  "password" : "gia tri"   ->  "password":"********"
-      REPLACE ALL OCCURRENCES OF PCRE
-              |"{ lv_tag }"\\s*:\\s*"[^"]*"|
-              IN r_text WITH |"{ lv_tag }":"{ gc_mask }"| IGNORING CASE.
-
-      " (2) JSON số / không ngoặc kép: "token": abc123
-      REPLACE ALL OCCURRENCES OF PCRE
-              |"{ lv_tag }"\\s*:\\s*[^",\{\}\\[\\]]+|
-              IN r_text WITH |"{ lv_tag }":"{ gc_mask }"| IGNORING CASE.
-
-      " (3) form-urlencoded:  password=abc&  ->  password=********&
-      REPLACE ALL OCCURRENCES OF PCRE
-              |(^\|&){ lv_tag }=[^&]*|
-              IN r_text WITH |$1{ lv_tag }={ gc_mask }| IGNORING CASE.
-
-      " (4) HTTP header:  Authorization: Basic xxx  ->  Authorization: ********
-      REPLACE ALL OCCURRENCES OF PCRE
-              |(^\|\\n){ lv_tag }\\s*:\\s*[^\\n]*|
-              IN r_text WITH |$1{ lv_tag }: { gc_mask }| IGNORING CASE.
-    ENDLOOP.
+    r_count = lv_count + 1.
 
   ENDMETHOD.
 
 
-  METHOD to_raw.
+  METHOD ensure_row.
 
-    IF i_text IS INITIAL.
+    SELECT SINGLE * FROM ztb_hddt_inv
+      WHERE bukrs     = @is_request-bukrs
+        AND gjahr     = @is_request-gjahr
+        AND src_type  = @is_request-src_type
+        AND src_docno = @is_request-src_docno
+      INTO @rs_inv.
+    IF sy-subrc = 0.
       RETURN.
     ENDIF.
-    r_data = zcl_hddt_platform=>get( )->string_to_xstring(
-                i_text     = i_text
-                i_encoding = CONV string( gc_codepage ) ).
+
+*   >>> Begin of change 20260928_30 F-DUBV TR S25K900131 - Review S25 R06 (DB trong vong lap)
+    " Phan tao dong toi thieu chuyen sang INIT_ROW (dung chung voi *_MULTI)
+*    CLEAR rs_inv.
+*    rs_inv-bukrs      = is_request-bukrs.
+*    rs_inv-gjahr      = is_request-gjahr.
+*    rs_inv-src_type   = is_request-src_type.
+*    rs_inv-src_docno  = is_request-src_docno.
+*    rs_inv-status     = zif_hddt_types=>gc_status-not_sent.
+*    rs_inv-buyer_code = is_request-invoice-buyer-code.
+*    rs_inv-buyer_name = is_request-invoice-buyer-legal_name.
+*    rs_inv-waers      = is_request-invoice-header-currency.
+*    rs_inv-inv_date   = is_request-invoice-header-inv_date.
+*    rs_inv-inv_time   = is_request-invoice-header-inv_time.
+*    rs_inv-created_by = sy-uname.
+*    GET TIME STAMP FIELD rs_inv-created_at.
+    rs_inv = init_row( is_request ).
+*   <<< End of change 20260928_30
+
+  ENDMETHOD.
+
+
+  METHOD init_row.
+
+*   >>> Begin of change 20260928_30 F-DUBV TR S25K900131 - Review S25 R06 (DB trong vong lap)
+    CLEAR rs_inv.
+    rs_inv-bukrs      = is_request-bukrs.
+    rs_inv-gjahr      = is_request-gjahr.
+    rs_inv-src_type   = is_request-src_type.
+    rs_inv-src_docno  = is_request-src_docno.
+    rs_inv-status     = zif_hddt_types=>gc_status-not_sent.
+    rs_inv-buyer_code = is_request-invoice-buyer-code.
+    rs_inv-buyer_name = is_request-invoice-buyer-legal_name.
+    rs_inv-waers      = is_request-invoice-header-currency.
+    rs_inv-inv_date   = is_request-invoice-header-inv_date.
+    rs_inv-inv_time   = is_request-invoice-header-inv_time.
+    rs_inv-created_by = sy-uname.
+    GET TIME STAMP FIELD rs_inv-created_at.
+*   <<< End of change 20260928_30
 
   ENDMETHOD.
 
@@ -338,19 +480,58 @@ CLASS zcl_hddt_log IMPLEMENTATION.
   ENDMETHOD.
 
 
-  METHOD count_attempts.
+  METHOD key_of.
 
-    SELECT COUNT( * )
-      FROM ztb_hddt_log
-      WHERE bukrs     = @is_request-bukrs
-        AND gjahr     = @is_request-gjahr
-        AND src_type  = @is_request-src_type
-        AND src_docno = @is_request-src_docno
-        AND action    = @i_action
-        AND test_run  = @space
-      INTO @DATA(lv_count).
+    rs_key = VALUE #( bukrs     = is_request-bukrs
+                      gjahr     = is_request-gjahr
+                      src_type  = is_request-src_type
+                      src_docno = is_request-src_docno ).
 
-    r_count = lv_count + 1.
+  ENDMETHOD.
+
+
+  METHOD lock_invoice.
+
+    CALL FUNCTION 'ENQUEUE_EZTB_HDDT_INV'
+      EXPORTING
+        mode_ztb_hddt_inv = 'E'
+        mandt             = sy-mandt
+        bukrs             = is_key-bukrs
+        gjahr             = is_key-gjahr
+        src_type          = is_key-src_type
+        src_docno         = is_key-src_docno
+        _scope            = '1'
+      EXCEPTIONS
+        foreign_lock      = 1
+        system_failure    = 2
+        OTHERS            = 3.
+    r_ok = xsdbool( sy-subrc = 0 ).
+
+  ENDMETHOD.
+
+
+  METHOD lock_invoices.
+
+    DATA lt_done TYPE ty_t_inv_key.
+
+    CLEAR: e_ok, es_failed, e_user.
+
+    LOOP AT it_keys INTO DATA(ls_key).
+      IF ls_key-src_docno IS INITIAL.
+        CONTINUE.
+      ENDIF.
+      IF lock_invoice( ls_key ) = abap_false.
+        es_failed = ls_key.
+        e_user    = sy-msgv1.
+        " Nhả lại đúng những dòng vừa lấy. Không dùng DEQUEUE_ALL vì nó
+        " nhả cả khoá mà chỗ gọi đang giữ cho việc khác.
+        unlock_invoices( lt_done ).
+        RETURN.
+      ENDIF.
+      APPEND ls_key TO lt_done.
+    ENDLOOP.
+
+    e_ok = abap_true.
 
   ENDMETHOD.
 
@@ -445,6 +626,166 @@ CLASS zcl_hddt_log IMPLEMENTATION.
   ENDMETHOD.
 
 
+  METHOD mark_original.
+
+    CLEAR e_ok.
+
+    DATA(ls_adj) = is_request-invoice-adjust.
+    IF ls_adj-org_docno IS INITIAL.
+      e_ok = abap_true.            " không có hoá đơn gốc -> không có gì phải đánh dấu
+      RETURN.
+    ENDIF.
+
+    DATA(lv_gjahr) = COND gjahr( WHEN ls_adj-org_gjahr IS NOT INITIAL
+                                 THEN ls_adj-org_gjahr ELSE is_request-gjahr ).
+    DATA(lv_type)  = COND zde_hddt_srctype( WHEN ls_adj-org_src_type IS NOT INITIAL
+                                              THEN ls_adj-org_src_type ELSE is_request-src_type ).
+    DATA lv_ts  TYPE timestampl.
+    DATA lv_msg TYPE zde_hddt_msg.
+    GET TIME STAMP FIELD lv_ts.
+    lv_msg = |Đã { COND string( WHEN i_status = zif_hddt_types=>gc_status-replaced
+                                THEN 'thay thế' ELSE 'điều chỉnh' ) }| &&
+             | bởi chứng từ { is_request-src_docno }/{ is_request-gjahr }|.
+
+    " Dòng bị ghi ở đây là hoá đơn GỐC — khoá khác với khoá chứng từ
+    " điều chỉnh mà ZCL_HDDT_SERVICE->EXECUTE đang giữ, nên phải khoá
+    " riêng. Khoá hụt thì KHÔNG ghi: đổi trạng thái hoá đơn gốc trong
+    " lúc người khác đang xử lý chính nó là ghi đè mù.
+    DATA(ls_org_key) = VALUE ty_inv_key( bukrs     = is_request-bukrs
+                                         gjahr     = lv_gjahr
+                                         src_type  = lv_type
+                                         src_docno = ls_adj-org_docno ).
+    IF lock_invoice( ls_org_key ) = abap_false.
+      RETURN.
+    ENDIF.
+
+    UPDATE ztb_hddt_inv
+      SET status     = @i_status,
+          message    = @lv_msg,
+          changed_by = @sy-uname,
+          changed_at = @lv_ts
+      WHERE bukrs     = @is_request-bukrs
+        AND gjahr     = @lv_gjahr
+        AND src_type  = @lv_type
+        AND src_docno = @ls_adj-org_docno.
+
+    unlock_invoice( ls_org_key ).
+    e_ok = abap_true.
+
+  ENDMETHOD.
+
+
+  METHOD mask_secrets.
+
+    r_text = i_text.
+    IF r_text IS INITIAL.
+      RETURN.
+    ENDIF.
+
+    DATA(lv_tags) = |{ zcl_hddt_config=>get_instance( )->get_param( gc_parm_mask_tags ) }|.
+    CONDENSE lv_tags NO-GAPS.
+    IF lv_tags IS INITIAL.
+      lv_tags = gc_default_tags.
+    ENDIF.
+
+    SPLIT lv_tags AT ',' INTO TABLE DATA(lt_tags).
+
+    LOOP AT lt_tags INTO DATA(lv_tag).
+      CONDENSE lv_tag NO-GAPS.
+      IF lv_tag IS INITIAL.
+        CONTINUE.
+      ENDIF.
+
+      " (1) JSON:  "password" : "gia tri"   ->  "password":"********"
+      REPLACE ALL OCCURRENCES OF PCRE
+              |"{ lv_tag }"\\s*:\\s*"[^"]*"|
+              IN r_text WITH |"{ lv_tag }":"{ gc_mask }"| IGNORING CASE.
+
+      " (2) JSON số / không ngoặc kép: "token": abc123
+      REPLACE ALL OCCURRENCES OF PCRE
+              |"{ lv_tag }"\\s*:\\s*[^",\{\}\\[\\]]+|
+              IN r_text WITH |"{ lv_tag }":"{ gc_mask }"| IGNORING CASE.
+
+      " (3) form-urlencoded:  password=abc&  ->  password=********&
+      REPLACE ALL OCCURRENCES OF PCRE
+              |(^\|&){ lv_tag }=[^&]*|
+              IN r_text WITH |$1{ lv_tag }={ gc_mask }| IGNORING CASE.
+
+      " (4) HTTP header:  Authorization: Basic xxx  ->  Authorization: ********
+      REPLACE ALL OCCURRENCES OF PCRE
+              |(^\|\\n){ lv_tag }\\s*:\\s*[^\\n]*|
+              IN r_text WITH |$1{ lv_tag }: { gc_mask }| IGNORING CASE.
+    ENDLOOP.
+
+  ENDMETHOD.
+
+
+  METHOD new_guid.
+
+    TRY.
+        r_guid = cl_system_uuid=>create_uuid_c32_static( ).
+      CATCH cx_uuid_error.
+        " Rất khó xảy ra; dự phòng bằng timestamp + user
+        DATA lv_ts TYPE timestampl.
+        GET TIME STAMP FIELD lv_ts.
+        r_guid = |{ lv_ts }{ sy-uname }|.
+        TRANSLATE r_guid TO UPPER CASE.
+    ENDTRY.
+
+  ENDMETHOD.
+
+
+  METHOD object_type_of.
+
+    CASE i_action.
+      WHEN zif_hddt_types=>gc_action-create_draft
+        OR zif_hddt_types=>gc_action-preview_draft
+        OR zif_hddt_types=>gc_action-delete_invoice.
+        r_type = 'DRAFT'.
+      WHEN zif_hddt_types=>gc_action-adjust_invoice.
+        r_type = 'ADJUST'.
+      WHEN zif_hddt_types=>gc_action-replace_invoice.
+        r_type = 'REPLACE'.
+      WHEN zif_hddt_types=>gc_action-search_invoice
+        OR zif_hddt_types=>gc_action-get_file.
+        r_type = 'SEARCH'.
+      WHEN zif_hddt_types=>gc_action-cancel_invoice
+        OR zif_hddt_types=>gc_action-wrong_notice.
+        r_type = 'CANCEL'.
+      WHEN OTHERS.
+        r_type = 'INVOICE'.
+    ENDCASE.
+    IF is_request-src_type = 'GOM'.
+      r_type = |{ r_type }_GOM|.
+    ENDIF.
+
+  ENDMETHOD.
+
+
+  METHOD read_invoice.
+
+    IF i_src_type IS NOT INITIAL.
+      SELECT SINGLE * FROM ztb_hddt_inv
+        WHERE bukrs     = @i_bukrs
+          AND gjahr     = @i_gjahr
+          AND src_type  = @i_src_type
+          AND src_docno = @i_src_docno
+        INTO @rs_inv.
+    ELSE.
+      SELECT SINGLE * FROM ztb_hddt_inv
+        WHERE bukrs     = @i_bukrs
+          AND gjahr     = @i_gjahr
+          AND src_docno = @i_src_docno
+        INTO @rs_inv.
+    ENDIF.
+
+    IF sy-subrc <> 0.
+      CLEAR rs_inv.
+    ENDIF.
+
+  ENDMETHOD.
+
+
   METHOD read_payload.
 
     SELECT SINGLE log_id, codepage, req_header, res_header, req_body, res_body
@@ -472,6 +813,217 @@ CLASS zcl_hddt_log IMPLEMENTATION.
                                                         i_encoding = lv_cp ).
     rs_payload-res_body   = lo_plat->xstring_to_string( i_data     = ls_db-res_body
                                                         i_encoding = lv_cp ).
+
+  ENDMETHOD.
+
+
+  METHOD read_rows.
+
+*   >>> Begin of change 20260928_30 F-DUBV TR S25K900131 - Review S25 R06 (DB trong vong lap)
+    " Doc dung khoa day du nhu SELECT SINGLE cua ENSURE_ROW (ke ca
+    " SRC_TYPE rong -> so sanh bang space, giong ENSURE_ROW)
+    DATA lt_key TYPE ty_t_inv_key.
+    lt_key = it_keys.
+    SORT lt_key BY bukrs gjahr src_type src_docno.
+    DELETE ADJACENT DUPLICATES FROM lt_key COMPARING bukrs gjahr src_type src_docno.
+    IF lt_key IS INITIAL.
+      RETURN.
+    ENDIF.
+    SELECT * FROM ztb_hddt_inv
+      FOR ALL ENTRIES IN @lt_key
+      WHERE bukrs     = @lt_key-bukrs
+        AND gjahr     = @lt_key-gjahr
+        AND src_type  = @lt_key-src_type
+        AND src_docno = @lt_key-src_docno
+      INTO TABLE @rt_inv.
+*   <<< End of change 20260928_30
+
+  ENDMETHOD.
+
+
+  METHOD reset_registry.
+
+    DATA(ls_inv) = ensure_row( is_request ).
+    CLEAR: ls_inv-template, ls_inv-serial, ls_inv-seq, ls_inv-issue_date,
+           ls_inv-cancel_date, ls_inv-mscqt, ls_inv-sec_code, ls_inv-inv_link,
+           ls_inv-prov_status, ls_inv-tax_status, ls_inv-mail_status, ls_inv-mail_date.
+    ls_inv-status     = zif_hddt_types=>gc_status-not_sent.
+    ls_inv-message    = i_message.
+    ls_inv-changed_by = sy-uname.
+    GET TIME STAMP FIELD ls_inv-changed_at.
+    MODIFY ztb_hddt_inv FROM ls_inv.
+
+  ENDMETHOD.
+
+
+  METHOD retire_invoice.
+
+    DATA(ls_inv) = ensure_row( is_request ).
+    CLEAR: ls_inv-template, ls_inv-serial, ls_inv-seq, ls_inv-mscqt,
+           ls_inv-sec_code, ls_inv-inv_link.
+    ls_inv-status = i_status.
+    IF i_message IS SUPPLIED AND i_message IS NOT INITIAL.
+      ls_inv-message = i_message.
+    ENDIF.
+    set_admin( EXPORTING i_new  = abap_false
+               CHANGING  cs_row = ls_inv ).
+    MODIFY ztb_hddt_inv FROM ls_inv.
+
+  ENDMETHOD.
+
+
+  METHOD retire_invoice_multi.
+
+*   >>> Begin of change 20260928_30 F-DUBV TR S25K900131 - Review S25 R06 (DB trong vong lap)
+    " Cung ket qua voi goi RETIRE_INVOICE lan luot tung khoa (khong khoa,
+    " doc dong so / tao dong toi thieu, xoa thong tin hoa don, doi trang
+    " thai). Khoa trung: lan sau thay dong lan truoc vua sua.
+    DATA ls_inv TYPE ztb_hddt_inv.
+
+    DATA(lt_inv) = read_rows( it_keys ).
+
+    LOOP AT it_keys ASSIGNING FIELD-SYMBOL(<fs_key>).
+      READ TABLE lt_inv INTO ls_inv
+           WITH TABLE KEY bukrs     = <fs_key>-bukrs
+                          gjahr     = <fs_key>-gjahr
+                          src_type  = <fs_key>-src_type
+                          src_docno = <fs_key>-src_docno.
+      DATA(lv_found) = xsdbool( sy-subrc = 0 ).
+      IF lv_found = abap_false.
+        ls_inv = init_row( VALUE #( bukrs     = <fs_key>-bukrs
+                                    gjahr     = <fs_key>-gjahr
+                                    src_type  = <fs_key>-src_type
+                                    src_docno = <fs_key>-src_docno ) ).
+      ENDIF.
+      CLEAR: ls_inv-template, ls_inv-serial, ls_inv-seq, ls_inv-mscqt,
+             ls_inv-sec_code, ls_inv-inv_link.
+      ls_inv-status = i_status.
+      IF i_message IS SUPPLIED AND i_message IS NOT INITIAL.
+        ls_inv-message = i_message.
+      ENDIF.
+      set_admin( EXPORTING i_new  = abap_false
+                 CHANGING  cs_row = ls_inv ).
+      IF lv_found = abap_true.
+        MODIFY TABLE lt_inv FROM ls_inv.
+      ELSE.
+        INSERT ls_inv INTO TABLE lt_inv.
+      ENDIF.
+    ENDLOOP.
+
+    " RETIRE_INVOICE cu cung khong kiem SY-SUBRC cua MODIFY (giu nguyen hanh vi)
+    IF lt_inv IS NOT INITIAL.
+      MODIFY ztb_hddt_inv FROM TABLE @lt_inv.
+    ENDIF.
+*   <<< End of change 20260928_30
+
+  ENDMETHOD.
+
+
+  METHOD save_edit.
+
+    " Gọi thẳng từ màn hình (sửa ngày/giờ/tên hàng), không nằm trong khoá
+    " của ZCL_HDDT_SERVICE, mà ENSURE_ROW là đọc-rồi-ghi. Không khoá thì
+    " sửa ngày của người này ghi đè tên hàng người kia vừa lưu.
+    DATA(ls_key) = key_of( is_request ).
+    IF lock_invoice( ls_key ) = abap_false.
+      zcx_hddt_error=>raise_text(
+        |Chứng từ { is_request-src_docno ALPHA = OUT } đang được user | &&
+        |{ sy-msgv1 } xử lý, chưa lưu được ngày/giờ/tên hàng.| ).
+    ENDIF.
+
+    DATA(ls_inv) = ensure_row( is_request ).
+    IF i_inv_date IS NOT INITIAL.
+      ls_inv-inv_date = i_inv_date.
+    ENDIF.
+    IF i_inv_time IS NOT INITIAL.
+      ls_inv-inv_time = i_inv_time.
+    ENDIF.
+    ls_inv-item_text  = i_item_text.
+    ls_inv-changed_by = sy-uname.
+    GET TIME STAMP FIELD ls_inv-changed_at.
+    MODIFY ztb_hddt_inv FROM ls_inv.
+
+    unlock_invoice( ls_key ).
+
+  ENDMETHOD.
+
+
+  METHOD save_edit_multi.
+
+*   >>> Begin of change 20260928_30 F-DUBV TR S25K900131 - Review S25 R06 (DB trong vong lap)
+    " Thu tu nhu SAVE_EDIT: KHOA truoc, DOC sau khi khoa, GHI, NHA khoa
+    " (nha truoc COMMIT cua cho goi - nhu SAVE_EDIT hien tai). Chi khac:
+    " khoa ca danh sach truoc, doc 1 lan, ghi 1 lan roi nha tat ca.
+    DATA lt_locked TYPE ty_t_inv_key.
+    DATA lt_req    TYPE zif_hddt_types=>ty_t_request.
+    DATA ls_inv    TYPE ztb_hddt_inv.
+    DATA lv_ts     TYPE timestampl.
+
+    CLEAR: e_count, e_error.
+
+    LOOP AT it_requests ASSIGNING FIELD-SYMBOL(<fs_req>).
+      DATA(ls_key) = key_of( <fs_req> ).
+      IF lock_invoice( ls_key ) = abap_false.
+        " Giu nguyen van ban message cua SAVE_EDIT (qua GET_TEXT_LONG nhu
+        " cho goi cu lam), bo qua dung dong nay, cac dong khac van luu
+        TRY.
+            zcx_hddt_error=>raise_text(
+              |Chứng từ { <fs_req>-src_docno ALPHA = OUT } đang được user | &&
+              |{ sy-msgv1 } xử lý, chưa lưu được ngày/giờ/tên hàng.| ).
+          CATCH zcx_hddt_error INTO DATA(lx_lock).
+            e_error = COND #( WHEN e_error IS INITIAL
+                              THEN lx_lock->get_text_long( )
+                              ELSE |{ e_error } / { lx_lock->get_text_long( ) }| ).
+        ENDTRY.
+        CONTINUE.
+      ENDIF.
+      APPEND ls_key   TO lt_locked.
+      APPEND <fs_req> TO lt_req.
+    ENDLOOP.
+
+    IF lt_req IS INITIAL.
+      RETURN.
+    ENDIF.
+
+    DATA(lt_inv) = read_rows( lt_locked ).
+
+    GET TIME STAMP FIELD lv_ts.
+    LOOP AT lt_req ASSIGNING <fs_req>.
+      READ TABLE lt_inv INTO ls_inv
+           WITH TABLE KEY bukrs     = <fs_req>-bukrs
+                          gjahr     = <fs_req>-gjahr
+                          src_type  = <fs_req>-src_type
+                          src_docno = <fs_req>-src_docno.
+      DATA(lv_found) = xsdbool( sy-subrc = 0 ).
+      IF lv_found = abap_false.
+        ls_inv = init_row( <fs_req> ).
+      ENDIF.
+      IF i_inv_date IS NOT INITIAL.
+        ls_inv-inv_date = i_inv_date.
+      ENDIF.
+      IF i_inv_time IS NOT INITIAL.
+        ls_inv-inv_time = i_inv_time.
+      ENDIF.
+      ls_inv-item_text  = i_item_text.
+      ls_inv-changed_by = sy-uname.
+      ls_inv-changed_at = lv_ts.
+      IF lv_found = abap_true.
+        MODIFY TABLE lt_inv FROM ls_inv.
+      ELSE.
+        INSERT ls_inv INTO TABLE lt_inv.
+      ENDIF.
+      e_count = e_count + 1.
+    ENDLOOP.
+
+    " SAVE_EDIT cu cung khong kiem SY-SUBRC cua MODIFY (giu nguyen hanh vi)
+    MODIFY ztb_hddt_inv FROM TABLE @lt_inv.
+
+    " Nha dung tung khoa da lay (UNLOCK_INVOICE nhu SAVE_EDIT, ke ca khoa
+    " trung lap - ENQUEUE cong don)
+    LOOP AT lt_locked INTO ls_key.
+      unlock_invoice( ls_key ).
+    ENDLOOP.
+*   <<< End of change 20260928_30
 
   ENDMETHOD.
 
@@ -612,38 +1164,142 @@ CLASS zcl_hddt_log IMPLEMENTATION.
     ENDLOOP.
 
     IF lt_item IS NOT INITIAL.
-      INSERT ztb_hddt_item FROM TABLE @lt_item.
+      " Dòng hàng sinh ra từ một lần gọi API (hoặc job nền chạy hàng loạt)
+    LOOP AT lt_item ASSIGNING FIELD-SYMBOL(<fs_adm>).
+      set_admin( CHANGING cs_row = <fs_adm> ).
+    ENDLOOP.
+
+    INSERT ztb_hddt_item FROM TABLE @lt_item.
     ENDIF.
 
   ENDMETHOD.
 
 
-  METHOD key_of.
+  METHOD set_admin.
 
-    rs_key = VALUE #( bukrs     = is_request-bukrs
-                      gjahr     = is_request-gjahr
-                      src_type  = is_request-src_type
-                      src_docno = is_request-src_docno ).
+    DATA lv_ts TYPE timestampl.
+    GET TIME STAMP FIELD lv_ts.
+
+    FIELD-SYMBOLS <fs> TYPE any.
+
+    IF i_new = abap_true.
+      ASSIGN COMPONENT 'CREATED_BY' OF STRUCTURE cs_row TO <fs>.
+      IF sy-subrc = 0 AND <fs> IS INITIAL.
+        <fs> = sy-uname.
+      ENDIF.
+      ASSIGN COMPONENT 'CREATED_AT' OF STRUCTURE cs_row TO <fs>.
+      IF sy-subrc = 0 AND <fs> IS INITIAL.
+        <fs> = lv_ts.
+      ENDIF.
+    ENDIF.
+
+    " Dòng sửa: luôn ghi đè người/lúc sửa gần nhất
+    ASSIGN COMPONENT 'CHANGED_BY' OF STRUCTURE cs_row TO <fs>.
+    IF sy-subrc = 0.
+      <fs> = sy-uname.
+    ENDIF.
+    ASSIGN COMPONENT 'CHANGED_AT' OF STRUCTURE cs_row TO <fs>.
+    IF sy-subrc = 0.
+      <fs> = lv_ts.
+    ENDIF.
 
   ENDMETHOD.
 
 
-  METHOD lock_invoice.
+  METHOD set_gom_no.
 
-    CALL FUNCTION 'ENQUEUE_EZTB_HDDT_INV'
-      EXPORTING
-        mode_ztb_hddt_inv = 'E'
-        mandt             = sy-mandt
-        bukrs             = is_key-bukrs
-        gjahr             = is_key-gjahr
-        src_type          = is_key-src_type
-        src_docno         = is_key-src_docno
-        _scope            = '1'
-      EXCEPTIONS
-        foreign_lock      = 1
-        system_failure    = 2
-        OTHERS            = 3.
-    r_ok = xsdbool( sy-subrc = 0 ).
+    " KHÔNG khoá ở đây: hai chỗ gọi duy nhất là ZCL_HDDT_GOM->CREATE và
+    " ->CANCEL, cả hai đã khoá sổ đăng ký của toàn bộ thành viên trước
+    " khi gọi. Thêm khoá nữa chỉ dựa vào cơ chế cộng dồn của ENQUEUE mà
+    " không cần thiết.
+    DATA(ls_inv) = ensure_row( is_request ).
+    ls_inv-gom_no     = i_gom_no.
+    ls_inv-changed_by = sy-uname.
+    GET TIME STAMP FIELD ls_inv-changed_at.
+    MODIFY ztb_hddt_inv FROM ls_inv.
+
+  ENDMETHOD.
+
+
+  METHOD set_gom_no_multi.
+
+*   >>> Begin of change 20260928_30 F-DUBV TR S25K900131 - Review S25 R06 (DB trong vong lap)
+    " Cung ket qua voi goi SET_GOM_NO lan luot tung request: dong da co
+    " -> giu nguyen, chi doi GOM_NO + CHANGED_*; dong chua co -> INIT_ROW.
+    " Request trung khoa: lan sau thay dong lan truoc vua sua (bang HASHED).
+    DATA lt_key TYPE ty_t_inv_key.
+    DATA ls_inv TYPE ztb_hddt_inv.
+    DATA lv_ts  TYPE timestampl.
+
+    LOOP AT it_requests ASSIGNING FIELD-SYMBOL(<fs_req>).
+      APPEND key_of( <fs_req> ) TO lt_key.
+    ENDLOOP.
+    DATA(lt_inv) = read_rows( lt_key ).
+
+    GET TIME STAMP FIELD lv_ts.
+    LOOP AT it_requests ASSIGNING <fs_req>.
+      READ TABLE lt_inv INTO ls_inv
+           WITH TABLE KEY bukrs     = <fs_req>-bukrs
+                          gjahr     = <fs_req>-gjahr
+                          src_type  = <fs_req>-src_type
+                          src_docno = <fs_req>-src_docno.
+      DATA(lv_found) = xsdbool( sy-subrc = 0 ).
+      IF lv_found = abap_false.
+        ls_inv = init_row( <fs_req> ).
+      ENDIF.
+      ls_inv-gom_no     = i_gom_no.
+      ls_inv-changed_by = sy-uname.
+      ls_inv-changed_at = lv_ts.
+      IF lv_found = abap_true.
+        MODIFY TABLE lt_inv FROM ls_inv.
+      ELSE.
+        INSERT ls_inv INTO TABLE lt_inv.
+      ENDIF.
+    ENDLOOP.
+
+    " SET_GOM_NO cu cung khong kiem SY-SUBRC cua MODIFY (giu nguyen hanh vi)
+    IF lt_inv IS NOT INITIAL.
+      MODIFY ztb_hddt_inv FROM TABLE @lt_inv.
+    ENDIF.
+*   <<< End of change 20260928_30
+
+  ENDMETHOD.
+
+
+  METHOD set_mail_status.
+
+    DATA(ls_inv) = ensure_row( is_request ).
+    ls_inv-mail_status = i_status.
+    ls_inv-mail_date   = sy-datum.
+    ls_inv-changed_by  = sy-uname.
+    GET TIME STAMP FIELD ls_inv-changed_at.
+    MODIFY ztb_hddt_inv FROM ls_inv.
+
+  ENDMETHOD.
+
+
+  METHOD set_status.
+
+    DATA(ls_inv) = ensure_row( is_request ).
+    ls_inv-status = i_status.
+    IF i_message IS SUPPLIED AND i_message IS NOT INITIAL.
+      ls_inv-message = i_message.
+    ENDIF.
+    set_admin( EXPORTING i_new  = abap_false
+               CHANGING  cs_row = ls_inv ).
+    MODIFY ztb_hddt_inv FROM ls_inv.
+
+  ENDMETHOD.
+
+
+  METHOD to_raw.
+
+    IF i_text IS INITIAL.
+      RETURN.
+    ENDIF.
+    r_data = zcl_hddt_platform=>get( )->string_to_xstring(
+                i_text     = i_text
+                i_encoding = CONV string( gc_codepage ) ).
 
   ENDMETHOD.
 
@@ -664,32 +1320,6 @@ CLASS zcl_hddt_log IMPLEMENTATION.
   ENDMETHOD.
 
 
-  METHOD lock_invoices.
-
-    DATA lt_done TYPE ty_t_inv_key.
-
-    CLEAR: e_ok, es_failed, e_user.
-
-    LOOP AT it_keys INTO DATA(ls_key).
-      IF ls_key-src_docno IS INITIAL.
-        CONTINUE.
-      ENDIF.
-      IF lock_invoice( ls_key ) = abap_false.
-        es_failed = ls_key.
-        e_user    = sy-msgv1.
-        " Nhả lại đúng những dòng vừa lấy. Không dùng DEQUEUE_ALL vì nó
-        " nhả cả khoá mà chỗ gọi đang giữ cho việc khác.
-        unlock_invoices( lt_done ).
-        RETURN.
-      ENDIF.
-      APPEND ls_key TO lt_done.
-    ENDLOOP.
-
-    e_ok = abap_true.
-
-  ENDMETHOD.
-
-
   METHOD unlock_invoices.
 
     LOOP AT it_keys INTO DATA(ls_key).
@@ -700,242 +1330,4 @@ CLASS zcl_hddt_log IMPLEMENTATION.
     ENDLOOP.
 
   ENDMETHOD.
-
-
-  METHOD mark_original.
-
-    CLEAR e_ok.
-
-    DATA(ls_adj) = is_request-invoice-adjust.
-    IF ls_adj-org_docno IS INITIAL.
-      e_ok = abap_true.            " không có hoá đơn gốc -> không có gì phải đánh dấu
-      RETURN.
-    ENDIF.
-
-    DATA(lv_gjahr) = COND gjahr( WHEN ls_adj-org_gjahr IS NOT INITIAL
-                                 THEN ls_adj-org_gjahr ELSE is_request-gjahr ).
-    DATA(lv_type)  = COND zde_hddt_srctype( WHEN ls_adj-org_src_type IS NOT INITIAL
-                                              THEN ls_adj-org_src_type ELSE is_request-src_type ).
-    DATA lv_ts  TYPE timestampl.
-    DATA lv_msg TYPE zde_hddt_msg.
-    GET TIME STAMP FIELD lv_ts.
-    lv_msg = |Đã { COND string( WHEN i_status = zif_hddt_types=>gc_status-replaced
-                                THEN 'thay thế' ELSE 'điều chỉnh' ) }| &&
-             | bởi chứng từ { is_request-src_docno }/{ is_request-gjahr }|.
-
-    " Dòng bị ghi ở đây là hoá đơn GỐC — khoá khác với khoá chứng từ
-    " điều chỉnh mà ZCL_HDDT_SERVICE->EXECUTE đang giữ, nên phải khoá
-    " riêng. Khoá hụt thì KHÔNG ghi: đổi trạng thái hoá đơn gốc trong
-    " lúc người khác đang xử lý chính nó là ghi đè mù.
-    DATA(ls_org_key) = VALUE ty_inv_key( bukrs     = is_request-bukrs
-                                         gjahr     = lv_gjahr
-                                         src_type  = lv_type
-                                         src_docno = ls_adj-org_docno ).
-    IF lock_invoice( ls_org_key ) = abap_false.
-      RETURN.
-    ENDIF.
-
-    UPDATE ztb_hddt_inv
-      SET status     = @i_status,
-          message    = @lv_msg,
-          changed_by = @sy-uname,
-          changed_at = @lv_ts
-      WHERE bukrs     = @is_request-bukrs
-        AND gjahr     = @lv_gjahr
-        AND src_type  = @lv_type
-        AND src_docno = @ls_adj-org_docno.
-
-    unlock_invoice( ls_org_key ).
-    e_ok = abap_true.
-
-  ENDMETHOD.
-
-
-  METHOD ensure_row.
-
-    SELECT SINGLE * FROM ztb_hddt_inv
-      WHERE bukrs     = @is_request-bukrs
-        AND gjahr     = @is_request-gjahr
-        AND src_type  = @is_request-src_type
-        AND src_docno = @is_request-src_docno
-      INTO @rs_inv.
-    IF sy-subrc = 0.
-      RETURN.
-    ENDIF.
-
-    CLEAR rs_inv.
-    rs_inv-bukrs      = is_request-bukrs.
-    rs_inv-gjahr      = is_request-gjahr.
-    rs_inv-src_type   = is_request-src_type.
-    rs_inv-src_docno  = is_request-src_docno.
-    rs_inv-status     = zif_hddt_types=>gc_status-not_sent.
-    rs_inv-buyer_code = is_request-invoice-buyer-code.
-    rs_inv-buyer_name = is_request-invoice-buyer-legal_name.
-    rs_inv-waers      = is_request-invoice-header-currency.
-    rs_inv-inv_date   = is_request-invoice-header-inv_date.
-    rs_inv-inv_time   = is_request-invoice-header-inv_time.
-    rs_inv-created_by = sy-uname.
-    GET TIME STAMP FIELD rs_inv-created_at.
-
-  ENDMETHOD.
-
-
-  METHOD set_gom_no.
-
-    " KHÔNG khoá ở đây: hai chỗ gọi duy nhất là ZCL_HDDT_GOM->CREATE và
-    " ->CANCEL, cả hai đã khoá sổ đăng ký của toàn bộ thành viên trước
-    " khi gọi. Thêm khoá nữa chỉ dựa vào cơ chế cộng dồn của ENQUEUE mà
-    " không cần thiết.
-    DATA(ls_inv) = ensure_row( is_request ).
-    ls_inv-gom_no     = i_gom_no.
-    ls_inv-changed_by = sy-uname.
-    GET TIME STAMP FIELD ls_inv-changed_at.
-    MODIFY ztb_hddt_inv FROM ls_inv.
-
-  ENDMETHOD.
-
-
-  METHOD save_edit.
-
-    " Gọi thẳng từ màn hình (sửa ngày/giờ/tên hàng), không nằm trong khoá
-    " của ZCL_HDDT_SERVICE, mà ENSURE_ROW là đọc-rồi-ghi. Không khoá thì
-    " sửa ngày của người này ghi đè tên hàng người kia vừa lưu.
-    DATA(ls_key) = key_of( is_request ).
-    IF lock_invoice( ls_key ) = abap_false.
-      zcx_hddt_error=>raise_text(
-        |Chứng từ { is_request-src_docno ALPHA = OUT } đang được user | &&
-        |{ sy-msgv1 } xử lý, chưa lưu được ngày/giờ/tên hàng.| ).
-    ENDIF.
-
-    DATA(ls_inv) = ensure_row( is_request ).
-    IF i_inv_date IS NOT INITIAL.
-      ls_inv-inv_date = i_inv_date.
-    ENDIF.
-    IF i_inv_time IS NOT INITIAL.
-      ls_inv-inv_time = i_inv_time.
-    ENDIF.
-    ls_inv-item_text  = i_item_text.
-    ls_inv-changed_by = sy-uname.
-    GET TIME STAMP FIELD ls_inv-changed_at.
-    MODIFY ztb_hddt_inv FROM ls_inv.
-
-    unlock_invoice( ls_key ).
-
-  ENDMETHOD.
-
-
-  METHOD attach_original.
-
-    DATA(ls_inv) = ensure_row( is_request ).
-    ls_inv-ref_docno   = i_org_docno.
-    ls_inv-ref_gjahr   = COND #( WHEN i_org_docno IS INITIAL THEN space ELSE i_org_gjahr ).
-    ls_inv-ref_srctype = COND #( WHEN i_org_docno IS INITIAL THEN space ELSE i_org_srctype ).
-    ls_inv-adj_type    = COND #( WHEN i_org_docno IS INITIAL THEN space ELSE i_adj_type ).
-    ls_inv-adj_dir     = COND #( WHEN i_org_docno IS INITIAL THEN space ELSE i_adj_dir ).
-    ls_inv-changed_by  = sy-uname.
-    GET TIME STAMP FIELD ls_inv-changed_at.
-    MODIFY ztb_hddt_inv FROM ls_inv.
-
-  ENDMETHOD.
-
-
-  METHOD set_mail_status.
-
-    DATA(ls_inv) = ensure_row( is_request ).
-    ls_inv-mail_status = i_status.
-    ls_inv-mail_date   = sy-datum.
-    ls_inv-changed_by  = sy-uname.
-    GET TIME STAMP FIELD ls_inv-changed_at.
-    MODIFY ztb_hddt_inv FROM ls_inv.
-
-  ENDMETHOD.
-
-
-  METHOD reset_registry.
-
-    DATA(ls_inv) = ensure_row( is_request ).
-    CLEAR: ls_inv-template, ls_inv-serial, ls_inv-seq, ls_inv-issue_date,
-           ls_inv-cancel_date, ls_inv-mscqt, ls_inv-sec_code, ls_inv-inv_link,
-           ls_inv-prov_status, ls_inv-tax_status, ls_inv-mail_status, ls_inv-mail_date.
-    ls_inv-status     = zif_hddt_types=>gc_status-not_sent.
-    ls_inv-message    = i_message.
-    ls_inv-changed_by = sy-uname.
-    GET TIME STAMP FIELD ls_inv-changed_at.
-    MODIFY ztb_hddt_inv FROM ls_inv.
-
-  ENDMETHOD.
-
-
-  METHOD object_type_of.
-
-    CASE i_action.
-      WHEN zif_hddt_types=>gc_action-create_draft
-        OR zif_hddt_types=>gc_action-preview_draft
-        OR zif_hddt_types=>gc_action-delete_invoice.
-        r_type = 'DRAFT'.
-      WHEN zif_hddt_types=>gc_action-adjust_invoice.
-        r_type = 'ADJUST'.
-      WHEN zif_hddt_types=>gc_action-replace_invoice.
-        r_type = 'REPLACE'.
-      WHEN zif_hddt_types=>gc_action-search_invoice
-        OR zif_hddt_types=>gc_action-get_file.
-        r_type = 'SEARCH'.
-      WHEN zif_hddt_types=>gc_action-cancel_invoice
-        OR zif_hddt_types=>gc_action-wrong_notice.
-        r_type = 'CANCEL'.
-      WHEN OTHERS.
-        r_type = 'INVOICE'.
-    ENDCASE.
-    IF is_request-src_type = 'GOM'.
-      r_type = |{ r_type }_GOM|.
-    ENDIF.
-
-  ENDMETHOD.
-
-
-  METHOD call_sink.
-
-    " Lớp sink của khách hàng (vd ánh xạ sang ZTB_INT_LOG của MAG).
-    " Lỗi ở sink không được làm hỏng nghiệp vụ -> bắt hết.
-    DATA(lv_class) = zcl_hddt_config=>get_instance( )->get_param(
-                       i_key = zif_hddt_types=>gc_parm-log_sink_class
-                       i_bukrs = is_request-bukrs ).
-    CONDENSE lv_class.
-    IF lv_class IS INITIAL.
-      RETURN.
-    ENDIF.
-    TRY.
-        DATA(lo_sink) = CAST zif_hddt_log_sink(
-                          zcl_hddt_factory=>create_object( CONV #( lv_class ) ) ).
-        lo_sink->write( is_log = is_log is_request = is_request is_result = is_result ).
-      CATCH cx_root.
-        " bỏ qua có chủ ý
-    ENDTRY.
-
-  ENDMETHOD.
-
-
-  METHOD read_invoice.
-
-    IF i_src_type IS NOT INITIAL.
-      SELECT SINGLE * FROM ztb_hddt_inv
-        WHERE bukrs     = @i_bukrs
-          AND gjahr     = @i_gjahr
-          AND src_type  = @i_src_type
-          AND src_docno = @i_src_docno
-        INTO @rs_inv.
-    ELSE.
-      SELECT SINGLE * FROM ztb_hddt_inv
-        WHERE bukrs     = @i_bukrs
-          AND gjahr     = @i_gjahr
-          AND src_docno = @i_src_docno
-        INTO @rs_inv.
-    ENDIF.
-
-    IF sy-subrc <> 0.
-      CLEAR rs_inv.
-    ENDIF.
-
-  ENDMETHOD.
-
 ENDCLASS.

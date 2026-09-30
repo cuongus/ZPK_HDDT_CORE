@@ -21,7 +21,8 @@
 *=====================================================================
 TYPE-POOLS icon.
 
-TABLES: bkpf, bseg, ztb_hddt_inv.
+" VBRK: tham số Billing Document lấy search help chuẩn của bảng
+TABLES: bkpf, bseg, vbrk, ztb_hddt_inv.
 
 *---------------------------------------------------------------------*
 * Dòng hiển thị trên ALV (FS mục 3.5)
@@ -33,16 +34,17 @@ TYPES: BEGIN OF gty_alv,
          bukrs       TYPE bukrs,
          gjahr       TYPE gjahr,
          src_type    TYPE zde_hddt_srctype,
+         biz_type    TYPE c LENGTH 20,    " Loại nghiệp vụ (FS v0.17 3.3)
          src_docno   TYPE zde_hddt_docno,
          gom_no      TYPE zde_hddt_docno, " số FI gom
          blart       TYPE blart,
          budat       TYPE dats,
          bldat       TYPE dats,
-         awkey       TYPE awkey,          " số billing SD tham chiếu
+         awkey       TYPE awkey,          " Billing Document (VBRK-VBELN)
          reversed    TYPE c LENGTH 4,     " icon: CT đã đảo / billing đã huỷ
          inv_date    TYPE dats,           " ngày phát hành (sửa được)
          inv_time    TYPE uzeit,          " giờ phát hành (sửa được)
-         buyer_code  TYPE kunnr,
+         buyer_code  TYPE zde_hddt_partner, " khách hàng hoặc NCC
          buyer_name  TYPE c LENGTH 120,
          buyer_addr  TYPE zde_hddt_name,
          buyer_tax   TYPE zde_hddt_taxcode,
@@ -64,15 +66,18 @@ TYPES: BEGIN OF gty_alv,
          mscqt       TYPE zde_hddt_mscqt,
          sec_code    TYPE zde_hddt_sec,
          inv_link    TYPE zde_hddt_link,
-         adj_code    TYPE c LENGTH 1,     " loại ĐC theo FS: 2/3/4/5
-         ref_docno   TYPE zde_hddt_docno, " số chứng từ gốc
-         ref_gjahr   TYPE gjahr,          " năm chứng từ gốc
+         adj_code    TYPE c LENGTH 1,     " loại ĐC chỉ đọc: 2 tăng / 3 giảm
          status      TYPE zde_hddt_status,
          status_txt  TYPE c LENGTH 60,
          tax_status  TYPE zde_hddt_rccode, " status_received của CQT
          msgty       TYPE symsgty,
          message     TYPE zde_hddt_msg,
          log_id      TYPE zde_hddt_logid,
+         " FS v0.17 mục 3.5: HAI CỘT CUỐI bên phải, chỉ đọc - bốc thẳng từ
+         " BSEG-REBZG / REBZJ. Là căn cứ duy nhất để nút Điều chỉnh / Thay
+         " thế xác định hoá đơn gốc.
+         ref_docno   TYPE zde_hddt_docno, " Source Accounting doc
+         ref_gjahr   TYPE gjahr,          " Source Fiscal year
        END OF gty_alv.
 TYPES gty_t_alv TYPE STANDARD TABLE OF gty_alv WITH EMPTY KEY.
 
@@ -213,7 +218,8 @@ CONSTANTS: BEGIN OF gc_fcode,
              deldrf  TYPE salv_de_function VALUE 'ZDELDRF',  " Hủy HĐ nháp
              issue   TYPE salv_de_function VALUE 'ZISSUE',   " Phát hành HĐ
              update  TYPE salv_de_function VALUE 'ZUPDATE',  " Cập nhật HĐ
-             adjref  TYPE salv_de_function VALUE 'ZADJREF',  " HĐ Điều chỉnh (gắn HĐ gốc)
+             adjref  TYPE salv_de_function VALUE 'ZADJREF',  " Điều chỉnh (tạo nháp)
+             repl    TYPE salv_de_function VALUE 'ZREPL',    " Thay thế (FS v0.17 3.6.5)
              mail    TYPE salv_de_function VALUE 'ZMAIL',    " Send Email
              gom     TYPE salv_de_function VALUE 'ZGOM',     " Gom HĐ
              ungom   TYPE salv_de_function VALUE 'ZUNGOM',   " Huỷ Gom HĐ
@@ -258,6 +264,10 @@ DATA gv_file_action TYPE i.
 *---------------------------------------------------------------------*
 * Màn hình chọn (FS mục 3.3)
 *---------------------------------------------------------------------*
+" Ngày để chọn dải số theo năm (FS v0.17 mục 3.2): Posting date From,
+" trống thì ngày hệ thống. Tính bằng FORM SERIAL_DATE.
+DATA gv_serial_date TYPE dats.
+
 SELECTION-SCREEN BEGIN OF BLOCK b1 WITH FRAME TITLE TEXT-b01.
   PARAMETERS     p_bukrs TYPE bukrs OBLIGATORY MEMORY ID buk.
   PARAMETERS     p_gjahr TYPE gjahr OBLIGATORY.
@@ -267,7 +277,7 @@ SELECTION-SCREEN BEGIN OF BLOCK b1 WITH FRAME TITLE TEXT-b01.
   SELECT-OPTIONS s_cpudt FOR bkpf-cpudt.
   SELECT-OPTIONS s_blart FOR bkpf-blart.
   " Số billing SD (BKPF-AWKEY khi nguồn FI, VBRK-VBELN khi nguồn SD)
-  SELECT-OPTIONS s_vbeln FOR bkpf-awkey.
+  SELECT-OPTIONS s_vbeln FOR vbrk-vbeln.
   SELECT-OPTIONS s_kunnr FOR bseg-kunnr.
   SELECT-OPTIONS s_usnam FOR bkpf-usnam.
   SELECT-OPTIONS s_seq   FOR ztb_hddt_inv-seq.

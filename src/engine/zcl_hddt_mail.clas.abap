@@ -58,17 +58,7 @@ ENDCLASS.
 
 
 
-CLASS zcl_hddt_mail IMPLEMENTATION.
-
-  METHOD param.
-
-    r_value = zcl_hddt_config=>get_instance( )->get_param( i_key   = i_key
-                                                           i_bukrs = i_bukrs ).
-    IF r_value IS INITIAL.
-      r_value = i_default.
-    ENDIF.
-
-  ENDMETHOD.
+CLASS ZCL_HDDT_MAIL IMPLEMENTATION.
 
 
   METHOD is_allowed.
@@ -84,6 +74,17 @@ CLASS zcl_hddt_mail IMPLEMENTATION.
         RETURN.
       ENDIF.
     ENDLOOP.
+
+  ENDMETHOD.
+
+
+  METHOD param.
+
+    r_value = zcl_hddt_config=>get_instance( )->get_param( i_key   = i_key
+                                                           i_bukrs = i_bukrs ).
+    IF r_value IS INITIAL.
+      r_value = i_default.
+    ENDIF.
 
   ENDMETHOD.
 
@@ -209,5 +210,4 @@ CLASS zcl_hddt_mail IMPLEMENTATION.
     ENDTRY.
 
   ENDMETHOD.
-
 ENDCLASS.

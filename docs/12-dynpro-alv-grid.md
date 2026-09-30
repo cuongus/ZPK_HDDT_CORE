@@ -48,7 +48,7 @@ Status `ZSALV_HDDT` tạo trước đó không còn dùng, xoá được.
 
 ## 3. Kiểm tra sau khi activate
 
-1. Chạy `ZFI001`, chọn công ty và năm, Execute.
+1. Chạy `ZHD001`, chọn công ty và năm, Execute.
 2. Màn hình danh sách hiện ra, thanh công cụ của **grid** có 12 nút nghiệp vụ
    chia ba nhóm, cách nhau bằng dấu phân cách.
 3. Chọn một dòng rồi bấm `Xem payload`: pop-up nội dung JSON, không gọi API.

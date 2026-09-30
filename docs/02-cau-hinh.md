@@ -1,6 +1,6 @@
 # 02 — Hướng dẫn cấu hình
 
-Transaction: **`ZFI002`** (nhấn đôi vào bảng để bảo trì).
+Transaction: **`ZHD002`** (nhấn đôi vào bảng để bảo trì).
 
 Thứ tự cấu hình khi triển khai mới đúng bằng thứ tự các mục dưới đây.
 

@@ -24,13 +24,7 @@ ENDCLASS.
 
 
 
-CLASS zcl_hddt_plat_classic IMPLEMENTATION.
-
-  METHOD zif_hddt_platform~newline.
-
-    r_char = cl_abap_char_utilities=>newline.
-
-  ENDMETHOD.
+CLASS ZCL_HDDT_PLAT_CLASSIC IMPLEMENTATION.
 
 
   METHOD zif_hddt_platform~carriage_return.
@@ -40,9 +34,13 @@ CLASS zcl_hddt_plat_classic IMPLEMENTATION.
   ENDMETHOD.
 
 
-  METHOD zif_hddt_platform~tab.
+  METHOD zif_hddt_platform~decode_base64.
 
-    r_char = cl_abap_char_utilities=>horizontal_tab.
+    TRY.
+        r_data = cl_http_utility=>decode_x_base64( i_encoded ).
+      CATCH cx_root.
+        CLEAR r_data.
+    ENDTRY.
 
   ENDMETHOD.
 
@@ -54,15 +52,16 @@ CLASS zcl_hddt_plat_classic IMPLEMENTATION.
   ENDMETHOD.
 
 
-  METHOD zif_hddt_platform~xstring_to_string.
+  METHOD zif_hddt_platform~get_time_zone.
 
-    TRY.
-        cl_abap_conv_in_ce=>create( encoding = CONV abap_encoding( i_encoding )
-          )->convert( EXPORTING input = i_data
-                      IMPORTING data  = r_text ).
-      CATCH cx_root.
-        CLEAR r_text.
-    ENDTRY.
+    r_tzone = sy-zonlo.
+
+  ENDMETHOD.
+
+
+  METHOD zif_hddt_platform~newline.
+
+    r_char = cl_abap_char_utilities=>newline.
 
   ENDMETHOD.
 
@@ -80,21 +79,22 @@ CLASS zcl_hddt_plat_classic IMPLEMENTATION.
   ENDMETHOD.
 
 
-  METHOD zif_hddt_platform~decode_base64.
+  METHOD zif_hddt_platform~tab.
+
+    r_char = cl_abap_char_utilities=>horizontal_tab.
+
+  ENDMETHOD.
+
+
+  METHOD zif_hddt_platform~xstring_to_string.
 
     TRY.
-        r_data = cl_http_utility=>decode_x_base64( i_encoded ).
+        cl_abap_conv_in_ce=>create( encoding = CONV abap_encoding( i_encoding )
+          )->convert( EXPORTING input = i_data
+                      IMPORTING data  = r_text ).
       CATCH cx_root.
-        CLEAR r_data.
+        CLEAR r_text.
     ENDTRY.
 
   ENDMETHOD.
-
-
-  METHOD zif_hddt_platform~get_time_zone.
-
-    r_tzone = sy-zonlo.
-
-  ENDMETHOD.
-
 ENDCLASS.

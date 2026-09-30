@@ -232,6 +232,22 @@ INTERFACE zif_hddt_types
            stjah     TYPE gjahr,
            fkart     TYPE fkart,
            xcancel   TYPE abap_bool,
+           "! FS v0.17 muc 3.5 / 3.6.4 / 3.6.5: so va nam chung tu ke toan
+           "! GOC, ke toan dien san vao dong cong no khi hach toan chung tu
+           "! dieu chinh / thay the. Day la CAN CU DUY NHAT de hai nut
+           "! "Dieu chinh" va "Thay the" xac dinh hoa don goc - khong con
+           "! pop-up cho nguoi dung nhap tay.
+           rebzg     TYPE rebzg,
+           rebzj     TYPE gjahr,
+           "! Chung tu huy cua cap chung tu dao (BKPF-AWREF_REV), dung de
+           "! loai ca cap khoi ALV theo FS v0.17 muc 3.3
+           awref_rev TYPE awref_rev,
+           "! Nhom 2 - hoa don dau vao tra lai hang nha cung cap
+           lifnr     TYPE lifnr,
+           ebeln     TYPE ebeln,
+           bsart     TYPE bsart,
+           "! So chung tu ban hang (VBRK-VBELN). Khac trong => huy bang VF11
+           bill_doc  TYPE vbeln_vf,
          END OF ty_src_info.
 
 *---------------------------------------------------------------------*
@@ -326,6 +342,69 @@ INTERFACE zif_hddt_types
                cancelled  TYPE zde_hddt_status VALUE '80',
                error      TYPE zde_hddt_status VALUE '90',
              END OF gc_status.
+
+*---------------------------------------------------------------------*
+* Huy chung tu ke toan bang CHUC NANG CHUAN cua SAP (FS v0.17 3.6.2, 3.6.5)
+* Chuong trinh KHONG tu viet logic dao chung tu.
+*---------------------------------------------------------------------*
+  "! Che do huy chung tu: xem GC_REV_MODE
+  TYPES ty_rev_mode TYPE c LENGTH 4.
+  "! Phuong an xu ly khi bam nut "Hủy HĐ nháp": xem GC_DELDRAFT
+  TYPES ty_deldraft TYPE c LENGTH 1.
+
+  TYPES: BEGIN OF ty_reversal,
+           "! Che do huy. Suy ra tu nguon goc chung tu (cot Billing
+           "! Document va BKPF-AWTYP), khong cho nguoi dung chon.
+           mode        TYPE ty_rev_mode,
+           "! Ly do huy - mac dinh '01' (huy cung ky ghi am) nhung CHO SUA:
+           "! ly do 01 chi dung duoc khi ky ke toan cua chung tu goc con mo.
+           reason      TYPE char2,
+           "! Ngay hach toan cua chung tu dao. De trong = SAP tu quyet.
+           post_date   TYPE dats,
+           "! Chung tu Billing can huy (che do VF11)
+           bill_doc    TYPE vbeln_vf,
+           "! Chung tu ke toan / hoa don mua hang can huy
+           bukrs       TYPE bukrs,
+           belnr       TYPE belnr_d,
+           gjahr       TYPE gjahr,
+           awtyp       TYPE awtyp,
+           awkey       TYPE awkey,
+         END OF ty_reversal.
+
+  TYPES: BEGIN OF ty_rev_result,
+           success TYPE abap_bool,
+           "! Nguyen van message loi chuan cua VF11 / MR8M / FB08 - FS bat
+           "! buoc tra lai dung chu cua chuc nang chuan, khong dien giai lai
+           message TYPE zde_hddt_msg,
+           msgid   TYPE symsgid,
+           msgno   TYPE symsgno,
+           "! Chung tu dao do SAP sinh ra
+           rev_doc TYPE belnr_d,
+           rev_yr  TYPE gjahr,
+           "! Ky ke toan cua chung tu goc da dong -> goi y chon lai ly do huy
+           closed  TYPE abap_bool,
+         END OF ty_rev_result.
+
+  CONSTANTS: BEGIN OF gc_rev_mode,
+               "! Chung tu ban hang: cot Billing Document khac trong, gom ca
+               "! ban ghi Nhom 3 chua co chung tu ke toan va chung tu ke toan
+               "! co BKPF-AWTYP = 'VBRK'. KHONG dung FB08 cho truong hop nay.
+               vf11 TYPE ty_rev_mode VALUE 'VF11',
+               "! Hoa don mua hang tu MIRO (BKPF-AWTYP = 'RMRP')
+               mr8m TYPE ty_rev_mode VALUE 'MR8M',
+               "! Chung tu ke toan FI hach toan truc tiep (AWTYP = 'BKPF')
+               fb08 TYPE ty_rev_mode VALUE 'FB08',
+             END OF gc_rev_mode.
+
+  CONSTANTS: BEGIN OF gc_deldraft,
+               "! Phuong an 1 - chi xoa hoa don nhap tren FPT eInvoice
+               draft_only TYPE ty_deldraft VALUE '1',
+               "! Phuong an 2 - xoa nhap DONG THOI huy chung tu ke toan
+               with_doc   TYPE ty_deldraft VALUE '2',
+             END OF gc_deldraft.
+
+  "! Ly do huy mac dinh: 01 - huy cung ky ghi am
+  CONSTANTS gc_rev_reason_def TYPE char2 VALUE '01' ##NO_TEXT.
 
   CONSTANTS: BEGIN OF gc_adj_type,
                original TYPE zde_hddt_adjtype VALUE '1',

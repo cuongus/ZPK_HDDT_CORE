@@ -72,7 +72,7 @@ SE41 → status ZGRID_HDDT, type Normal screen
 
 Chi tiết và cách kiểm tra: [docs/12-dynpro-alv-grid.md](12-dynpro-alv-grid.md).
 
-### Table Maintenance Generator (bắt buộc để `ZFI002` chạy)
+### Table Maintenance Generator (bắt buộc để `ZHD002` chạy)
 
 Với **từng bảng** `ZTB_HDDT_*`: SE11 → nhập tên bảng → Display →
 menu **Utilities → Table Maintenance Generator**
@@ -87,7 +87,7 @@ Overview screen     : 100, 200, 300, ... (tăng dần cho từng bảng)
 Bảng chỉ để xem (`ZTB_HDDT_INV`, `_ITEM`, `_LOG`, `_TOK`) vẫn nên sinh để tra
 cứu bằng SM30, nhưng đặt authorization group hạn chế hơn.
 
-> Nếu chưa sinh maintenance dialog, `ZFI002` báo lỗi
+> Nếu chưa sinh maintenance dialog, `ZHD002` báo lỗi
 > *"Bảng &1 chưa sinh Table Maintenance Generator"* — đúng thông điệp, không dump.
 
 **Ngoại lệ — 3 bảng có field kiểu STRING / RAWSTRING không sinh được TMG.**
@@ -96,9 +96,9 @@ Table Maintenance Generator, không phải lỗi bảng.
 
 | Bảng | Field | Cách bảo trì / tra cứu thay thế |
 |---|---|---|
-| `ZTB_HDDT_TPL` | `TPL_BODY` (STRING) | nhấn đôi dòng "Mẫu payload" trong `ZFI002` → nhập nhà cung cấp + mã nghiệp vụ → nạp file JSON từ máy trạm |
-| `ZTB_HDDT_TOK` | `TOKEN` (STRING) | nhấn đôi dòng "Token" trong `ZFI002` → xem bộ đệm bằng ALV, hỏi xoá để buộc đăng nhập lại |
-| `ZTB_HDDT_LOG` | `REQ_HEADER`, `RES_HEADER`, `REQ_BODY`, `RES_BODY` (RAWSTRING) | nhấn đôi dòng "Log API" trong `ZFI002` → mở `ZPG_HDDT_LOG` |
+| `ZTB_HDDT_TPL` | `TPL_BODY` (STRING) | nhấn đôi dòng "Mẫu payload" trong `ZHD002` → nhập nhà cung cấp + mã nghiệp vụ → nạp file JSON từ máy trạm |
+| `ZTB_HDDT_TOK` | `TOKEN` (STRING) | nhấn đôi dòng "Token" trong `ZHD002` → xem bộ đệm bằng ALV, hỏi xoá để buộc đăng nhập lại |
+| `ZTB_HDDT_LOG` | `REQ_HEADER`, `RES_HEADER`, `REQ_BODY`, `RES_BODY` (RAWSTRING) | nhấn đôi dòng "Log API" trong `ZHD002` → mở `ZPG_HDDT_LOG` |
 
 Vậy chỉ sinh TMG cho 11 bảng còn lại. Mẫu payload nạp trực tiếp vào bảng nên
 **không đi theo transport**, phải nạp lại trên từng hệ QAS và PRD.
@@ -167,7 +167,7 @@ Cách này không dùng được proxy có xác thực.
 ## 6. Cấu hình nghiệp vụ tối thiểu để chạy
 
 ```
-ZFI002 →
+ZHD002 →
 
 1. ZTB_HDDT_CRED
    PROVIDER=FPT  BUKRS=1000  INV_TYPE=(trống)  CONNID=UAT
@@ -189,7 +189,7 @@ ZFI002 →
 ## 7. Chạy thử
 
 ```
-ZFI001
+ZHD001
   Mã công ty     : 1000
   Năm tài chính  : 2026
   Số chứng từ    : <1 chứng từ bán hàng đã ghi sổ>
@@ -206,7 +206,7 @@ ZFI001
 
 | Object | Dùng cho |
 |---|---|
-| `S_TCODE` | `ZFI001`, `ZFI002` |
+| `S_TCODE` | `ZHD001`, `ZHD002` |
 | `F_BKPF_BUK` (`BUKRS`, `ACTVT=03`) | chương trình kiểm tra ở `AT SELECTION-SCREEN ON p_bukrs` |
 | `S_RFC` / `S_ICF` | gọi RFC destination loại G |
 | `S_TABU_DIS` / `S_TABU_NAM` | bảo trì bảng cấu hình — tách nhóm riêng cho `ZTB_HDDT_CRED` |
@@ -239,7 +239,7 @@ Xem checklist go-live ở [07-doi-nha-cung-cap.md](07-doi-nha-cung-cap.md) §5.
 Mô tả Transport Request theo chuẩn nội bộ: `TEAM\ACCOUNT\mô tả` — ví dụ
 `DEV\CUONGUS\Tich hop hoa don dien tu ZPK_HDDT_CORE` (`DEV` team phát triển,
 `BA` team nghiệp vụ; mô tả ngắn, phần quan trọng lên đầu vì một số màn hình cắt
-còn 60 ký tự). Tcode `ZFI001`–`ZFI003`: kiểm SE93 xem số còn trống trước khi
+còn 60 ký tự). Tcode `ZHD001`–`ZHD003`: kiểm SE93 xem số còn trống trước khi
 import, nếu trùng thì đổi số trong `tools/gen_meta.py` (TRANS) và tài liệu.
 
 Trước khi release TR đầu tiên, cập nhật cột **Transport** trong khối changelog ở

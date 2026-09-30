@@ -242,6 +242,14 @@ def read_class(path):
                 if typ.lower() in ("c", "n", "x", "p", "clike", "csequence",
                                    "xsequence", "numeric", "simple", "any",
                                    "data", "table", "decfloat"):
+                    # Ngoai le khai tuong minh: helper co chu dinh chay tren
+                    # nhieu kieu dong bang ASSIGN COMPONENT thi BUOC phai
+                    # generic. Phai ghi "generic OK" ngay tren dong khai bao
+                    # kem ly do, khong phai bo qua lang le.
+                    if ("generic OK" in s
+                            or any("generic OK" in l
+                                   for l in lines[max(0, ln - 6):ln])):
+                        continue
                     report("D", path, ln, "%s.%s: %s %s TYPE %s là kiểu generic"
                            % (name, mname, kw.upper(), pname, typ))
 

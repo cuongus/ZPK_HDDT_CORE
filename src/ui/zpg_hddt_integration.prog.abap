@@ -49,6 +49,10 @@
 *                         trong một năm cho một đơn vị: tham số p_seri,
 *                         tự điền theo cờ Mặc định (ZTB_HDDT_CRED-XDEFAULT),
 *                         F4 danh sách dải số, kiểm tra giá trị gõ tay
+* 1.4       23/09/2026    cuongus - CuongUS        S25K900131  FS v0.17:
+*                         dải số theo Company code + năm (năm của Posting
+*                         date), nút Thay thế tách riêng, huỷ chứng từ
+*                         chuẩn VF11/MR8M/FB08, tham số Billing Document
 *=====================================================================
 REPORT zpg_hddt_integration MESSAGE-ID zms_hddt.
 
@@ -74,10 +78,15 @@ AT SELECTION-SCREEN ON p_prov.
   IF p_prov IS INITIAL.
     RETURN.
   ENDIF.
+  " Biến khai trong event là biến TOÀN CỤC của chương trình: phải xoá
+  " trước, không thì SELECT hụt giữ nguyên X của lần kiểm trước và một
+  " nhà cung cấp sai vẫn lọt qua.
+  DATA lv_exists TYPE abap_bool.
+  CLEAR lv_exists.
   SELECT SINGLE @abap_true FROM ztb_hddt_prov
     WHERE provider = @p_prov
       AND xactive  = @abap_true
-    INTO @DATA(lv_exists).
+    INTO @lv_exists.
   IF lv_exists <> abap_true.
     MESSAGE e005(zms_hddt) WITH p_prov.
   ENDIF.
@@ -87,11 +96,15 @@ AT SELECTION-SCREEN OUTPUT.
   " năm, nên màn hình tự điền dải đã tích Mặc định trong ZTB_HDDT_CRED.
   " CHỈ điền khi ô còn trống: người dùng xoá đi để chọn dải khác thì
   " không được đè lại, nếu không họ không bao giờ đổi được dải số.
+  " FS v0.17 mục 3.2: dải số mặc định theo Company code VÀ NĂM - năm
+  " lấy theo Posting date (giá trị From), trống thì năm hiện hành.
   IF p_seri IS INITIAL AND p_bukrs IS NOT INITIAL.
+    PERFORM serial_date CHANGING gv_serial_date.
     p_seri = zcl_hddt_config=>get_instance( )->get_default_serial(
                i_provider = p_prov
                i_bukrs    = p_bukrs
-               i_inv_type = p_ityp ).
+               i_inv_type = p_ityp
+               i_date     = gv_serial_date ).
   ENDIF.
 
 AT SELECTION-SCREEN ON VALUE-REQUEST FOR p_seri.
@@ -101,10 +114,12 @@ AT SELECTION-SCREEN ON p_seri.
   " Gõ tay một dải số không có trong cấu hình thì chặn ngay tại màn hình
   " tham số, đừng để chạy tới lúc gọi API mới báo.
   IF p_seri IS NOT INITIAL AND p_bukrs IS NOT INITIAL.
+    PERFORM serial_date CHANGING gv_serial_date.
     DATA(lt_cred) = zcl_hddt_config=>get_instance( )->get_cred_list(
                       i_provider = p_prov
                       i_bukrs    = p_bukrs
-                      i_inv_type = p_ityp ).
+                      i_inv_type = p_ityp
+                      i_date     = gv_serial_date ).
     IF NOT line_exists( lt_cred[ serial = p_seri ] ).
       MESSAGE e050(zms_hddt) WITH p_seri p_bukrs.
     ENDIF.

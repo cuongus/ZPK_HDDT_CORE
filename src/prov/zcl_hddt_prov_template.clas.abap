@@ -92,51 +92,17 @@ ENDCLASS.
 
 
 
-CLASS zcl_hddt_prov_template IMPLEMENTATION.
-
-  METHOD zif_hddt_provider~get_id.
-
-    r_provider = gc_provider.
-
-  ENDMETHOD.
+CLASS ZCL_HDDT_PROV_TEMPLATE IMPLEMENTATION.
 
 
-  METHOD get_template.
+  METHOD escape_xml.
 
-    SELECT SINGLE tpl_body, xactive
-      FROM ztb_hddt_tpl
-      WHERE provider = @( zif_hddt_provider~get_id( ) )
-        AND action   = @i_action
-      INTO @DATA(ls_tpl).
-    IF sy-subrc <> 0.
-      zcx_hddt_error=>raise_text(
-        |Chưa khai mẫu payload cho { zif_hddt_provider~get_id( ) } / | &&
-        |nghiệp vụ { i_action } trong bảng ZTB_HDDT_TPL.| ).
-    ENDIF.
-
-    IF ls_tpl-xactive <> abap_true.
-      zcx_hddt_error=>raise_text(
-        |Mẫu payload { zif_hddt_provider~get_id( ) }/{ i_action } đang bị khoá.| ).
-    ENDIF.
-
-    r_tpl = ls_tpl-tpl_body.
-
-  ENDMETHOD.
-
-
-  METHOD zif_hddt_provider~build_payload.
-
-    DATA(lv_tpl) = get_template( i_action ).
-
-    " Bước 1: bung các khối lặp {{#items}} / {{#taxes}}
-    DATA(lv_body) = expand_loops( i_template = lv_tpl
-                                  is_request  = is_request
-                                  is_cred     = is_cred ).
-
-    " Bước 2: thay các placeholder còn lại ở cấp hoá đơn
-    r_payload = render( i_template = lv_body
-                         is_request  = is_request
-                         is_cred     = is_cred ).
+    r_escaped = i_value.
+    REPLACE ALL OCCURRENCES OF `&`  IN r_escaped WITH `&amp;`.
+    REPLACE ALL OCCURRENCES OF `<`  IN r_escaped WITH `&lt;`.
+    REPLACE ALL OCCURRENCES OF `>`  IN r_escaped WITH `&gt;`.
+    REPLACE ALL OCCURRENCES OF `"`  IN r_escaped WITH `&quot;`.
+    REPLACE ALL OCCURRENCES OF `'`  IN r_escaped WITH `&apos;`.
 
   ENDMETHOD.
 
@@ -205,6 +171,29 @@ CLASS zcl_hddt_prov_template IMPLEMENTATION.
                  && substring( val = r_result off = lv_pos2 + strlen( lv_close ) ).
       ENDWHILE.
     ENDDO.
+
+  ENDMETHOD.
+
+
+  METHOD get_template.
+
+    SELECT SINGLE tpl_body, xactive
+      FROM ztb_hddt_tpl
+      WHERE provider = @( zif_hddt_provider~get_id( ) )
+        AND action   = @i_action
+        INTO @DATA(ls_tpl).
+    IF sy-subrc <> 0.
+      zcx_hddt_error=>raise_text(
+        |Chưa khai mẫu payload cho { zif_hddt_provider~get_id( ) } / | &&
+        |nghiệp vụ { i_action } trong bảng ZTB_HDDT_TPL.| ).
+    ENDIF.
+
+    IF ls_tpl-xactive <> abap_true.
+      zcx_hddt_error=>raise_text(
+        |Mẫu payload { zif_hddt_provider~get_id( ) }/{ i_action } đang bị khoá.| ).
+    ENDIF.
+
+    r_tpl = ls_tpl-tpl_body.
 
   ENDMETHOD.
 
@@ -375,14 +364,26 @@ CLASS zcl_hddt_prov_template IMPLEMENTATION.
   ENDMETHOD.
 
 
-  METHOD escape_xml.
+  METHOD zif_hddt_provider~build_payload.
 
-    r_escaped = i_value.
-    REPLACE ALL OCCURRENCES OF `&`  IN r_escaped WITH `&amp;`.
-    REPLACE ALL OCCURRENCES OF `<`  IN r_escaped WITH `&lt;`.
-    REPLACE ALL OCCURRENCES OF `>`  IN r_escaped WITH `&gt;`.
-    REPLACE ALL OCCURRENCES OF `"`  IN r_escaped WITH `&quot;`.
-    REPLACE ALL OCCURRENCES OF `'`  IN r_escaped WITH `&apos;`.
+    DATA(lv_tpl) = get_template( i_action ).
+
+    " Bước 1: bung các khối lặp {{#items}} / {{#taxes}}
+    DATA(lv_body) = expand_loops( i_template = lv_tpl
+                                  is_request  = is_request
+                                  is_cred     = is_cred ).
+
+    " Bước 2: thay các placeholder còn lại ở cấp hoá đơn
+    r_payload = render( i_template = lv_body
+                         is_request  = is_request
+                         is_cred     = is_cred ).
+
+  ENDMETHOD.
+
+
+  METHOD zif_hddt_provider~get_id.
+
+    r_provider = gc_provider.
 
   ENDMETHOD.
 
@@ -433,5 +434,4 @@ CLASS zcl_hddt_prov_template IMPLEMENTATION.
     ENDIF.
 
   ENDMETHOD.
-
 ENDCLASS.

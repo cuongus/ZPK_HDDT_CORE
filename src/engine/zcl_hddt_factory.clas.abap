@@ -63,7 +63,44 @@ ENDCLASS.
 
 
 
-CLASS zcl_hddt_factory IMPLEMENTATION.
+CLASS ZCL_HDDT_FACTORY IMPLEMENTATION.
+
+
+  METHOD create_instance.
+
+    DATA lv_class TYPE zde_hddt_class.
+
+    lv_class = i_class.
+    TRANSLATE lv_class TO UPPER CASE.
+
+    TRY.
+        ro_object = mt_cache[ classname = lv_class ]-instance.
+        RETURN.
+      CATCH cx_sy_itab_line_not_found.
+        " chưa có trong cache -> tạo mới
+    ENDTRY.
+
+    TRY.
+        CREATE OBJECT ro_object TYPE (lv_class).
+      CATCH cx_sy_create_object_error INTO DATA(lx_create).
+        zcx_hddt_error=>raise_text(
+          i_text     = |Không tạo được đối tượng của lớp { lv_class }: | &&
+                        |{ lx_create->get_text( ) }|
+          io_previous = lx_create ).
+    ENDTRY.
+
+    INSERT VALUE ty_cache( classname = lv_class
+                           instance  = ro_object ) INTO TABLE mt_cache.
+
+  ENDMETHOD.
+
+
+  METHOD create_object.
+
+    ro_object = create_instance( i_class ).
+
+  ENDMETHOD.
+
 
   METHOD get_provider.
 
@@ -117,47 +154,10 @@ CLASS zcl_hddt_factory IMPLEMENTATION.
   ENDMETHOD.
 
 
-  METHOD create_instance.
-
-    DATA lv_class TYPE zde_hddt_class.
-
-    lv_class = i_class.
-    TRANSLATE lv_class TO UPPER CASE.
-
-    TRY.
-        ro_object = mt_cache[ classname = lv_class ]-instance.
-        RETURN.
-      CATCH cx_sy_itab_line_not_found.
-        " chưa có trong cache -> tạo mới
-    ENDTRY.
-
-    TRY.
-        CREATE OBJECT ro_object TYPE (lv_class).
-      CATCH cx_sy_create_object_error INTO DATA(lx_create).
-        zcx_hddt_error=>raise_text(
-          i_text     = |Không tạo được đối tượng của lớp { lv_class }: | &&
-                        |{ lx_create->get_text( ) }|
-          io_previous = lx_create ).
-    ENDTRY.
-
-    INSERT VALUE ty_cache( classname = lv_class
-                           instance  = ro_object ) INTO TABLE mt_cache.
-
-  ENDMETHOD.
-
-
-  METHOD create_object.
-
-    ro_object = create_instance( i_class ).
-
-  ENDMETHOD.
-
-
   METHOD reset.
 
     CLEAR mt_cache.
     zcl_hddt_config=>get_instance( )->invalidate( ).
 
   ENDMETHOD.
-
 ENDCLASS.

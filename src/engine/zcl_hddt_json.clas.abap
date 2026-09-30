@@ -194,144 +194,7 @@ ENDCLASS.
 
 
 
-CLASS zcl_hddt_json IMPLEMENTATION.
-
-  METHOD class_constructor.
-
-    " Lấy qua lớp nền tảng: CL_ABAP_CHAR_UTILITIES không được phép trong
-    " ABAP Cloud, mà lớp này phải dùng chung cho cả hai nền tảng.
-    DATA(lo_plat) = zcl_hddt_platform=>get( ).
-    gv_cr  = lo_plat->carriage_return( ).
-    gv_lf  = lo_plat->newline( ).
-    gv_tab = lo_plat->tab( ).
-
-  ENDMETHOD.
-
-
-*---------------------------------------------------------------------*
-* WRITER
-*---------------------------------------------------------------------*
-  METHOD constructor.
-
-    mv_skip_initial = i_skip_initial.
-
-  ENDMETHOD.
-
-
-  METHOD open_level.
-
-    APPEND abap_false TO mt_has_item.
-
-  ENDMETHOD.
-
-
-  METHOD close_level.
-
-    DATA(lv_last) = lines( mt_has_item ).
-    IF lv_last > 0.
-      DELETE mt_has_item INDEX lv_last.
-    ENDIF.
-
-  ENDMETHOD.
-
-
-  METHOD separator.
-
-    DATA(lv_last) = lines( mt_has_item ).
-    IF lv_last = 0.
-      RETURN.
-    ENDIF.
-    IF mt_has_item[ lv_last ] = abap_true.
-      mv_buffer = mv_buffer && `,`.
-    ELSE.
-      mt_has_item[ lv_last ] = abap_true.
-    ENDIF.
-
-  ENDMETHOD.
-
-
-  METHOD write_name.
-
-    IF i_name IS NOT INITIAL.
-      mv_buffer = mv_buffer && gc_quote && i_name && gc_quote && `:`.
-    ENDIF.
-
-  ENDMETHOD.
-
-
-  METHOD begin_object.
-
-    separator( ).
-    write_name( i_name ).
-    mv_buffer = mv_buffer && `{`.
-    open_level( ).
-    ro_self = me.
-
-  ENDMETHOD.
-
-
-  METHOD end_object.
-
-    close_level( ).
-    mv_buffer = mv_buffer && `}`.
-    ro_self = me.
-
-  ENDMETHOD.
-
-
-  METHOD begin_array.
-
-    separator( ).
-    write_name( i_name ).
-    mv_buffer = mv_buffer && `[`.
-    open_level( ).
-    ro_self = me.
-
-  ENDMETHOD.
-
-
-  METHOD end_array.
-
-    close_level( ).
-    mv_buffer = mv_buffer && `]`.
-    ro_self = me.
-
-  ENDMETHOD.
-
-
-  METHOD add_string.
-
-    ro_self = me.
-
-    DATA(lv_text) = escape( i_value ).
-    IF lv_text IS INITIAL
-       AND mv_skip_initial = abap_true
-       AND i_force = abap_false.
-      RETURN.
-    ENDIF.
-
-    separator( ).
-    write_name( i_name ).
-    mv_buffer = mv_buffer && gc_quote && lv_text && gc_quote.
-
-  ENDMETHOD.
-
-
-  METHOD add_number.
-
-    ro_self = me.
-
-    DATA(lv_num) = format_number( i_value    = i_value
-                                  i_decimals = i_decimals ).
-    IF lv_num = `0` AND i_force = abap_false.
-      RETURN.
-    ENDIF.
-
-    separator( ).
-    write_name( i_name ).
-    mv_buffer = mv_buffer && lv_num.
-
-  ENDMETHOD.
+CLASS ZCL_HDDT_JSON IMPLEMENTATION.
 
 
   METHOD add_bool.
@@ -355,12 +218,40 @@ CLASS zcl_hddt_json IMPLEMENTATION.
   ENDMETHOD.
 
 
+  METHOD add_ext.
+
+    ro_self = me.
+    LOOP AT it_ext ASSIGNING FIELD-SYMBOL(<fs_ext>).
+      add_string( i_name  = <fs_ext>-name
+                  i_value = <fs_ext>-value ).
+    ENDLOOP.
+
+  ENDMETHOD.
+
+
   METHOD add_null.
 
     separator( ).
     write_name( i_name ).
     mv_buffer = mv_buffer && `null`.
     ro_self = me.
+
+  ENDMETHOD.
+
+
+  METHOD add_number.
+
+    ro_self = me.
+
+    DATA(lv_num) = format_number( i_value    = i_value
+                                  i_decimals = i_decimals ).
+    IF lv_num = `0` AND i_force = abap_false.
+      RETURN.
+    ENDIF.
+
+    separator( ).
+    write_name( i_name ).
+    mv_buffer = mv_buffer && lv_num.
 
   ENDMETHOD.
 
@@ -379,13 +270,190 @@ CLASS zcl_hddt_json IMPLEMENTATION.
   ENDMETHOD.
 
 
-  METHOD add_ext.
+  METHOD add_result.
+
+    APPEND VALUE #( name = i_path value = i_value ) TO mt_result.
+
+  ENDMETHOD.
+
+
+  METHOD add_string.
 
     ro_self = me.
-    LOOP AT it_ext ASSIGNING FIELD-SYMBOL(<fs_ext>).
-      add_string( i_name  = <fs_ext>-name
-                  i_value = <fs_ext>-value ).
-    ENDLOOP.
+
+    DATA(lv_text) = escape( i_value ).
+    IF lv_text IS INITIAL
+       AND mv_skip_initial = abap_true
+       AND i_force = abap_false.
+      RETURN.
+    ENDIF.
+
+    separator( ).
+    write_name( i_name ).
+    mv_buffer = mv_buffer && gc_quote && lv_text && gc_quote.
+
+  ENDMETHOD.
+
+
+  METHOD begin_array.
+
+    separator( ).
+    write_name( i_name ).
+    mv_buffer = mv_buffer && `[`.
+    open_level( ).
+    ro_self = me.
+
+  ENDMETHOD.
+
+
+  METHOD begin_object.
+
+    separator( ).
+    write_name( i_name ).
+    mv_buffer = mv_buffer && `{`.
+    open_level( ).
+    ro_self = me.
+
+  ENDMETHOD.
+
+
+  METHOD class_constructor.
+
+    " Lấy qua lớp nền tảng: CL_ABAP_CHAR_UTILITIES không được phép trong
+    " ABAP Cloud, mà lớp này phải dùng chung cho cả hai nền tảng.
+    DATA(lo_plat) = zcl_hddt_platform=>get( ).
+    gv_cr  = lo_plat->carriage_return( ).
+    gv_lf  = lo_plat->newline( ).
+    gv_tab = lo_plat->tab( ).
+
+  ENDMETHOD.
+
+
+  METHOD close_level.
+
+    DATA(lv_last) = lines( mt_has_item ).
+    IF lv_last > 0.
+      DELETE mt_has_item INDEX lv_last.
+    ENDIF.
+
+  ENDMETHOD.
+
+
+  METHOD constructor.
+
+    mv_skip_initial = i_skip_initial.
+
+  ENDMETHOD.
+
+
+  METHOD cur.
+
+    IF mv_pos < mv_len.
+      r_char = substring( val = mv_src off = mv_pos len = 1 ).
+    ELSE.
+      CLEAR r_char.
+    ENDIF.
+
+  ENDMETHOD.
+
+
+  METHOD do_parse.
+
+    CLEAR mt_result.
+    mv_src = i_json.
+    mv_len = strlen( mv_src ).
+    mv_pos = 0.
+
+    IF mv_len = 0.
+      RETURN.
+    ENDIF.
+
+    skip_ws( ).
+    p_value( `` ).
+    rt_values = mt_result.
+
+  ENDMETHOD.
+
+
+  METHOD end_array.
+
+    close_level( ).
+    mv_buffer = mv_buffer && `]`.
+    ro_self = me.
+
+  ENDMETHOD.
+
+
+  METHOD end_object.
+
+    close_level( ).
+    mv_buffer = mv_buffer && `}`.
+    ro_self = me.
+
+  ENDMETHOD.
+
+
+  METHOD escape.
+
+    r_escaped = |{ i_value }|.
+
+    " Thứ tự quan trọng: backslash phải xử lý trước tiên.
+    REPLACE ALL OCCURRENCES OF `\` IN r_escaped WITH `\\`.
+    REPLACE ALL OCCURRENCES OF `"` IN r_escaped WITH `\"`.
+    REPLACE ALL OCCURRENCES OF gv_cr && gv_lf IN r_escaped WITH `\r\n`.
+    REPLACE ALL OCCURRENCES OF gv_cr  IN r_escaped WITH `\r`.
+    REPLACE ALL OCCURRENCES OF gv_lf  IN r_escaped WITH `\n`.
+    REPLACE ALL OCCURRENCES OF gv_tab IN r_escaped WITH `\t`.
+
+  ENDMETHOD.
+
+
+  METHOD format_number.
+
+    DATA lv_packed TYPE p LENGTH 16 DECIMALS 6.
+    DATA lv_dec    TYPE i.
+
+    TRY.
+        lv_packed = i_value.
+      CATCH cx_sy_conversion_error.
+        r_text = `0`.
+        RETURN.
+    ENDTRY.
+
+    lv_dec = i_decimals.
+    IF lv_dec < 0.
+      lv_dec = 0.
+    ELSEIF lv_dec > 6.
+      lv_dec = 6.
+    ENDIF.
+
+    lv_packed = round( val = lv_packed dec = lv_dec ).
+
+    " NUMBER = RAW luôn cho dấu '.' làm phân cách thập phân và dấu trừ ở
+    " PHÍA TRƯỚC, độc lập cài đặt của người dùng — đúng yêu cầu JSON.
+    " Bản trước dùng WRITE ... TO + NO-GROUPING + đổi ',' thành '.' + tự
+    " đảo dấu; cách đó phụ thuộc user setting VÀ không được phép trong
+    " ABAP Cloud. NUMBER = RAW giải quyết cả hai vấn đề.
+    r_text = |{ lv_packed NUMBER = RAW }|.
+    CONDENSE r_text NO-GAPS.
+
+    " Bỏ các số 0 vô nghĩa ở cuối phần thập phân
+    IF r_text CS `.`.
+      WHILE strlen( r_text ) > 1 AND substring( val = r_text
+                                                 off = strlen( r_text ) - 1
+                                                 len = 1 ) = `0`.
+        r_text = substring( val = r_text len = strlen( r_text ) - 1 ).
+      ENDWHILE.
+      IF strlen( r_text ) > 1 AND substring( val = r_text
+                                              off = strlen( r_text ) - 1
+                                              len = 1 ) = `.`.
+        r_text = substring( val = r_text len = strlen( r_text ) - 1 ).
+      ENDIF.
+    ENDIF.
+
+    IF r_text IS INITIAL OR r_text = `-0` OR r_text = `-`.
+      r_text = `0`.
+    ENDIF.
 
   ENDMETHOD.
 
@@ -393,6 +461,57 @@ CLASS zcl_hddt_json IMPLEMENTATION.
   METHOD get_json.
 
     r_json = mv_buffer.
+
+  ENDMETHOD.
+
+
+  METHOD get_value.
+
+    TRY.
+        r_value = it_values[ name = i_path ]-value.
+      CATCH cx_sy_itab_line_not_found.
+        CLEAR r_value.
+    ENDTRY.
+
+  ENDMETHOD.
+
+
+  METHOD get_value_by_name.
+
+    DATA(lv_suffix) = `/` && i_name.
+
+    LOOP AT it_values ASSIGNING FIELD-SYMBOL(<fs_val>).
+      IF <fs_val>-name = i_name.
+        r_value = <fs_val>-value.
+        RETURN.
+      ENDIF.
+    ENDLOOP.
+
+    LOOP AT it_values ASSIGNING <fs_val>.
+      IF strlen( <fs_val>-name ) > strlen( lv_suffix )
+         AND substring( val = <fs_val>-name
+                        off = strlen( <fs_val>-name ) - strlen( lv_suffix )
+                        len = strlen( lv_suffix ) ) = lv_suffix.
+        r_value = <fs_val>-value.
+        RETURN.
+      ENDIF.
+    ENDLOOP.
+
+  ENDMETHOD.
+
+
+  METHOD open_level.
+
+    APPEND abap_false TO mt_has_item.
+
+  ENDMETHOD.
+
+
+  METHOD parse.
+*---------------------------------------------------------------------*
+* PARSER
+*---------------------------------------------------------------------*
+    rt_values = NEW zcl_hddt_json( )->do_parse( i_json ).
 
   ENDMETHOD.
 
@@ -465,148 +584,40 @@ CLASS zcl_hddt_json IMPLEMENTATION.
   ENDMETHOD.
 
 
-  METHOD escape.
+  METHOD p_array.
 
-    r_escaped = |{ i_value }|.
+    DATA lv_idx TYPE i.
 
-    " Thứ tự quan trọng: backslash phải xử lý trước tiên.
-    REPLACE ALL OCCURRENCES OF `\` IN r_escaped WITH `\\`.
-    REPLACE ALL OCCURRENCES OF `"` IN r_escaped WITH `\"`.
-    REPLACE ALL OCCURRENCES OF gv_cr && gv_lf IN r_escaped WITH `\r\n`.
-    REPLACE ALL OCCURRENCES OF gv_cr  IN r_escaped WITH `\r`.
-    REPLACE ALL OCCURRENCES OF gv_lf  IN r_escaped WITH `\n`.
-    REPLACE ALL OCCURRENCES OF gv_tab IN r_escaped WITH `\t`.
+    mv_pos = mv_pos + 1.                     " bỏ qua '['
+    skip_ws( ).
 
-  ENDMETHOD.
-
-
-  METHOD format_number.
-
-    DATA lv_packed TYPE p LENGTH 16 DECIMALS 6.
-    DATA lv_dec    TYPE i.
-
-    TRY.
-        lv_packed = i_value.
-      CATCH cx_sy_conversion_error.
-        r_text = `0`.
-        RETURN.
-    ENDTRY.
-
-    lv_dec = i_decimals.
-    IF lv_dec < 0.
-      lv_dec = 0.
-    ELSEIF lv_dec > 6.
-      lv_dec = 6.
-    ENDIF.
-
-    lv_packed = round( val = lv_packed dec = lv_dec ).
-
-    " NUMBER = RAW luôn cho dấu '.' làm phân cách thập phân và dấu trừ ở
-    " PHÍA TRƯỚC, độc lập cài đặt của người dùng — đúng yêu cầu JSON.
-    " Bản trước dùng WRITE ... TO + NO-GROUPING + đổi ',' thành '.' + tự
-    " đảo dấu; cách đó phụ thuộc user setting VÀ không được phép trong
-    " ABAP Cloud. NUMBER = RAW giải quyết cả hai vấn đề.
-    r_text = |{ lv_packed NUMBER = RAW }|.
-    CONDENSE r_text NO-GAPS.
-
-    " Bỏ các số 0 vô nghĩa ở cuối phần thập phân
-    IF r_text CS `.`.
-      WHILE strlen( r_text ) > 1 AND substring( val = r_text
-                                                 off = strlen( r_text ) - 1
-                                                 len = 1 ) = `0`.
-        r_text = substring( val = r_text len = strlen( r_text ) - 1 ).
-      ENDWHILE.
-      IF strlen( r_text ) > 1 AND substring( val = r_text
-                                              off = strlen( r_text ) - 1
-                                              len = 1 ) = `.`.
-        r_text = substring( val = r_text len = strlen( r_text ) - 1 ).
-      ENDIF.
-    ENDIF.
-
-    IF r_text IS INITIAL OR r_text = `-0` OR r_text = `-`.
-      r_text = `0`.
-    ENDIF.
-
-  ENDMETHOD.
-
-
-*---------------------------------------------------------------------*
-* PARSER
-*---------------------------------------------------------------------*
-  METHOD parse.
-
-    rt_values = NEW zcl_hddt_json( )->do_parse( i_json ).
-
-  ENDMETHOD.
-
-
-  METHOD do_parse.
-
-    CLEAR mt_result.
-    mv_src = i_json.
-    mv_len = strlen( mv_src ).
-    mv_pos = 0.
-
-    IF mv_len = 0.
+    IF cur( ) = `]`.
+      mv_pos = mv_pos + 1.
+      add_result( i_path = i_path && `#count` i_value = `0` ).
       RETURN.
     ENDIF.
 
-    skip_ws( ).
-    p_value( `` ).
-    rt_values = mt_result.
+    DO.
+      p_value( |{ i_path }[{ lv_idx }]| ).
+      lv_idx = lv_idx + 1.
 
-  ENDMETHOD.
-
-
-  METHOD cur.
-
-    IF mv_pos < mv_len.
-      r_char = substring( val = mv_src off = mv_pos len = 1 ).
-    ELSE.
-      CLEAR r_char.
-    ENDIF.
-
-  ENDMETHOD.
-
-
-  METHOD skip_ws.
-
-    WHILE mv_pos < mv_len.
-      DATA(lv_c) = substring( val = mv_src off = mv_pos len = 1 ).
-      IF lv_c = ` ` OR lv_c = gv_tab
-                    OR lv_c = gv_lf
-                    OR lv_c = gv_cr.
+      skip_ws( ).
+      IF cur( ) = `,`.
         mv_pos = mv_pos + 1.
-      ELSE.
+        CONTINUE.
+      ENDIF.
+
+      IF cur( ) = `]`.
+        mv_pos = mv_pos + 1.
         EXIT.
       ENDIF.
-    ENDWHILE.
 
-  ENDMETHOD.
+      zcx_hddt_error=>raise_text(
+        |JSON không hợp lệ: chờ ',' hoặc ']' tại vị trí { mv_pos }.| ).
+    ENDDO.
 
-
-  METHOD add_result.
-
-    APPEND VALUE #( name = i_path value = i_value ) TO mt_result.
-
-  ENDMETHOD.
-
-
-  METHOD p_value.
-
-    skip_ws( ).
-    DATA(lv_c) = cur( ).
-
-    CASE lv_c.
-      WHEN `{`.
-        p_object( i_path ).
-      WHEN `[`.
-        p_array( i_path ).
-      WHEN `"`.
-        add_result( i_path = i_path i_value = p_string( ) ).
-      WHEN OTHERS.
-        add_result( i_path = i_path i_value = p_scalar( ) ).
-    ENDCASE.
+    add_result( i_path  = i_path && `#count`
+                i_value = |{ lv_idx }| ).
 
   ENDMETHOD.
 
@@ -658,40 +669,24 @@ CLASS zcl_hddt_json IMPLEMENTATION.
   ENDMETHOD.
 
 
-  METHOD p_array.
+  METHOD p_scalar.
 
-    DATA lv_idx TYPE i.
-
-    mv_pos = mv_pos + 1.                     " bỏ qua '['
-    skip_ws( ).
-
-    IF cur( ) = `]`.
-      mv_pos = mv_pos + 1.
-      add_result( i_path = i_path && `#count` i_value = `0` ).
-      RETURN.
-    ENDIF.
-
-    DO.
-      p_value( |{ i_path }[{ lv_idx }]| ).
-      lv_idx = lv_idx + 1.
-
-      skip_ws( ).
-      IF cur( ) = `,`.
-        mv_pos = mv_pos + 1.
-        CONTINUE.
-      ENDIF.
-
-      IF cur( ) = `]`.
-        mv_pos = mv_pos + 1.
+    " Số, true, false, null — đọc tới dấu phân cách gần nhất.
+    WHILE mv_pos < mv_len.
+      DATA(lv_c) = substring( val = mv_src off = mv_pos len = 1 ).
+      IF lv_c = `,` OR lv_c = `}` OR lv_c = `]`
+         OR lv_c = ` ` OR lv_c = gv_lf
+         OR lv_c = gv_tab
+         OR lv_c = gv_cr.
         EXIT.
       ENDIF.
+      r_value = r_value && lv_c.
+      mv_pos   = mv_pos + 1.
+    ENDWHILE.
 
-      zcx_hddt_error=>raise_text(
-        |JSON không hợp lệ: chờ ',' hoặc ']' tại vị trí { mv_pos }.| ).
-    ENDDO.
-
-    add_result( i_path  = i_path && `#count`
-                i_value = |{ lv_idx }| ).
+    IF r_value = `null`.
+      CLEAR r_value.
+    ENDIF.
 
   ENDMETHOD.
 
@@ -752,60 +747,61 @@ CLASS zcl_hddt_json IMPLEMENTATION.
   ENDMETHOD.
 
 
-  METHOD p_scalar.
+  METHOD p_value.
 
-    " Số, true, false, null — đọc tới dấu phân cách gần nhất.
-    WHILE mv_pos < mv_len.
-      DATA(lv_c) = substring( val = mv_src off = mv_pos len = 1 ).
-      IF lv_c = `,` OR lv_c = `}` OR lv_c = `]`
-         OR lv_c = ` ` OR lv_c = gv_lf
-         OR lv_c = gv_tab
-         OR lv_c = gv_cr.
-        EXIT.
-      ENDIF.
-      r_value = r_value && lv_c.
-      mv_pos   = mv_pos + 1.
-    ENDWHILE.
+    skip_ws( ).
+    DATA(lv_c) = cur( ).
 
-    IF r_value = `null`.
-      CLEAR r_value.
+    CASE lv_c.
+      WHEN `{`.
+        p_object( i_path ).
+      WHEN `[`.
+        p_array( i_path ).
+      WHEN `"`.
+        add_result( i_path = i_path i_value = p_string( ) ).
+      WHEN OTHERS.
+        add_result( i_path = i_path i_value = p_scalar( ) ).
+    ENDCASE.
+
+  ENDMETHOD.
+
+
+  METHOD separator.
+
+    DATA(lv_last) = lines( mt_has_item ).
+    IF lv_last = 0.
+      RETURN.
+    ENDIF.
+    IF mt_has_item[ lv_last ] = abap_true.
+      mv_buffer = mv_buffer && `,`.
+    ELSE.
+      mt_has_item[ lv_last ] = abap_true.
     ENDIF.
 
   ENDMETHOD.
 
 
-  METHOD get_value.
+  METHOD skip_ws.
 
-    TRY.
-        r_value = it_values[ name = i_path ]-value.
-      CATCH cx_sy_itab_line_not_found.
-        CLEAR r_value.
-    ENDTRY.
+    WHILE mv_pos < mv_len.
+      DATA(lv_c) = substring( val = mv_src off = mv_pos len = 1 ).
+      IF lv_c = ` ` OR lv_c = gv_tab
+                    OR lv_c = gv_lf
+                    OR lv_c = gv_cr.
+        mv_pos = mv_pos + 1.
+      ELSE.
+        EXIT.
+      ENDIF.
+    ENDWHILE.
 
   ENDMETHOD.
 
 
-  METHOD get_value_by_name.
+  METHOD write_name.
 
-    DATA(lv_suffix) = `/` && i_name.
-
-    LOOP AT it_values ASSIGNING FIELD-SYMBOL(<fs_val>).
-      IF <fs_val>-name = i_name.
-        r_value = <fs_val>-value.
-        RETURN.
-      ENDIF.
-    ENDLOOP.
-
-    LOOP AT it_values ASSIGNING <fs_val>.
-      IF strlen( <fs_val>-name ) > strlen( lv_suffix )
-         AND substring( val = <fs_val>-name
-                        off = strlen( <fs_val>-name ) - strlen( lv_suffix )
-                        len = strlen( lv_suffix ) ) = lv_suffix.
-        r_value = <fs_val>-value.
-        RETURN.
-      ENDIF.
-    ENDLOOP.
+    IF i_name IS NOT INITIAL.
+      mv_buffer = mv_buffer && gc_quote && i_name && gc_quote && `:`.
+    ENDIF.
 
   ENDMETHOD.
-
 ENDCLASS.

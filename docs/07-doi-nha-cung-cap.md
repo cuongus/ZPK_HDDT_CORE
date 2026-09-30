@@ -71,7 +71,7 @@ trống là **dùng chung**, không phải khai lại cho FPT.
 ## 2. Kiểm thử song song (khuyến nghị 1–2 tuần trước cắt chuyển)
 
 ```
-ZFI001
+ZHD001
   Mã công ty  : 1000
   Nhà cung cấp: FPT          ← ghi đè cấu hình, chỉ trong lần chạy này
   ☑ Test run
@@ -92,17 +92,17 @@ thử nhà cung cấp mới **mà không đổi cấu hình toàn hệ**.
 
 ```
 1. Đóng sổ nghiệp vụ HĐĐT của ngày cuối cùng với Viettel:
-   ZFI001 → lọc s_stat = 00 (chưa tích hợp) → phát hành hết
+   ZHD001 → lọc s_stat = 00 (chưa tích hợp) → phát hành hết
    → kiểm tra không còn dòng đèn vàng / đỏ
 
 2. Đổi tham số ACTIVE_PROVIDER:
-   ZFI002 → ZTB_HDDT_PARM
+   ZHD002 → ZTB_HDDT_PARM
      PROVIDER=(trống)  BUKRS=1000
      PARM_KEY=ACTIVE_PROVIDER   PARM_VAL=FPT
 
 3. Xoá bộ đệm cấu hình của các session đang mở:
-   - Người dùng thoát và vào lại ZFI001, HOẶC
-   - ZFI002 tự gọi ZCL_HDDT_FACTORY=>RESET( ) sau mỗi lần bảo trì
+   - Người dùng thoát và vào lại ZHD001, HOẶC
+   - ZHD002 tự gọi ZCL_HDDT_FACTORY=>RESET( ) sau mỗi lần bảo trì
 
 4. Phát hành 1 hoá đơn thật, kiểm tra:
    - ZTB_HDDT_INV: PROVIDER = FPT, SERIAL/SEQ có giá trị, STATUS = 40

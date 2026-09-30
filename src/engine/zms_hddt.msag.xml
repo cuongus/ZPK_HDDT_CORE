@@ -120,7 +120,7 @@
      <SPRSL>E</SPRSL>
      <ARBGB>ZMS_HDDT</ARBGB>
      <MSGNR>018</MSGNR>
-     <TEXT>Không thể huỷ hoá đơn đã phát hành, dùng chức năng điều chỉnh hoặc thay thế</TEXT>
+     <TEXT>Không thể huỷ HĐ đã phát hành, dùng chức năng điều chỉnh/thay thế</TEXT>
     </T100>
     <T100>
      <SPRSL>E</SPRSL>
@@ -331,6 +331,114 @@
      <ARBGB>ZMS_HDDT</ARBGB>
      <MSGNR>053</MSGNR>
      <TEXT>Bộ đệm token đang được user &amp;1 xử lý</TEXT>
+    </T100>
+    <T100>
+     <SPRSL>E</SPRSL>
+     <ARBGB>ZMS_HDDT</ARBGB>
+     <MSGNR>054</MSGNR>
+     <TEXT>Không có hóa đơn gốc để điều chỉnh</TEXT>
+    </T100>
+    <T100>
+     <SPRSL>E</SPRSL>
+     <ARBGB>ZMS_HDDT</ARBGB>
+     <MSGNR>055</MSGNR>
+     <TEXT>Không có hóa đơn gốc để thay thế</TEXT>
+    </T100>
+    <T100>
+     <SPRSL>E</SPRSL>
+     <ARBGB>ZMS_HDDT</ARBGB>
+     <MSGNR>056</MSGNR>
+     <TEXT>Chỉ chọn 1 chứng từ điều chỉnh</TEXT>
+    </T100>
+    <T100>
+     <SPRSL>E</SPRSL>
+     <ARBGB>ZMS_HDDT</ARBGB>
+     <MSGNR>057</MSGNR>
+     <TEXT>Chỉ chọn 1 chứng từ thay thế</TEXT>
+    </T100>
+    <T100>
+     <SPRSL>E</SPRSL>
+     <ARBGB>ZMS_HDDT</ARBGB>
+     <MSGNR>058</MSGNR>
+     <TEXT>Hoá đơn gom đã phát hành, không gỡ gom được - dùng nút Thay thế</TEXT>
+    </T100>
+    <T100>
+     <SPRSL>E</SPRSL>
+     <ARBGB>ZMS_HDDT</ARBGB>
+     <MSGNR>059</MSGNR>
+     <TEXT>Hoá đơn gom gồm &amp;1 chứng từ thành phần, tất cả sẽ bị huỷ. Chắc chắn?</TEXT>
+    </T100>
+    <T100>
+     <SPRSL>E</SPRSL>
+     <ARBGB>ZMS_HDDT</ARBGB>
+     <MSGNR>060</MSGNR>
+     <TEXT>Chứng từ gốc &amp;1-&amp;2 sẽ bị huỷ bằng &amp;3 trước khi thay thế. Xác nhận?</TEXT>
+    </T100>
+    <T100>
+     <SPRSL>E</SPRSL>
+     <ARBGB>ZMS_HDDT</ARBGB>
+     <MSGNR>061</MSGNR>
+     <TEXT>Không huỷ được chứng từ gốc &amp;1-&amp;2: &amp;3</TEXT>
+    </T100>
+    <T100>
+     <SPRSL>E</SPRSL>
+     <ARBGB>ZMS_HDDT</ARBGB>
+     <MSGNR>062</MSGNR>
+     <TEXT>Đã huỷ hoá đơn nháp và huỷ chứng từ kế toán</TEXT>
+    </T100>
+    <T100>
+     <SPRSL>E</SPRSL>
+     <ARBGB>ZMS_HDDT</ARBGB>
+     <MSGNR>063</MSGNR>
+     <TEXT>Đã huỷ hoá đơn nháp nhưng không huỷ được chứng từ: &amp;1</TEXT>
+    </T100>
+    <T100>
+     <SPRSL>E</SPRSL>
+     <ARBGB>ZMS_HDDT</ARBGB>
+     <MSGNR>064</MSGNR>
+     <TEXT>Kỳ kế toán chứng từ gốc đã đóng, chọn lại Lý do huỷ và Ngày huỷ</TEXT>
+    </T100>
+    <T100>
+     <SPRSL>E</SPRSL>
+     <ARBGB>ZMS_HDDT</ARBGB>
+     <MSGNR>065</MSGNR>
+     <TEXT>Company code &amp;1 năm &amp;2 đã có dải số mặc định</TEXT>
+    </T100>
+    <T100>
+     <SPRSL>E</SPRSL>
+     <ARBGB>ZMS_HDDT</ARBGB>
+     <MSGNR>066</MSGNR>
+     <TEXT>Bạn không có quyền cấu hình hoá đơn điện tử cho company code &amp;1</TEXT>
+    </T100>
+    <T100>
+     <SPRSL>E</SPRSL>
+     <ARBGB>ZMS_HDDT</ARBGB>
+     <MSGNR>067</MSGNR>
+     <TEXT>Không huỷ được chứng từ &amp;1-&amp;2: &amp;3</TEXT>
+    </T100>
+    <T100>
+     <SPRSL>E</SPRSL>
+     <ARBGB>ZMS_HDDT</ARBGB>
+     <MSGNR>068</MSGNR>
+     <TEXT>Chứng từ đã bị huỷ trên SAP, không thực hiện được nghiệp vụ này</TEXT>
+    </T100>
+    <T100>
+     <SPRSL>E</SPRSL>
+     <ARBGB>ZMS_HDDT</ARBGB>
+     <MSGNR>069</MSGNR>
+     <TEXT>Không xác định được nguồn gốc chứng từ để chọn chức năng huỷ chuẩn</TEXT>
+    </T100>
+    <T100>
+     <SPRSL>E</SPRSL>
+     <ARBGB>ZMS_HDDT</ARBGB>
+     <MSGNR>070</MSGNR>
+     <TEXT>Đã huỷ chứng từ kế toán nhưng chưa xoá được hoá đơn nháp:</TEXT>
+    </T100>
+    <T100>
+     <SPRSL>E</SPRSL>
+     <ARBGB>ZMS_HDDT</ARBGB>
+     <MSGNR>071</MSGNR>
+     <TEXT>Company code &amp;1 không tồn tại</TEXT>
     </T100>
    </T100_TEXTS>
   </asx:values>

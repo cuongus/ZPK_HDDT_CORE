@@ -24,6 +24,8 @@
 * Version   Ngày          Người sửa                Transport   Mô tả
 *=====================================================================
 * 1.0       28/08/2026    cuongus - CuongUS        abapGit     Tạo mới
+* 1.1       25/09/2026    F-DUBV                   S25K900131  Review S25: BUILD_CANCEL
+*                                                                  khai RAISING ZCX_HDDT_ERROR
 *=====================================================================
 CLASS zcl_hddt_prov_viettel DEFINITION
   PUBLIC
@@ -51,7 +53,11 @@ CLASS zcl_hddt_prov_viettel DEFINITION
     METHODS build_cancel
       IMPORTING is_request        TYPE zif_hddt_types=>ty_request
                 is_cred           TYPE ztb_hddt_cred
-      RETURNING VALUE(r_payload) TYPE string .
+      RETURNING VALUE(r_payload) TYPE string
+*     >>> Begin of change 20260925_01 F-DUBV - Review S25 25/09 (ATC P1 SLIN)
+*     Thân method raise ZCX_HDDT_ERROR (static check) khi không có số HĐ.
+      RAISING   zcx_hddt_error .
+*     <<< End of change 20260925_01
 
     METHODS build_search
       IMPORTING is_request        TYPE zif_hddt_types=>ty_request
@@ -81,47 +87,93 @@ ENDCLASS.
 
 
 
-CLASS zcl_hddt_prov_viettel IMPLEMENTATION.
+CLASS ZCL_HDDT_PROV_VIETTEL IMPLEMENTATION.
 
-  METHOD zif_hddt_provider~get_id.
 
-    r_provider = gc_provider.
+  METHOD build_cancel.
+
+    " Mục 7.9: Content-Type = application/x-www-form-urlencoded (KHÔNG
+    " phải JSON), và strIssueDate / additionalReferenceDate là
+    " milliseconds since epoch — không phải chuỗi ngày.
+    DATA(ls_hdr) = is_request-invoice-header.
+    DATA(ls_adj) = is_request-invoice-adjust.
+
+    DATA(lv_seq)    = |{ ls_hdr-seq }|.
+    DATA(lv_serial) = |{ ls_hdr-serial }|.
+    DATA(lv_tmpl)   = |{ ls_hdr-template }|.
+    DATA(lv_date)   = ls_hdr-inv_date.
+    DATA(lv_time)   = ls_hdr-inv_time.
+
+    IF lv_seq IS INITIAL.
+      DATA(ls_reg) = zcl_hddt_log=>read_invoice(
+                       i_bukrs     = is_request-bukrs
+                       i_gjahr     = is_request-gjahr
+                       i_src_type  = is_request-src_type
+                       i_src_docno = is_request-src_docno ).
+      lv_seq    = |{ ls_reg-seq }|.
+      lv_serial = |{ ls_reg-serial }|.
+      lv_tmpl   = |{ ls_reg-template }|.
+      IF ls_reg-issue_date IS NOT INITIAL.
+        lv_date = ls_reg-issue_date.
+        lv_time = ls_reg-inv_time.
+      ENDIF.
+    ENDIF.
+
+    IF lv_seq IS INITIAL.
+      zcx_hddt_error=>raise_text(
+        |Không xác định được số hoá đơn cần huỷ cho chứng từ | &&
+        |{ is_request-src_docno }/{ is_request-gjahr }.| ).
+    ENDIF.
+
+    " additionalReferenceDesc là BẮT BUỘC (mục 7.9, tối đa 400) — tên
+    " văn bản thoả thuận huỷ. Không có thì dùng lý do huỷ để tránh 400.
+    DATA(lv_ref_desc) = COND string( WHEN ls_adj-doc_ref_no IS NOT INITIAL
+                                     THEN ls_adj-doc_ref_no
+                                     ELSE ls_adj-reason ).
+    DATA(lv_ref_date) = COND #( WHEN ls_adj-doc_ref_date IS NOT INITIAL
+                                THEN ls_adj-doc_ref_date
+                                ELSE sy-datum ).
+
+    r_payload = build_form( VALUE #(
+      ( name  = `supplierTaxCode`
+        value = |{ is_cred-taxcode }| )
+      ( name  = `templateCode`
+        value = lv_tmpl )
+      ( name  = `invoiceNo`
+        value = |{ lv_serial }{ lv_seq }| )
+      ( name  = `strIssueDate`
+        value = to_epoch_millis( i_date = lv_date i_time = lv_time ) )
+      ( name  = `additionalReferenceDesc`
+        value = lv_ref_desc )
+      ( name  = `additionalReferenceDate`
+        value = to_epoch_millis( lv_ref_date ) )
+      ( name  = `reasonDelete`
+        value = ls_adj-reason ) ) ).
 
   ENDMETHOD.
 
 
-  METHOD zif_hddt_provider~build_payload.
+  METHOD build_get_file.
 
-    CASE i_action.
+    DATA(ls_hdr) = is_request-invoice-header.
 
-      WHEN zif_hddt_types=>gc_action-create_invoice
-        OR zif_hddt_types=>gc_action-adjust_invoice
-        OR zif_hddt_types=>gc_action-replace_invoice
-        OR zif_hddt_types=>gc_action-create_draft
-        OR zif_hddt_types=>gc_action-preview_draft
-        OR zif_hddt_types=>gc_action-update_invoice.
-        r_payload = build_invoice( is_request = is_request
-                                    i_action  = i_action
-                                    is_cred    = is_cred ).
+    DATA(lv_type) = zcl_hddt_json=>get_value(
+                      it_values = is_request-params
+                      i_path   = `fileType` ).
+    IF lv_type IS INITIAL.
+      lv_type = `PDF`.
+    ENDIF.
 
-      WHEN zif_hddt_types=>gc_action-cancel_invoice
-        OR zif_hddt_types=>gc_action-delete_invoice.
-        r_payload = build_cancel( is_request = is_request
-                                   is_cred    = is_cred ).
-
-      WHEN zif_hddt_types=>gc_action-search_invoice.
-        r_payload = build_search( is_request = is_request
-                                   is_cred    = is_cred ).
-
-      WHEN zif_hddt_types=>gc_action-get_file.
-        r_payload = build_get_file( is_request = is_request
-                                     is_cred    = is_cred ).
-
-      WHEN OTHERS.
-        zcx_hddt_error=>raise_text(
-          |Adapter VIETTEL chưa hỗ trợ nghiệp vụ { i_action }.| &&
-          | Bổ sung trong ZCL_HDDT_PROV_VIETTEL~BUILD_PAYLOAD.| ).
-    ENDCASE.
+    r_payload = NEW zcl_hddt_json( )->begin_object(
+      )->add_string( i_name = `supplierTaxCode` i_value = is_cred-taxcode
+                     i_force = abap_true
+      )->add_string( i_name = `templateCode` i_value = ls_hdr-template
+      )->add_string( i_name = `invoiceNo`
+                     i_value = |{ ls_hdr-serial }{ ls_hdr-seq }|
+                     i_force = abap_true
+      )->add_string( i_name = `fileType` i_value = lv_type i_force = abap_true
+      )->end_object(
+      )->get_json( ).
 
   ENDMETHOD.
 
@@ -342,69 +394,6 @@ CLASS zcl_hddt_prov_viettel IMPLEMENTATION.
   ENDMETHOD.
 
 
-  METHOD build_cancel.
-
-    " Mục 7.9: Content-Type = application/x-www-form-urlencoded (KHÔNG
-    " phải JSON), và strIssueDate / additionalReferenceDate là
-    " milliseconds since epoch — không phải chuỗi ngày.
-    DATA(ls_hdr) = is_request-invoice-header.
-    DATA(ls_adj) = is_request-invoice-adjust.
-
-    DATA(lv_seq)    = |{ ls_hdr-seq }|.
-    DATA(lv_serial) = |{ ls_hdr-serial }|.
-    DATA(lv_tmpl)   = |{ ls_hdr-template }|.
-    DATA(lv_date)   = ls_hdr-inv_date.
-    DATA(lv_time)   = ls_hdr-inv_time.
-
-    IF lv_seq IS INITIAL.
-      DATA(ls_reg) = zcl_hddt_log=>read_invoice(
-                       i_bukrs     = is_request-bukrs
-                       i_gjahr     = is_request-gjahr
-                       i_src_type  = is_request-src_type
-                       i_src_docno = is_request-src_docno ).
-      lv_seq    = |{ ls_reg-seq }|.
-      lv_serial = |{ ls_reg-serial }|.
-      lv_tmpl   = |{ ls_reg-template }|.
-      IF ls_reg-issue_date IS NOT INITIAL.
-        lv_date = ls_reg-issue_date.
-        lv_time = ls_reg-inv_time.
-      ENDIF.
-    ENDIF.
-
-    IF lv_seq IS INITIAL.
-      zcx_hddt_error=>raise_text(
-        |Không xác định được số hoá đơn cần huỷ cho chứng từ | &&
-        |{ is_request-src_docno }/{ is_request-gjahr }.| ).
-    ENDIF.
-
-    " additionalReferenceDesc là BẮT BUỘC (mục 7.9, tối đa 400) — tên
-    " văn bản thoả thuận huỷ. Không có thì dùng lý do huỷ để tránh 400.
-    DATA(lv_ref_desc) = COND string( WHEN ls_adj-doc_ref_no IS NOT INITIAL
-                                     THEN ls_adj-doc_ref_no
-                                     ELSE ls_adj-reason ).
-    DATA(lv_ref_date) = COND #( WHEN ls_adj-doc_ref_date IS NOT INITIAL
-                                THEN ls_adj-doc_ref_date
-                                ELSE sy-datum ).
-
-    r_payload = build_form( VALUE #(
-      ( name  = `supplierTaxCode`
-        value = |{ is_cred-taxcode }| )
-      ( name  = `templateCode`
-        value = lv_tmpl )
-      ( name  = `invoiceNo`
-        value = |{ lv_serial }{ lv_seq }| )
-      ( name  = `strIssueDate`
-        value = to_epoch_millis( i_date = lv_date i_time = lv_time ) )
-      ( name  = `additionalReferenceDesc`
-        value = lv_ref_desc )
-      ( name  = `additionalReferenceDate`
-        value = to_epoch_millis( lv_ref_date ) )
-      ( name  = `reasonDelete`
-        value = ls_adj-reason ) ) ).
-
-  ENDMETHOD.
-
-
   METHOD build_search.
 
     " Mục 7.21: form-urlencoded, đúng 2 tham số
@@ -417,27 +406,14 @@ CLASS zcl_hddt_prov_viettel IMPLEMENTATION.
   ENDMETHOD.
 
 
-  METHOD build_get_file.
+  METHOD get_adjustment_type.
 
-    DATA(ls_hdr) = is_request-invoice-header.
-
-    DATA(lv_type) = zcl_hddt_json=>get_value(
-                      it_values = is_request-params
-                      i_path   = `fileType` ).
-    IF lv_type IS INITIAL.
-      lv_type = `PDF`.
-    ENDIF.
-
-    r_payload = NEW zcl_hddt_json( )->begin_object(
-      )->add_string( i_name = `supplierTaxCode` i_value = is_cred-taxcode
-                     i_force = abap_true
-      )->add_string( i_name = `templateCode` i_value = ls_hdr-template
-      )->add_string( i_name = `invoiceNo`
-                     i_value = |{ ls_hdr-serial }{ ls_hdr-seq }|
-                     i_force = abap_true
-      )->add_string( i_name = `fileType` i_value = lv_type i_force = abap_true
-      )->end_object(
-      )->get_json( ).
+    CASE is_adjust-adj_type.
+      WHEN zif_hddt_types=>gc_adj_type-replace.  r_type = `3`.
+      WHEN zif_hddt_types=>gc_adj_type-adjust.   r_type = `5`.
+      WHEN zif_hddt_types=>gc_adj_type-cancel.   r_type = `7`.
+      WHEN OTHERS.                                 r_type = `1`.
+    ENDCASE.
 
   ENDMETHOD.
 
@@ -466,14 +442,45 @@ CLASS zcl_hddt_prov_viettel IMPLEMENTATION.
   ENDMETHOD.
 
 
-  METHOD get_adjustment_type.
+  METHOD zif_hddt_provider~build_payload.
 
-    CASE is_adjust-adj_type.
-      WHEN zif_hddt_types=>gc_adj_type-replace.  r_type = `3`.
-      WHEN zif_hddt_types=>gc_adj_type-adjust.   r_type = `5`.
-      WHEN zif_hddt_types=>gc_adj_type-cancel.   r_type = `7`.
-      WHEN OTHERS.                                 r_type = `1`.
+    CASE i_action.
+
+      WHEN zif_hddt_types=>gc_action-create_invoice
+        OR zif_hddt_types=>gc_action-adjust_invoice
+        OR zif_hddt_types=>gc_action-replace_invoice
+        OR zif_hddt_types=>gc_action-create_draft
+        OR zif_hddt_types=>gc_action-preview_draft
+        OR zif_hddt_types=>gc_action-update_invoice.
+        r_payload = build_invoice( is_request = is_request
+                                    i_action  = i_action
+                                    is_cred    = is_cred ).
+
+      WHEN zif_hddt_types=>gc_action-cancel_invoice
+        OR zif_hddt_types=>gc_action-delete_invoice.
+        r_payload = build_cancel( is_request = is_request
+                                   is_cred    = is_cred ).
+
+      WHEN zif_hddt_types=>gc_action-search_invoice.
+        r_payload = build_search( is_request = is_request
+                                   is_cred    = is_cred ).
+
+      WHEN zif_hddt_types=>gc_action-get_file.
+        r_payload = build_get_file( is_request = is_request
+                                     is_cred    = is_cred ).
+
+      WHEN OTHERS.
+        zcx_hddt_error=>raise_text(
+          |Adapter VIETTEL chưa hỗ trợ nghiệp vụ { i_action }.| &&
+          | Bổ sung trong ZCL_HDDT_PROV_VIETTEL~BUILD_PAYLOAD.| ).
     ENDCASE.
+
+  ENDMETHOD.
+
+
+  METHOD zif_hddt_provider~get_id.
+
+    r_provider = gc_provider.
 
   ENDMETHOD.
 
@@ -590,5 +597,4 @@ CLASS zcl_hddt_prov_viettel IMPLEMENTATION.
     ENDIF.
 
   ENDMETHOD.
-
 ENDCLASS.

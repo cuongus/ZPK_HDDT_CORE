@@ -27,6 +27,16 @@
 * Version   Ngày          Người sửa                Transport   Mô tả
 *=====================================================================
 * 1.0       03/09/2026    cuongus - CuongUS        abapGit     Tạo mới
+* 1.1       27/09/2026    F-DUBV                   S25K900131  R06: goi
+*                         PREFETCH_SELLER / PREFETCH_MAT_TEXTS /
+*                         PREFETCH_BUYER_DOCS truoc vong lap buoc 4
+*                         (review S25 27/09)
+* 1.2       28/09/2026    F-DUBV                   S25K900131  R06: goi
+*                         PREFETCH_BUYER_MASTER truoc vong lap buoc 4
+*                         (review S25 28/09)
+* 1.3       30/09/2026    cuongus - CuongUS        DS4K900172  20260930_01 Kiem
+*                         chung DS4: quy doi so tien theo TCURX (VND
+*                         luu chia 100), ty gia theo TCURF (1:1000)
 *=====================================================================
 CLASS zcl_hddt_src_sd DEFINITION
   PUBLIC
@@ -52,6 +62,8 @@ CLASS zcl_hddt_src_sd DEFINITION
              kunrg TYPE vbrk-kunrg,
              zlsch TYPE vbrk-zlsch,
              fksto TYPE vbrk-fksto,
+             "! Số billing bị huỷ - có giá trị trên CHÍNH chứng từ huỷ
+             sfakn TYPE vbrk-sfakn,
              knumv TYPE vbrk-knumv,
              ernam TYPE vbrk-ernam,
              erdat TYPE vbrk-erdat,
@@ -95,178 +107,7 @@ ENDCLASS.
 
 
 
-CLASS zcl_hddt_src_sd IMPLEMENTATION.
-
-  METHOD zif_hddt_source~select_documents.
-
-    IF is_selection-bukrs IS INITIAL.
-      zcx_hddt_error=>raise_text( `Thiếu mã công ty (BUKRS) khi đọc hoá đơn SD.` ).
-    ENDIF.
-
-*---- Loại hoá đơn SD được phát hành: bắt buộc cấu hình --------------*
-    DATA lr_fkart TYPE RANGE OF fkart.
-    LOOP AT map_list_as_range( zif_hddt_types=>gc_map_type-bill_type )
-         ASSIGNING FIELD-SYMBOL(<fs_r>).
-      APPEND VALUE #( sign = <fs_r>-sign option = <fs_r>-option
-                      low  = <fs_r>-low(4) ) TO lr_fkart.
-    ENDLOOP.
-    IF lr_fkart IS INITIAL.
-      zcx_hddt_error=>raise_text(
-        `Chưa khai báo loại hoá đơn SD được phát hành HĐĐT (ZTB_HDDT_MAP, ` &&
-        `MAP_TYPE = BILLTYPE, SAP_VALUE = VBRK-FKART).` ).
-    ENDIF.
-
-    load_registry( i_bukrs    = is_selection-bukrs
-                   i_gjahr    = is_selection-gjahr
-                   i_src_type = gc_src_type ).
-
-*---- 1. Header billing ----------------------------------------------*
-    " VBRK không có năm tài chính: dùng năm dương lịch của FKDAT làm
-    " GJAHR của sổ đăng ký (ghi rõ trong tài liệu).
-    DATA(lv_from) = CONV dats( |{ is_selection-gjahr }0101| ).
-    DATA(lv_to)   = CONV dats( |{ is_selection-gjahr }1231| ).
-
-    DATA lt_vbrk TYPE ty_t_vbrk.
-    SELECT vbeln, fkart, fkdat, bukrs, waerk, kurrf, kunrg, zlsch, fksto,
-           knumv, ernam, erdat, xblnr
-      FROM vbrk
-      WHERE bukrs  = @is_selection-bukrs
-        AND fkdat BETWEEN @lv_from AND @lv_to
-        AND fkdat IN @is_selection-r_budat
-        AND erdat IN @is_selection-r_cpudt
-        AND vbeln IN @is_selection-r_docno
-        AND vbeln IN @is_selection-r_vbeln
-        AND fkart IN @lr_fkart
-        AND kunrg IN @is_selection-r_kunnr
-        AND ernam IN @is_selection-r_usnam
-      ORDER BY vbeln
-      INTO TABLE @lt_vbrk.
-    IF sy-subrc <> 0.
-      RETURN.
-    ENDIF.
-
-*---- 2. Loại billing đã sinh chứng từ FI (nguồn FI xử lý) -----------*
-    DATA lt_awkey TYPE RANGE OF awkey.
-    DATA lt_vbeln TYPE RANGE OF vbeln_vf.
-    LOOP AT lt_vbrk ASSIGNING FIELD-SYMBOL(<fs_vbrk>).
-      APPEND VALUE #( sign = 'I' option = 'EQ' low = <fs_vbrk>-vbeln ) TO lt_awkey.
-      APPEND VALUE #( sign = 'I' option = 'EQ' low = <fs_vbrk>-vbeln ) TO lt_vbeln.
-    ENDLOOP.
-
-    SELECT awkey FROM bkpf
-      WHERE bukrs  = @is_selection-bukrs
-        AND awtyp  = 'VBRK'
-        AND awkey IN @lt_awkey
-      INTO TABLE @DATA(lt_has_fi).
-    SORT lt_has_fi BY awkey.
-
-    LOOP AT lt_vbrk ASSIGNING <fs_vbrk>.
-      READ TABLE lt_has_fi TRANSPORTING NO FIELDS
-           WITH KEY awkey = CONV awkey( <fs_vbrk>-vbeln ) BINARY SEARCH.
-      IF sy-subrc = 0.
-        DELETE lt_vbrk.
-        CONTINUE.
-      ENDIF.
-      DATA(ls_reg) = registry_of( i_bukrs    = <fs_vbrk>-bukrs
-                                  i_gjahr    = is_selection-gjahr
-                                  i_src_type = gc_src_type
-                                  i_docno    = CONV #( <fs_vbrk>-vbeln ) ).
-      IF keep_document( i_reversed  = xsdbool( <fs_vbrk>-fksto = 'X' )
-                        is_reg       = ls_reg
-                        is_selection = is_selection ) = abap_false.
-        DELETE lt_vbrk.
-        CONTINUE.
-      ENDIF.
-      IF is_selection-r_seq IS NOT INITIAL AND ls_reg-seq NOT IN is_selection-r_seq.
-        DELETE lt_vbrk.
-      ENDIF.
-    ENDLOOP.
-    IF lt_vbrk IS INITIAL.
-      RETURN.
-    ENDIF.
-
-*---- 3. Dòng billing + điều kiện giá --------------------------------*
-    CLEAR lt_vbeln.
-    DATA lt_knumv TYPE RANGE OF knumv.
-    LOOP AT lt_vbrk ASSIGNING <fs_vbrk>.
-      APPEND VALUE #( sign = 'I' option = 'EQ' low = <fs_vbrk>-vbeln ) TO lt_vbeln.
-      IF <fs_vbrk>-knumv IS NOT INITIAL.
-        APPEND VALUE #( sign = 'I' option = 'EQ' low = <fs_vbrk>-knumv ) TO lt_knumv.
-      ENDIF.
-    ENDLOOP.
-
-    DATA lt_vbrp TYPE ty_t_vbrp.
-    SELECT vbeln, posnr, matnr, arktx, fkimg, vrkme, netwr, mwsbp, mwskz, aubel, aupos
-      FROM vbrp
-      WHERE vbeln IN @lt_vbeln
-      ORDER BY vbeln, posnr
-      INTO TABLE @lt_vbrp.
-
-    " Chỉ đọc PRCD_ELEMENTS khi có cấu hình loại điều kiện
-    DATA lt_cond TYPE ty_t_cond.
-    DATA(lv_use_cond) = abap_false.
-    DATA(lr_kschl) = map_list_as_range( zif_hddt_types=>gc_map_type-cond_type ).
-    IF lr_kschl IS NOT INITIAL AND lt_knumv IS NOT INITIAL.
-      lv_use_cond = abap_true.
-      DATA lr_kschl4 TYPE RANGE OF kschl.
-      LOOP AT lr_kschl ASSIGNING FIELD-SYMBOL(<fs_k>).
-        APPEND VALUE #( sign = <fs_k>-sign option = <fs_k>-option
-                        low  = <fs_k>-low(4) ) TO lr_kschl4.
-      ENDLOOP.
-      SELECT knumv, kposn, kschl, kwert, kbetr
-        FROM prcd_elements
-        WHERE knumv IN @lt_knumv
-          AND kschl IN @lr_kschl4
-          AND kinak  = @space
-        INTO TABLE @lt_cond.
-    ENDIF.
-
-*---- 4. Dựng request ------------------------------------------------*
-    LOOP AT lt_vbrk ASSIGNING <fs_vbrk>.
-      DATA(lt_doc_vbrp) = VALUE ty_t_vbrp( FOR ls IN lt_vbrp
-                                           WHERE ( vbeln = <fs_vbrk>-vbeln ) ( ls ) ).
-      DATA(lt_doc_cond) = VALUE ty_t_cond( FOR lc IN lt_cond
-                                           WHERE ( knumv = <fs_vbrk>-knumv ) ( lc ) ).
-      DATA(ls_req) = build_one( is_vbrk     = <fs_vbrk>
-                                it_vbrp     = lt_doc_vbrp
-                                it_cond     = lt_doc_cond
-                                i_use_cond = lv_use_cond
-                                i_gjahr    = is_selection-gjahr ).
-      IF ls_req-src_docno IS NOT INITIAL.
-        ls_req-invoice-header-inv_type = is_selection-inv_type.
-        apply_registry_edits(
-          EXPORTING is_reg     = registry_of( i_bukrs    = ls_req-bukrs
-                                              i_gjahr    = ls_req-gjahr
-                                              i_src_type = gc_src_type
-                                              i_docno    = ls_req-src_docno )
-          CHANGING  cs_request = ls_req ).
-        APPEND ls_req TO rt_request.
-      ENDIF.
-    ENDLOOP.
-
-  ENDMETHOD.
-
-
-  METHOD zif_hddt_source~get_doc_state.
-
-    DATA lv_vbeln TYPE vbeln_vf.
-    lv_vbeln = i_docno.
-
-    SELECT SINGLE fksto, waerk, kunrg
-      FROM vbrk
-      WHERE vbeln = @lv_vbeln
-        AND bukrs = @i_bukrs
-      INTO @DATA(ls_vbrk).
-    IF sy-subrc <> 0.
-      RETURN.
-    ENDIF.
-
-    rs_state-exists    = abap_true.
-    rs_state-xreversed = xsdbool( ls_vbrk-fksto = 'X' ).
-    rs_state-waers     = ls_vbrk-waerk.
-    rs_state-kunnr     = ls_vbrk-kunrg.
-
-  ENDMETHOD.
+CLASS ZCL_HDDT_SRC_SD IMPLEMENTATION.
 
 
   METHOD build_one.
@@ -289,13 +130,19 @@ CLASS zcl_hddt_src_sd IMPLEMENTATION.
       awtyp   = 'VBRK'
       awkey   = is_vbrk-vbeln
       fkart   = is_vbrk-fkart
-      xcancel = xsdbool( is_vbrk-fksto = 'X' ) ).
+      xcancel = xsdbool( is_vbrk-fksto IS NOT INITIAL OR is_vbrk-sfakn IS NOT INITIAL )
+      " Chưa có chứng từ FI: huỷ bắt buộc bằng VF11 theo số Billing
+      bill_doc = is_vbrk-vbeln ).
 
     rs_request-invoice-header = VALUE #(
       currency  = is_vbrk-waerk
       exch_rate = exch_rate_of( i_bukrs = is_vbrk-bukrs
                                 i_waers = is_vbrk-waerk
-                                i_kursf = is_vbrk-kurrf )
+*   >>> Begin of change 20260930_01 F-CUONGUS TR DS4K900172 - Kiem chung DS4: so tien theo TCURX, ty gia theo TCURF
+*                                i_kursf = is_vbrk-kurrf )
+                                i_kursf = is_vbrk-kurrf
+                                i_date  = is_vbrk-fkdat )
+*   <<< End of change 20260930_01
       inv_date  = config( )->resolve_invoice_date( i_bukrs = is_vbrk-bukrs
                                                    i_budat = is_vbrk-fkdat
                                                    i_bldat = is_vbrk-fkdat
@@ -369,6 +216,15 @@ CLASS zcl_hddt_src_sd IMPLEMENTATION.
         ENDIF.
       ENDIF.
 
+*   >>> Begin of change 20260930_01 F-CUONGUS TR DS4K900172 - Kiem chung DS4: so tien theo TCURX, ty gia theo TCURF
+      " KWERT / NETWR / MWSBP lưu theo số lẻ của đồng tiền (VND chia 100):
+      " quy đổi MỘT lần sau khi đã cộng đủ các điều kiện giá. Thuế suất suy
+      " từ tỷ lệ ở trên không đổi vì cả hai vế cùng hệ số.
+      ls_item-amount     = amount_of( i_amount = ls_item-amount
+                                      i_waers  = is_vbrk-waerk ).
+      ls_item-tax_amount = amount_of( i_amount = ls_item-tax_amount
+                                      i_waers  = is_vbrk-waerk ).
+*   <<< End of change 20260930_01
       " Billing huỷ (loại hoá đơn huỷ) mang dấu âm: giữ nguyên dấu để
       " adapter quyết định điều chỉnh tăng/giảm.
       IF ls_item-quantity <> 0.
@@ -385,4 +241,206 @@ CLASS zcl_hddt_src_sd IMPLEMENTATION.
 
   ENDMETHOD.
 
+
+  METHOD zif_hddt_source~get_doc_state.
+
+    DATA lv_vbeln TYPE vbeln_vf.
+    lv_vbeln = i_docno.
+
+    SELECT SINGLE fksto, sfakn, waerk, kunrg
+      FROM vbrk
+      WHERE vbeln = @lv_vbeln
+        AND bukrs = @i_bukrs
+      INTO @DATA(ls_vbrk).
+    IF sy-subrc <> 0.
+      RETURN.
+    ENDIF.
+
+    rs_state-exists    = abap_true.
+    rs_state-xreversed = xsdbool( ls_vbrk-fksto IS NOT INITIAL
+                               OR ls_vbrk-sfakn IS NOT INITIAL ).
+    rs_state-waers     = ls_vbrk-waerk.
+    rs_state-kunnr     = ls_vbrk-kunrg.
+
+  ENDMETHOD.
+
+
+  METHOD zif_hddt_source~select_documents.
+
+    IF is_selection-bukrs IS INITIAL.
+      zcx_hddt_error=>raise_text( `Thiếu mã công ty (BUKRS) khi đọc hoá đơn SD.` ).
+    ENDIF.
+
+*---- Loại hoá đơn SD được phát hành: bắt buộc cấu hình --------------*
+    DATA lr_fkart TYPE RANGE OF fkart.
+    LOOP AT map_list_as_range( zif_hddt_types=>gc_map_type-bill_type )
+         ASSIGNING FIELD-SYMBOL(<fs_r>).
+      APPEND VALUE #( sign = <fs_r>-sign option = <fs_r>-option
+                      low  = <fs_r>-low(4) ) TO lr_fkart.
+    ENDLOOP.
+    IF lr_fkart IS INITIAL.
+      zcx_hddt_error=>raise_text(
+        `Chưa khai báo loại hoá đơn SD được phát hành HĐĐT (ZTB_HDDT_MAP, ` &&
+        `MAP_TYPE = BILLTYPE, SAP_VALUE = VBRK-FKART).` ).
+    ENDIF.
+
+    load_registry( i_bukrs    = is_selection-bukrs
+                   i_gjahr    = is_selection-gjahr
+                   i_src_type = gc_src_type ).
+
+*---- 1. Header billing ----------------------------------------------*
+    " VBRK không có năm tài chính: dùng năm dương lịch của FKDAT làm
+    " GJAHR của sổ đăng ký (ghi rõ trong tài liệu).
+    DATA(lv_from) = CONV dats( |{ is_selection-gjahr }0101| ).
+    DATA(lv_to)   = CONV dats( |{ is_selection-gjahr }1231| ).
+
+    DATA lt_vbrk TYPE ty_t_vbrk.
+    SELECT vbeln, fkart, fkdat, bukrs, waerk, kurrf, kunrg, zlsch, fksto,
+           sfakn, knumv, ernam, erdat, xblnr
+      FROM vbrk
+      WHERE bukrs  = @is_selection-bukrs
+        AND fkdat BETWEEN @lv_from AND @lv_to
+        AND fkdat IN @is_selection-r_budat
+        AND erdat IN @is_selection-r_cpudt
+        AND vbeln IN @is_selection-r_docno
+        AND vbeln IN @is_selection-r_vbeln
+        AND fkart IN @lr_fkart
+        AND kunrg IN @is_selection-r_kunnr
+        AND ernam IN @is_selection-r_usnam
+      ORDER BY vbeln
+      INTO TABLE @lt_vbrk.
+    IF sy-subrc <> 0.
+      RETURN.
+    ENDIF.
+
+*---- 2. Loại billing đã sinh chứng từ FI (nguồn FI xử lý) -----------*
+    DATA lt_awkey TYPE RANGE OF awkey.
+    DATA lt_vbeln TYPE RANGE OF vbeln_vf.
+    LOOP AT lt_vbrk ASSIGNING FIELD-SYMBOL(<fs_vbrk>).
+      APPEND VALUE #( sign = 'I' option = 'EQ' low = <fs_vbrk>-vbeln ) TO lt_awkey.
+      APPEND VALUE #( sign = 'I' option = 'EQ' low = <fs_vbrk>-vbeln ) TO lt_vbeln.
+    ENDLOOP.
+
+    SELECT awkey FROM bkpf
+      WHERE bukrs  = @is_selection-bukrs
+        AND awtyp  = 'VBRK'
+        AND awkey IN @lt_awkey
+      INTO TABLE @DATA(lt_has_fi).
+    SORT lt_has_fi BY awkey.
+
+    LOOP AT lt_vbrk ASSIGNING <fs_vbrk>.
+      READ TABLE lt_has_fi TRANSPORTING NO FIELDS
+           WITH KEY awkey = CONV awkey( <fs_vbrk>-vbeln ) BINARY SEARCH.
+      IF sy-subrc = 0.
+        DELETE lt_vbrk.
+        CONTINUE.
+      ENDIF.
+      DATA(ls_reg) = registry_of( i_bukrs    = <fs_vbrk>-bukrs
+                                  i_gjahr    = is_selection-gjahr
+                                  i_src_type = gc_src_type
+                                  i_docno    = CONV #( <fs_vbrk>-vbeln ) ).
+      " FS v0.17 mục 3.3 Nhóm 3: loại mọi dòng có VBRK-FKSTO khác trống
+      " (billing đã bị huỷ) HOẶC VBRK-SFAKN khác trống (chính là chứng từ
+      " huỷ của một billing khác).
+      IF keep_document( i_reversed  = xsdbool( <fs_vbrk>-fksto IS NOT INITIAL
+                                            OR <fs_vbrk>-sfakn IS NOT INITIAL )
+                        is_reg       = ls_reg
+                        is_selection = is_selection ) = abap_false.
+        DELETE lt_vbrk.
+        CONTINUE.
+      ENDIF.
+      IF is_selection-r_seq IS NOT INITIAL AND ls_reg-seq NOT IN is_selection-r_seq.
+        DELETE lt_vbrk.
+      ENDIF.
+    ENDLOOP.
+    IF lt_vbrk IS INITIAL.
+      RETURN.
+    ENDIF.
+
+*---- 3. Dòng billing + điều kiện giá --------------------------------*
+    CLEAR lt_vbeln.
+    DATA lt_knumv TYPE RANGE OF knumv.
+    LOOP AT lt_vbrk ASSIGNING <fs_vbrk>.
+      APPEND VALUE #( sign = 'I' option = 'EQ' low = <fs_vbrk>-vbeln ) TO lt_vbeln.
+      IF <fs_vbrk>-knumv IS NOT INITIAL.
+        APPEND VALUE #( sign = 'I' option = 'EQ' low = <fs_vbrk>-knumv ) TO lt_knumv.
+      ENDIF.
+    ENDLOOP.
+
+    DATA lt_vbrp TYPE ty_t_vbrp.
+    SELECT vbeln, posnr, matnr, arktx, fkimg, vrkme, netwr, mwsbp, mwskz, aubel, aupos
+      FROM vbrp
+      WHERE vbeln IN @lt_vbeln
+      ORDER BY vbeln, posnr
+      INTO TABLE @lt_vbrp.
+
+    " Chỉ đọc PRCD_ELEMENTS khi có cấu hình loại điều kiện
+    DATA lt_cond TYPE ty_t_cond.
+    DATA(lv_use_cond) = abap_false.
+    DATA(lr_kschl) = map_list_as_range( zif_hddt_types=>gc_map_type-cond_type ).
+    IF lr_kschl IS NOT INITIAL AND lt_knumv IS NOT INITIAL.
+      lv_use_cond = abap_true.
+      DATA lr_kschl4 TYPE RANGE OF kschl.
+      LOOP AT lr_kschl ASSIGNING FIELD-SYMBOL(<fs_k>).
+        APPEND VALUE #( sign = <fs_k>-sign option = <fs_k>-option
+                        low  = <fs_k>-low(4) ) TO lr_kschl4.
+      ENDLOOP.
+      SELECT knumv, kposn, kschl, kwert, kbetr
+        FROM prcd_elements
+        WHERE knumv IN @lt_knumv
+          AND kschl IN @lr_kschl4
+          AND kinak  = @space
+        INTO TABLE @lt_cond.
+    ENDIF.
+
+*   >>> Begin of change 20260927_01 F-DUBV TR S25K900131 - Review S25 (SELECT trong vong lap)
+*   Nap 1 lan truoc vong lap: header STXH cho ten hang (ITEM_NAME) va dieu
+*   kien thue A003/KONP (TAX_RATE_OF) - thay SELECT theo tung dong hang.
+    prefetch_item_texts( i_bukrs = is_selection-bukrs
+                         it_keys = VALUE #( FOR ls_tk IN lt_vbrp
+                                            ( vbeln = ls_tk-aubel
+                                              posnr = ls_tk-aupos
+                                              matnr = ls_tk-matnr ) ) ).
+    prefetch_tax_cond( is_selection-bukrs ).
+*   <<< End of change 20260927_01
+
+*   >>> Begin of change 20260927_20 F-DUBV TR S25K900131 - Review S25 R06 (DB trong vong lap)
+*   Nap 1 lan truoc vong lap: nguoi ban T001/ADRC/ADR6 (READ_SELLER), ten vat
+*   tu MAKT (MATERIAL_TEXT qua ITEM_NAME), VBKD-BSTKD theo AUBEL (READ_BUYER).
+*   Cac method do chi doc bo dem - khong con SELECT trong vong lap buoc 4.
+    prefetch_seller( is_selection-bukrs ).
+    prefetch_mat_texts( VALUE #( FOR ls_pv IN lt_vbrp ( ls_pv-matnr ) ) ).
+    prefetch_buyer_docs( it_aubel = VALUE #( FOR ls_pa IN lt_vbrp ( ls_pa-aubel ) ) ).
+*   <<< End of change 20260927_20
+
+*   >>> Begin of change 20260928_30 F-DUBV TR S25K900131 - Review S25 R06 (DB trong vong lap)
+*   Nap 1 lan truoc vong lap du lieu BP / KNA1 cua moi ben thanh toan KUNRG:
+*   BUYER_FROM_BP / BUYER_FROM_KNA1 (qua READ_BUYER) chi doc bo dem.
+    prefetch_buyer_master( VALUE #( FOR ls_pb IN lt_vbrk ( kunnr = ls_pb-kunrg ) ) ).
+*   <<< End of change 20260928_30
+
+*---- 4. Dựng request ------------------------------------------------*
+    LOOP AT lt_vbrk ASSIGNING <fs_vbrk>.
+      DATA(lt_doc_vbrp) = VALUE ty_t_vbrp( FOR ls IN lt_vbrp
+                                           WHERE ( vbeln = <fs_vbrk>-vbeln ) ( ls ) ).
+      DATA(lt_doc_cond) = VALUE ty_t_cond( FOR lc IN lt_cond
+                                           WHERE ( knumv = <fs_vbrk>-knumv ) ( lc ) ).
+      DATA(ls_req) = build_one( is_vbrk     = <fs_vbrk>
+                                it_vbrp     = lt_doc_vbrp
+                                it_cond     = lt_doc_cond
+                                i_use_cond = lv_use_cond
+                                i_gjahr    = is_selection-gjahr ).
+      IF ls_req-src_docno IS NOT INITIAL.
+        ls_req-invoice-header-inv_type = is_selection-inv_type.
+        apply_registry_edits(
+          EXPORTING is_reg     = registry_of( i_bukrs    = ls_req-bukrs
+                                              i_gjahr    = ls_req-gjahr
+                                              i_src_type = gc_src_type
+                                              i_docno    = ls_req-src_docno )
+          CHANGING  cs_request = ls_req ).
+        APPEND ls_req TO rt_request.
+      ENDIF.
+    ENDLOOP.
+
+  ENDMETHOD.
 ENDCLASS.

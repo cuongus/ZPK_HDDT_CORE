@@ -380,13 +380,13 @@ không tin tab Deployment Status của bản draft đang mở.
                        Basic Authentication, user = clientid, password = clientsecret
                        (service key của instance Process Integration Runtime)
 
-3. ZFI002 → ZTB_HDDT_CONN → thêm dòng
+3. ZHD002 → ZTB_HDDT_CONN → thêm dòng
      PROVIDER FPT · CONNID CPI · RFCDEST ZHDDT_CPI · AUTH_MODE N
      TOKEN_TTL 3000 · TIMEOUT 60 · XACTIVE X
 
-4. ZFI002 → ZTB_HDDT_CRED → đổi CONNID của công ty sang CPI
+4. ZHD002 → ZTB_HDDT_CRED → đổi CONNID của công ty sang CPI
 
-5. ZFI002 → ZTB_HDDT_ACT → đổi API_PATH của provider FPT sang dạng
+5. ZHD002 → ZTB_HDDT_ACT → đổi API_PATH của provider FPT sang dạng
      /http/hddt_fpt?api=<mã nghiệp vụ>
 ```
 
@@ -455,7 +455,7 @@ Không lưu `clientsecret` trong bảng nào của package: nó nằm ở destin
    **không có body**, thêm header `stax`, `form`, `serial`, `seq`, `sid`,
    `type: json`. Trả về đúng hoá đơn thì phần header đã đi xuyên được CPI; trả
    rỗng là Allowed Header(s) còn thiếu tên header.
-3. `ZFI001` → chọn chứng từ → tick Test run → nút `Xem payload` để soát nội dung.
+3. `ZHD001` → chọn chứng từ → tick Test run → nút `Xem payload` để soát nội dung.
 4. Bỏ tick Test run → `Tích hợp HĐ`. Xem `ZTB_HDDT_LOG` qua nút `Log`: `FULL_URL`
    phải trỏ CPI, `HTTP_CODE` và `RES_BODY` là của FPT.
 5. Lỗi thì bật Trace: Manage Integration Content → iFlow → Log Configuration →

@@ -1,6 +1,6 @@
 # 08 — Log tích hợp
 
-Transaction: **`ZFI003`** · Bảng: `ZTB_HDDT_LOG`
+Transaction: **`ZHD003`** · Bảng: `ZTB_HDDT_LOG`
 
 ## 1. Mục đích
 
@@ -91,7 +91,7 @@ Cột `MASKED` trên ALV cho biết dòng đó có thật sự bị che gì hay 
 số lần hiển thị là **số lần gọi thật**. Nhờ trường này nhìn ngay ra chứng từ
 nào phải gọi 5 lần mới thành công.
 
-`CALLER` phân biệt phát hành từ màn hình `ZFI001`, từ job nền, hay từ
+`CALLER` phân biệt phát hành từ màn hình `ZHD001`, từ job nền, hay từ
 enhancement — khi một chứng từ có nhiều dòng log thì đây là thứ cho biết ai
 đã gọi.
 
@@ -168,7 +168,7 @@ cùng số dòng có thể chênh nhau 50 lần về byte.
 
 Bảng log chứa thông tin người mua (tên, MST, địa chỉ, email) → là **dữ liệu cá
 nhân**. Đặt authorization group riêng khi sinh Table Maintenance Generator, và
-chỉ cấp `ZFI003` cho người thực sự cần điều tra sự cố.
+chỉ cấp `ZHD003` cho người thực sự cần điều tra sự cố.
 
 Secret đã được che lúc ghi nên rủi ro lộ mật khẩu được xử lý ở gốc, không phụ
 thuộc vào việc cấp quyền có đúng hay không.

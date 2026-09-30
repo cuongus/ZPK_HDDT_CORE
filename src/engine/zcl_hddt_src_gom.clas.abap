@@ -48,6 +48,13 @@ CLASS zcl_hddt_src_gom DEFINITION
 
   PRIVATE SECTION.
 
+*   >>> Begin of change 20260927_01 F-DUBV TR S25K900131 - Review S25 (SELECT trong vong lap)
+*   Dong sua tay ZTB_HDDT_ITEM cua moi so gom trong lan doc, nap 1 lan o
+*   SELECT_DOCUMENTS truoc vong lap; LOAD_ITEM_OVERRIDE chi doc bo nho.
+    DATA mt_item_ov TYPE SORTED TABLE OF ztb_hddt_item
+                    WITH NON-UNIQUE KEY src_docno line_no.
+*   <<< End of change 20260927_01
+
     "! Dòng hàng người dùng đã sửa trên màn hình gom, lưu ở ZTB_HDDT_ITEM.
     "! Chỉ áp dụng khi chứng từ chưa gửi thành công lần nào — SAVE_ITEMS
     "! của engine chỉ ghi bảng này sau khi gửi thành công.
@@ -61,161 +68,22 @@ ENDCLASS.
 
 
 
-CLASS zcl_hddt_src_gom IMPLEMENTATION.
-
-  METHOD zif_hddt_source~select_documents.
-
-    IF is_selection-bukrs IS INITIAL.
-      zcx_hddt_error=>raise_text( `Thiếu mã công ty (BUKRS) khi đọc hoá đơn gom.` ).
-    ENDIF.
-
-    load_registry( i_bukrs    = is_selection-bukrs
-                   i_gjahr    = is_selection-gjahr
-                   i_src_type = gc_src_type ).
-
-    SELECT DISTINCT gom_no
-      FROM ztb_hddt_gom
-      WHERE bukrs   = @is_selection-bukrs
-        AND gjahr   = @is_selection-gjahr
-        AND gom_no IN @is_selection-r_gom
-        AND gom_no IN @is_selection-r_docno
-        AND xcancel = @space
-      ORDER BY gom_no
-      INTO TABLE @DATA(lt_gom).
-    IF sy-subrc <> 0.
-      RETURN.
-    ENDIF.
-
-    LOOP AT lt_gom ASSIGNING FIELD-SYMBOL(<fs_gom>).
-      DATA(lt_mem) = zcl_hddt_gom=>members( i_bukrs  = is_selection-bukrs
-                                            i_gjahr  = is_selection-gjahr
-                                            i_gom_no = <fs_gom>-gom_no ).
-      IF lt_mem IS INITIAL.
-        CONTINUE.
-      ENDIF.
-
-      " Đọc thành viên: chỉ giữ bộ lọc công ty/năm, lấy cả CT đã đảo để
-      " phát hiện và chặn phát hành
-      DATA ls_sel TYPE zif_hddt_source=>ty_selection.
-      CLEAR ls_sel.
-      ls_sel-bukrs     = is_selection-bukrs.
-      ls_sel-gjahr     = is_selection-gjahr.
-      ls_sel-inv_type  = is_selection-inv_type.
-      ls_sel-xreversed = abap_true.
-      " FS 3.6.7: một chứng từ gom được gom từ NHIỀU loại nguồn khác nhau
-      " nên phải đọc thành viên theo từng loại, không cố định FI
-      DATA lt_mtype TYPE SORTED TABLE OF zde_hddt_srctype WITH UNIQUE KEY table_line.
-      DATA lt_req   TYPE zif_hddt_types=>ty_t_request.
-      CLEAR: lt_mtype, lt_req.
-      LOOP AT lt_mem ASSIGNING FIELD-SYMBOL(<fs_mem>).
-        INSERT <fs_mem>-src_type INTO TABLE lt_mtype.
-      ENDLOOP.
-
-      LOOP AT lt_mtype ASSIGNING FIELD-SYMBOL(<fs_mtype>).
-        CLEAR ls_sel-r_docno.
-        LOOP AT lt_mem ASSIGNING FIELD-SYMBOL(<fs_mem2>) WHERE src_type = <fs_mtype>.
-          APPEND VALUE #( sign = 'I' option = 'EQ' low = <fs_mem2>-src_docno ) TO ls_sel-r_docno.
-        ENDLOOP.
-        IF ls_sel-r_docno IS INITIAL.
-          CONTINUE.
-        ENDIF.
-        TRY.
-            DATA(lo_mem) = zcl_hddt_factory=>get_source( i_bukrs    = is_selection-bukrs
-                                                         i_src_type = <fs_mtype> ).
-          CATCH zcx_hddt_error.
-            CONTINUE.
-        ENDTRY.
-        APPEND LINES OF lo_mem->select_documents( ls_sel ) TO lt_req.
-      ENDLOOP.
-      IF lt_req IS INITIAL.
-        CONTINUE.
-      ENDIF.
-      SORT lt_req BY src_type src_docno.
-
-      DATA(ls_req) = merge( i_bukrs    = is_selection-bukrs
-                            i_gjahr    = is_selection-gjahr
-                            i_gom_no   = <fs_gom>-gom_no
-                            it_members = lt_req ).
-
-      DATA(ls_reg) = registry_of( i_bukrs    = is_selection-bukrs
-                                  i_gjahr    = is_selection-gjahr
-                                  i_src_type = gc_src_type
-                                  i_docno    = <fs_gom>-gom_no ).
-      " Dòng hàng đã sửa tay ưu tiên hơn kết quả MERGE
-      IF ls_reg-status IS INITIAL
-         OR ls_reg-status = zif_hddt_types=>gc_status-not_sent.
-        load_item_override( EXPORTING i_bukrs    = is_selection-bukrs
-                                      i_gjahr    = is_selection-gjahr
-                                      i_docno    = <fs_gom>-gom_no
-                            CHANGING  cs_request = ls_req ).
-      ENDIF.
-
-      IF keep_document( i_reversed   = ls_req-src_info-xreversed
-                        is_reg       = ls_reg
-                        is_selection = is_selection ) = abap_false.
-        CONTINUE.
-      ENDIF.
-      IF is_selection-r_kunnr IS NOT INITIAL
-         AND ls_req-invoice-buyer-code NOT IN is_selection-r_kunnr.
-        CONTINUE.
-      ENDIF.
-      IF is_selection-r_seq IS NOT INITIAL AND ls_reg-seq NOT IN is_selection-r_seq.
-        CONTINUE.
-      ENDIF.
-
-      apply_registry_edits( EXPORTING is_reg = ls_reg CHANGING cs_request = ls_req ).
-      APPEND ls_req TO rt_request.
-    ENDLOOP.
-
-  ENDMETHOD.
-
-
-  METHOD zif_hddt_source~get_doc_state.
-
-    DATA(lt_mem) = zcl_hddt_gom=>members( i_bukrs  = i_bukrs
-                                          i_gjahr  = i_gjahr
-                                          i_gom_no = i_docno ).
-    IF lt_mem IS INITIAL.
-      RETURN.
-    ENDIF.
-    rs_state-exists = abap_true.
-
-    LOOP AT lt_mem ASSIGNING FIELD-SYMBOL(<fs_mem>).
-      TRY.
-          DATA(lo_mem) = zcl_hddt_factory=>get_source( i_bukrs    = i_bukrs
-                                                       i_src_type = <fs_mem>-src_type ).
-        CATCH zcx_hddt_error.
-          CONTINUE.
-      ENDTRY.
-      DATA(ls_st) = lo_mem->get_doc_state( i_bukrs = i_bukrs
-                                           i_gjahr = <fs_mem>-gjahr
-                                           i_docno = <fs_mem>-src_docno ).
-      IF rs_state-waers IS INITIAL.
-        rs_state-waers = ls_st-waers.
-        rs_state-kunnr = ls_st-kunnr.
-      ENDIF.
-      IF ls_st-xreversed = abap_true.
-        rs_state-xreversed = abap_true.
-        rs_state-stblg     = ls_st-stblg.
-        rs_state-stjah     = ls_st-stjah.
-      ENDIF.
-    ENDLOOP.
-
-  ENDMETHOD.
+CLASS ZCL_HDDT_SRC_GOM IMPLEMENTATION.
 
 
   METHOD load_item_override.
 
-    SELECT line_no, item_code, item_name, item_type, unit, quantity,
-           price, amount, tax_rate, tax_amount, total, disc_pct,
-           disc_amt, note
-      FROM ztb_hddt_item
-      WHERE bukrs     = @i_bukrs
-        AND gjahr     = @i_gjahr
-        AND src_type  = @gc_src_type
-        AND src_docno = @i_docno
-      ORDER BY line_no
-      INTO TABLE @DATA(lt_ov).
+*   >>> Begin of change 20260927_01 F-DUBV TR S25K900131 - Review S25 (SELECT trong vong lap)
+*   Lay tu bo nho MT_ITEM_OV (nap 1 lan o SELECT_DOCUMENTS). Bo dem da loc
+*   BUKRS / GJAHR / SRC_TYPE = GOM; khoa sap theo LINE_NO nhu ORDER BY cu.
+    DATA lt_ov TYPE STANDARD TABLE OF ztb_hddt_item WITH EMPTY KEY.
+    LOOP AT mt_item_ov INTO DATA(ls_ov_buf)
+         WHERE src_docno = i_docno.
+      IF ls_ov_buf-bukrs = i_bukrs AND ls_ov_buf-gjahr = i_gjahr.
+        APPEND ls_ov_buf TO lt_ov.
+      ENDIF.
+    ENDLOOP.
+*   <<< End of change 20260927_01
     IF lt_ov IS INITIAL.
       RETURN.
     ENDIF.
@@ -315,4 +183,170 @@ CLASS zcl_hddt_src_gom IMPLEMENTATION.
 
   ENDMETHOD.
 
+
+  METHOD zif_hddt_source~get_doc_state.
+
+    DATA(lt_mem) = zcl_hddt_gom=>members( i_bukrs  = i_bukrs
+                                          i_gjahr  = i_gjahr
+                                          i_gom_no = i_docno ).
+    IF lt_mem IS INITIAL.
+      RETURN.
+    ENDIF.
+    rs_state-exists = abap_true.
+
+    LOOP AT lt_mem ASSIGNING FIELD-SYMBOL(<fs_mem>).
+      TRY.
+          DATA(lo_mem) = zcl_hddt_factory=>get_source( i_bukrs    = i_bukrs
+                                                       i_src_type = <fs_mem>-src_type ).
+        CATCH zcx_hddt_error.
+          CONTINUE.
+      ENDTRY.
+      DATA(ls_st) = lo_mem->get_doc_state( i_bukrs = i_bukrs
+                                           i_gjahr = <fs_mem>-gjahr
+                                           i_docno = <fs_mem>-src_docno ).
+      IF rs_state-waers IS INITIAL.
+        rs_state-waers = ls_st-waers.
+        rs_state-kunnr = ls_st-kunnr.
+      ENDIF.
+      IF ls_st-xreversed = abap_true.
+        rs_state-xreversed = abap_true.
+        rs_state-stblg     = ls_st-stblg.
+        rs_state-stjah     = ls_st-stjah.
+      ENDIF.
+    ENDLOOP.
+
+  ENDMETHOD.
+
+
+  METHOD zif_hddt_source~select_documents.
+
+    IF is_selection-bukrs IS INITIAL.
+      zcx_hddt_error=>raise_text( `Thiếu mã công ty (BUKRS) khi đọc hoá đơn gom.` ).
+    ENDIF.
+
+    load_registry( i_bukrs    = is_selection-bukrs
+                   i_gjahr    = is_selection-gjahr
+                   i_src_type = gc_src_type ).
+
+    SELECT DISTINCT gom_no
+      FROM ztb_hddt_gom
+      WHERE bukrs   = @is_selection-bukrs
+        AND gjahr   = @is_selection-gjahr
+        AND gom_no IN @is_selection-r_gom
+        AND gom_no IN @is_selection-r_docno
+        AND xcancel = @space
+      ORDER BY gom_no
+      INTO TABLE @DATA(lt_gom).
+    IF sy-subrc <> 0.
+      RETURN.
+    ENDIF.
+
+*   >>> Begin of change 20260927_01 F-DUBV TR S25K900131 - Review S25 (SELECT trong vong lap)
+*   Doc 1 lan truoc vong lap: thanh vien cua moi so gom (thay MEMBERS( ) tung
+*   so gom) va dong sua tay ZTB_HDDT_ITEM (thay SELECT trong LOAD_ITEM_OVERRIDE).
+    DATA lt_gom_no TYPE zcl_hddt_gom=>ty_t_gom_no.
+    DATA lt_mem    TYPE zcl_hddt_gom=>ty_t_member.
+    LOOP AT lt_gom ASSIGNING FIELD-SYMBOL(<fs_gom0>).
+      INSERT <fs_gom0>-gom_no INTO TABLE lt_gom_no.
+    ENDLOOP.
+    DATA(lt_mem_all) = zcl_hddt_gom=>members_multi( i_bukrs   = is_selection-bukrs
+                                                    i_gjahr   = is_selection-gjahr
+                                                    it_gom_no = lt_gom_no ).
+    CLEAR mt_item_ov.
+    SELECT * FROM ztb_hddt_item
+      FOR ALL ENTRIES IN @lt_gom_no
+      WHERE bukrs     = @is_selection-bukrs
+        AND gjahr     = @is_selection-gjahr
+        AND src_type  = @gc_src_type
+        AND src_docno = @lt_gom_no-table_line
+      INTO TABLE @mt_item_ov.
+*   <<< End of change 20260927_01
+
+    LOOP AT lt_gom ASSIGNING FIELD-SYMBOL(<fs_gom>).
+*     >>> Begin of change 20260927_01 F-DUBV TR S25K900131 - Review S25 (SELECT trong vong lap)
+      CLEAR lt_mem.
+      LOOP AT lt_mem_all ASSIGNING FIELD-SYMBOL(<fs_mall>) WHERE gom_no = <fs_gom>-gom_no.
+        APPEND VALUE #( src_type  = <fs_mall>-src_type
+                        src_docno = <fs_mall>-src_docno
+                        gjahr     = <fs_mall>-gjahr ) TO lt_mem.
+      ENDLOOP.
+*     <<< End of change 20260927_01
+      IF lt_mem IS INITIAL.
+        CONTINUE.
+      ENDIF.
+
+      " Đọc thành viên: chỉ giữ bộ lọc công ty/năm, lấy cả CT đã đảo để
+      " phát hiện và chặn phát hành
+      DATA ls_sel TYPE zif_hddt_source=>ty_selection.
+      CLEAR ls_sel.
+      ls_sel-bukrs     = is_selection-bukrs.
+      ls_sel-gjahr     = is_selection-gjahr.
+      ls_sel-inv_type  = is_selection-inv_type.
+      ls_sel-xreversed = abap_true.
+      " FS 3.6.7: một chứng từ gom được gom từ NHIỀU loại nguồn khác nhau
+      " nên phải đọc thành viên theo từng loại, không cố định FI
+      DATA lt_mtype TYPE SORTED TABLE OF zde_hddt_srctype WITH UNIQUE KEY table_line.
+      DATA lt_req   TYPE zif_hddt_types=>ty_t_request.
+      CLEAR: lt_mtype, lt_req.
+      LOOP AT lt_mem ASSIGNING FIELD-SYMBOL(<fs_mem>).
+        INSERT <fs_mem>-src_type INTO TABLE lt_mtype.
+      ENDLOOP.
+
+      LOOP AT lt_mtype ASSIGNING FIELD-SYMBOL(<fs_mtype>).
+        CLEAR ls_sel-r_docno.
+        LOOP AT lt_mem ASSIGNING FIELD-SYMBOL(<fs_mem2>) WHERE src_type = <fs_mtype>.
+          APPEND VALUE #( sign = 'I' option = 'EQ' low = <fs_mem2>-src_docno ) TO ls_sel-r_docno.
+        ENDLOOP.
+        IF ls_sel-r_docno IS INITIAL.
+          CONTINUE.
+        ENDIF.
+        TRY.
+            DATA(lo_mem) = zcl_hddt_factory=>get_source( i_bukrs    = is_selection-bukrs
+                                                         i_src_type = <fs_mtype> ).
+          CATCH zcx_hddt_error.
+            CONTINUE.
+        ENDTRY.
+        APPEND LINES OF lo_mem->select_documents( ls_sel ) TO lt_req.
+      ENDLOOP.
+      IF lt_req IS INITIAL.
+        CONTINUE.
+      ENDIF.
+      SORT lt_req BY src_type src_docno.
+
+      DATA(ls_req) = merge( i_bukrs    = is_selection-bukrs
+                            i_gjahr    = is_selection-gjahr
+                            i_gom_no   = <fs_gom>-gom_no
+                            it_members = lt_req ).
+
+      DATA(ls_reg) = registry_of( i_bukrs    = is_selection-bukrs
+                                  i_gjahr    = is_selection-gjahr
+                                  i_src_type = gc_src_type
+                                  i_docno    = <fs_gom>-gom_no ).
+      " Dòng hàng đã sửa tay ưu tiên hơn kết quả MERGE
+      IF ls_reg-status IS INITIAL
+         OR ls_reg-status = zif_hddt_types=>gc_status-not_sent.
+        load_item_override( EXPORTING i_bukrs    = is_selection-bukrs
+                                      i_gjahr    = is_selection-gjahr
+                                      i_docno    = <fs_gom>-gom_no
+                            CHANGING  cs_request = ls_req ).
+      ENDIF.
+
+      IF keep_document( i_reversed   = ls_req-src_info-xreversed
+                        is_reg       = ls_reg
+                        is_selection = is_selection ) = abap_false.
+        CONTINUE.
+      ENDIF.
+      IF is_selection-r_kunnr IS NOT INITIAL
+         AND ls_req-invoice-buyer-code NOT IN is_selection-r_kunnr.
+        CONTINUE.
+      ENDIF.
+      IF is_selection-r_seq IS NOT INITIAL AND ls_reg-seq NOT IN is_selection-r_seq.
+        CONTINUE.
+      ENDIF.
+
+      apply_registry_edits( EXPORTING is_reg = ls_reg CHANGING cs_request = ls_req ).
+      APPEND ls_req TO rt_request.
+    ENDLOOP.
+
+  ENDMETHOD.
 ENDCLASS.

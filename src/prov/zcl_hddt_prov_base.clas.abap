@@ -90,6 +90,13 @@ CLASS zcl_hddt_prov_base DEFINITION
       IMPORTING is_adjust      TYPE zif_hddt_types=>ty_adjust
       RETURNING VALUE(r_note) TYPE string .
 
+    "! Lý do điều chỉnh cho thẻ inv.adj.rea - chính câu mô tả của
+    "! BUILD_ADJUST_NOTE nhưng cắt còn 100 ký tự theo giới hạn của
+    "! FPT eInvoice (FS v0.17 mục 3.7.6).
+    METHODS adjust_reason
+      IMPORTING is_adjust        TYPE zif_hddt_types=>ty_adjust
+      RETURNING VALUE(r_reason) TYPE string .
+
   PRIVATE SECTION.
 
     DATA mo_config TYPE REF TO zcl_hddt_config .
@@ -98,116 +105,130 @@ ENDCLASS.
 
 
 
-CLASS zcl_hddt_prov_base IMPLEMENTATION.
+CLASS ZCL_HDDT_PROV_BASE IMPLEMENTATION.
 
-*---------------------------------------------------------------------*
-* Cài đặt mặc định của interface — adapter con override khi cần
-*---------------------------------------------------------------------*
-  METHOD zif_hddt_provider~resolve_action.
 
-    r_action = is_request-action.
+  METHOD adjust_reason.
+
+    " FS v0.17 muc 3.7.6: the inv.adj.rea chi dai toi da 100 ky tu trong
+    " khi cau mo ta day du nam o the inv.note (255 ky tu). Truyen chinh
+    " cau do nhung CAT con 100.
+    r_reason = build_adjust_note( is_adjust ).
+    IF strlen( r_reason ) > 100.
+      r_reason = r_reason(100).
+    ENDIF.
 
   ENDMETHOD.
 
 
-  METHOD zif_hddt_provider~get_url_symbols.
+  METHOD build_adjust_note.
 
-    rt_symbols = VALUE #(
-      ( name  = zif_hddt_types=>gc_symbol-taxcode
-        value = |{ is_cred-taxcode }| )
-      ( name  = zif_hddt_types=>gc_symbol-template
-        value = |{ is_request-invoice-header-template }| )
-      ( name  = zif_hddt_types=>gc_symbol-serial
-        value = |{ is_request-invoice-header-serial }| )
-      ( name  = zif_hddt_types=>gc_symbol-seq
-        value = |{ is_request-invoice-header-seq }| )
-      ( name  = zif_hddt_types=>gc_symbol-idkey
-        value = |{ is_request-invoice-header-idkey }| )
-      ( name  = zif_hddt_types=>gc_symbol-bukrs
-        value = |{ is_request-bukrs }| )
-      ( name  = zif_hddt_types=>gc_symbol-apiuser
-        value = |{ is_cred-apiuser }| ) ).
+    IF is_adjust-reason IS NOT INITIAL.
+      r_note = is_adjust-reason.
+      RETURN.
+    ENDIF.
 
-    " Tham số tự do của caller cũng dùng được làm placeholder
-    LOOP AT is_request-params ASSIGNING FIELD-SYMBOL(<fs_p>).
-      APPEND <fs_p> TO rt_symbols.
+    IF is_adjust-org_serial IS INITIAL AND is_adjust-org_seq IS INITIAL.
+      RETURN.
+    ENDIF.
+
+    " FS v0.17 muc 3.6.4 chot CU PHAP CO DINH cua cau mo ta, in tren ban
+    " the hien hoa don. Nguoi dung khong nhap va khong sua duoc:
+    "   Hóa đơn điều chỉnh <tăng|giảm> cho hóa đơn điện tử mẫu số <mẫu
+    "   số>, ký hiệu <ký hiệu>, số <số hóa đơn> lập ngày <dd/mm/yyyy>
+    " Bon gia tri lay tu ban ghi HOA DON GOC tren so dang ky nen luon
+    " khop voi bo the inv.ref.rform / rserial / rseq / ridt.
+    " Ky hieu FPT gom MAU SO o ky tu dau (vi du 1C25MAG): tach ra thanh
+    " mau so = ky tu dau, ky hieu = phan con lai.
+    DATA(lv_form)   = CONV string( is_adjust-org_serial ).
+    DATA(lv_serial) = lv_form.
+    IF strlen( lv_form ) > 1.
+      lv_form   = lv_form(1).
+      lv_serial = lv_serial+1.
+    ENDIF.
+
+    IF is_adjust-adj_type = zif_hddt_types=>gc_adj_type-replace.
+      " Nghiep vu thay the khong co loai dieu chinh nen giu cau cu
+      r_note = |Thay thế cho hóa đơn điện tử mẫu số { lv_form }, | &&
+               |ký hiệu { lv_serial }, số { is_adjust-org_seq }|.
+    ELSE.
+      " '1' tang, '0' giam - lay dung theo chieu ghi so cua dong doanh thu
+      DATA(lv_ud) = COND string( WHEN is_adjust-adj_direction = '0'
+                                 THEN `giảm` ELSE `tăng` ).
+      r_note = |Hóa đơn điều chỉnh { lv_ud } cho hóa đơn điện tử mẫu số | &&
+               |{ lv_form }, ký hiệu { lv_serial }, | &&
+               |số { is_adjust-org_seq }|.
+    ENDIF.
+
+    IF is_adjust-org_inv_date IS NOT INITIAL.
+      r_note = r_note && | lập ngày { fmt_date_vn( is_adjust-org_inv_date ) }|.
+    ENDIF.
+
+  ENDMETHOD.
+
+
+  METHOD build_form.
+
+    LOOP AT it_fields ASSIGNING FIELD-SYMBOL(<fs_f>).
+      IF <fs_f>-value IS INITIAL.
+        CONTINUE.
+      ENDIF.
+      IF r_body IS NOT INITIAL.
+        r_body = r_body && `&`.
+      ENDIF.
+      r_body = r_body
+             && platform( )->escape_url( <fs_f>-name )
+             && `=`
+             && platform( )->escape_url( <fs_f>-value ).
     ENDLOOP.
 
   ENDMETHOD.
 
 
-  METHOD zif_hddt_provider~get_headers.
+  METHOD fmt_date.
 
-    CLEAR rt_headers.
-
-  ENDMETHOD.
-
-
-  METHOD zif_hddt_provider~build_login_payload.
-
-    r_payload = NEW zcl_hddt_json( )->begin_object(
-      )->add_string( i_name = `username` i_value = is_cred-apiuser i_force = abap_true
-      )->add_string( i_name = `password` i_value = i_secret       i_force = abap_true
-      )->end_object(
-      )->get_json( ).
+    IF i_date IS INITIAL.
+      RETURN.
+    ENDIF.
+    r_text = |{ i_date(4) }-{ i_date+4(2) }-{ i_date+6(2) }|.
 
   ENDMETHOD.
 
 
-  METHOD zif_hddt_provider~extract_token.
+  METHOD fmt_datetime.
 
-    " Mặc định: body chính là token (chuỗi JWT thuần). Nếu là JSON thì
-    " thử các tên thẻ thông dụng.
-    DATA(lv_body) = i_body.
-    CONDENSE lv_body.
-
-    IF lv_body IS INITIAL.
+    IF i_date IS INITIAL.
       RETURN.
     ENDIF.
 
-    IF substring( val = lv_body len = 1 ) <> `{`.
-      r_token = lv_body.
-      " Một số API bọc token trong dấu ngoặc kép
-      REPLACE ALL OCCURRENCES OF `"` IN r_token WITH ``.
-      RETURN.
-    ENDIF.
+    DATA lv_time TYPE uzeit.
+    lv_time = i_time.
 
-    TRY.
-        DATA(lt_val) = zcl_hddt_json=>parse( lv_body ).
-      CATCH zcx_hddt_error.
-        RETURN.
-    ENDTRY.
-
-    r_token = zcl_hddt_json=>get_value_by_name( it_values = lt_val
-                                                  i_name   = `access_token` ).
-    IF r_token IS INITIAL.
-      r_token = zcl_hddt_json=>get_value_by_name( it_values = lt_val
-                                                    i_name   = `token` ).
-    ENDIF.
-    IF r_token IS INITIAL.
-      r_token = zcl_hddt_json=>get_value_by_name( it_values = lt_val
-                                                    i_name   = `accessToken` ).
-    ENDIF.
+    r_text = |{ i_date(4) }-{ i_date+4(2) }-{ i_date+6(2) }| &&
+              | { lv_time(2) }:{ lv_time+2(2) }:{ lv_time+4(2) }|.
 
   ENDMETHOD.
 
 
+  METHOD fmt_date_vn.
+
+    IF i_date IS INITIAL.
+      RETURN.
+    ENDIF.
+    r_text = |{ i_date+6(2) }/{ i_date+4(2) }/{ i_date(4) }|.
+
+  ENDMETHOD.
+
+
+  METHOD get_config.
 *---------------------------------------------------------------------*
 * Tiện ích dùng chung
 *---------------------------------------------------------------------*
-  METHOD get_config.
 
     IF mo_config IS NOT BOUND.
       mo_config = zcl_hddt_config=>get_instance( ).
     ENDIF.
     ro_config = mo_config.
-
-  ENDMETHOD.
-
-
-  METHOD platform.
-
-    ro_platform = zcl_hddt_platform=>get( ).
 
   ENDMETHOD.
 
@@ -235,37 +256,17 @@ CLASS zcl_hddt_prov_base IMPLEMENTATION.
   ENDMETHOD.
 
 
-  METHOD fmt_date.
+  METHOD num.
 
-    IF i_date IS INITIAL.
-      RETURN.
-    ENDIF.
-    r_text = |{ i_date(4) }-{ i_date+4(2) }-{ i_date+6(2) }|.
+    r_text = zcl_hddt_json=>format_number( i_value    = i_value
+                                             i_decimals = i_decimals ).
 
   ENDMETHOD.
 
 
-  METHOD fmt_date_vn.
+  METHOD platform.
 
-    IF i_date IS INITIAL.
-      RETURN.
-    ENDIF.
-    r_text = |{ i_date+6(2) }/{ i_date+4(2) }/{ i_date(4) }|.
-
-  ENDMETHOD.
-
-
-  METHOD fmt_datetime.
-
-    IF i_date IS INITIAL.
-      RETURN.
-    ENDIF.
-
-    DATA lv_time TYPE uzeit.
-    lv_time = i_time.
-
-    r_text = |{ i_date(4) }-{ i_date+4(2) }-{ i_date+6(2) }| &&
-              | { lv_time(2) }:{ lv_time+2(2) }:{ lv_time+4(2) }|.
+    ro_platform = zcl_hddt_platform=>get( ).
 
   ENDMETHOD.
 
@@ -324,53 +325,93 @@ CLASS zcl_hddt_prov_base IMPLEMENTATION.
   ENDMETHOD.
 
 
-  METHOD num.
+  METHOD zif_hddt_provider~build_login_payload.
 
-    r_text = zcl_hddt_json=>format_number( i_value    = i_value
-                                             i_decimals = i_decimals ).
+    r_payload = NEW zcl_hddt_json( )->begin_object(
+      )->add_string( i_name = `username` i_value = is_cred-apiuser i_force = abap_true
+      )->add_string( i_name = `password` i_value = i_secret       i_force = abap_true
+      )->end_object(
+      )->get_json( ).
 
   ENDMETHOD.
 
 
-  METHOD build_form.
+  METHOD zif_hddt_provider~extract_token.
 
-    LOOP AT it_fields ASSIGNING FIELD-SYMBOL(<fs_f>).
-      IF <fs_f>-value IS INITIAL.
-        CONTINUE.
-      ENDIF.
-      IF r_body IS NOT INITIAL.
-        r_body = r_body && `&`.
-      ENDIF.
-      r_body = r_body
-             && platform( )->escape_url( <fs_f>-name )
-             && `=`
-             && platform( )->escape_url( <fs_f>-value ).
+    " Mặc định: body chính là token (chuỗi JWT thuần). Nếu là JSON thì
+    " thử các tên thẻ thông dụng.
+    DATA(lv_body) = i_body.
+    CONDENSE lv_body.
+
+    IF lv_body IS INITIAL.
+      RETURN.
+    ENDIF.
+
+    IF substring( val = lv_body len = 1 ) <> `{`.
+      r_token = lv_body.
+      " Một số API bọc token trong dấu ngoặc kép
+      REPLACE ALL OCCURRENCES OF `"` IN r_token WITH ``.
+      RETURN.
+    ENDIF.
+
+    TRY.
+        DATA(lt_val) = zcl_hddt_json=>parse( lv_body ).
+      CATCH zcx_hddt_error.
+        RETURN.
+    ENDTRY.
+
+    r_token = zcl_hddt_json=>get_value_by_name( it_values = lt_val
+                                                  i_name   = `access_token` ).
+    IF r_token IS INITIAL.
+      r_token = zcl_hddt_json=>get_value_by_name( it_values = lt_val
+                                                    i_name   = `token` ).
+    ENDIF.
+    IF r_token IS INITIAL.
+      r_token = zcl_hddt_json=>get_value_by_name( it_values = lt_val
+                                                    i_name   = `accessToken` ).
+    ENDIF.
+
+  ENDMETHOD.
+
+
+  METHOD zif_hddt_provider~get_headers.
+
+    CLEAR rt_headers.
+
+  ENDMETHOD.
+
+
+  METHOD zif_hddt_provider~get_url_symbols.
+
+    rt_symbols = VALUE #(
+      ( name  = zif_hddt_types=>gc_symbol-taxcode
+        value = |{ is_cred-taxcode }| )
+      ( name  = zif_hddt_types=>gc_symbol-template
+        value = |{ is_request-invoice-header-template }| )
+      ( name  = zif_hddt_types=>gc_symbol-serial
+        value = |{ is_request-invoice-header-serial }| )
+      ( name  = zif_hddt_types=>gc_symbol-seq
+        value = |{ is_request-invoice-header-seq }| )
+      ( name  = zif_hddt_types=>gc_symbol-idkey
+        value = |{ is_request-invoice-header-idkey }| )
+      ( name  = zif_hddt_types=>gc_symbol-bukrs
+        value = |{ is_request-bukrs }| )
+      ( name  = zif_hddt_types=>gc_symbol-apiuser
+        value = |{ is_cred-apiuser }| ) ).
+
+    " Tham số tự do của caller cũng dùng được làm placeholder
+    LOOP AT is_request-params ASSIGNING FIELD-SYMBOL(<fs_p>).
+      APPEND <fs_p> TO rt_symbols.
     ENDLOOP.
 
   ENDMETHOD.
 
 
-  METHOD build_adjust_note.
-
-    IF is_adjust-reason IS NOT INITIAL.
-      r_note = is_adjust-reason.
-      RETURN.
-    ENDIF.
-
-    IF is_adjust-org_serial IS INITIAL AND is_adjust-org_seq IS INITIAL.
-      RETURN.
-    ENDIF.
-
-    DATA(lv_prefix) = COND string(
-      WHEN is_adjust-adj_type = zif_hddt_types=>gc_adj_type-replace
-      THEN `Thay thế cho hóa đơn `
-      ELSE `Điều chỉnh cho hóa đơn ` ).
-
-    r_note = |{ lv_prefix }{ is_adjust-org_serial }{ is_adjust-org_seq }|.
-    IF is_adjust-org_inv_date IS NOT INITIAL.
-      r_note = r_note && | ngày { fmt_date_vn( is_adjust-org_inv_date ) }|.
-    ENDIF.
+  METHOD zif_hddt_provider~resolve_action.
+*---------------------------------------------------------------------*
+* Cài đặt mặc định của interface — adapter con override khi cần
+*---------------------------------------------------------------------*
+    r_action = is_request-action.
 
   ENDMETHOD.
-
 ENDCLASS.

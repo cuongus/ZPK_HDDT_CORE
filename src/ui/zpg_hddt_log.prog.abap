@@ -30,6 +30,14 @@
 * Version   Ngày          Người sửa                Transport   Mô tả
 *=====================================================================
 * 1.0       28/08/2026    cuongus - CuongUS        abapGit     Tạo mới
+* 1.1       22/09/2026    cuongus - CuongUS        abapGit     SELECT_DATA: đưa
+*                         hai bộ lọc p_test / p_onlyer vào WHERE thay vì
+*                         DELETE gt_log sau UP TO ... ROWS. Trước đây cắt N
+*                         dòng mới nhất rồi mới lọc nên "chỉ lỗi" có thể ra
+*                         màn hình rỗng dù vẫn còn lỗi ở dòng cũ hơn
+* 1.2       22/09/2026    cuongus - CuongUS        abapGit     Thêm cột
+*                         LOG_DATE / LOG_TIME đổi từ CREATED_AT sang múi giờ
+*                         người dùng; cột UTC gốc giữ lại nhưng ẩn mặc định
 *=====================================================================
 REPORT zpg_hddt_log MESSAGE-ID zms_hddt.
 
@@ -43,6 +51,12 @@ TYPES gty_icon TYPE c LENGTH 4.
 
 TYPES: BEGIN OF gty_log,
          light       TYPE c LENGTH 4,
+         " CREATED_AT lưu UTC (đúng định nghĩa TIMESTAMPL) và KHÔNG đổi.
+         " Hai cột dưới là dẫn xuất chỉ để hiển thị theo múi giờ người
+         " dùng — TIMESTAMPL không có conversion exit nên ALV vẽ nguyên
+         " số UTC, người xem ở VN sẽ thấy lệch 7 tiếng.
+         log_date    TYPE dats,
+         log_time    TYPE uzeit,
          created_at  TYPE timestampl,
          bukrs       TYPE bukrs,
          gjahr       TYPE gjahr,
@@ -196,6 +210,31 @@ CLASS lcl_log IMPLEMENTATION.
       lr_gjahr = VALUE #( ( sign = 'I' option = 'EQ' low = p_gjahr ) ).
     ENDIF.
 
+    " Hai bộ lọc dưới đây TRƯỚC ĐÂY chạy bằng DELETE gt_log SAU câu
+    " SELECT, tức là cắt N dòng mới nhất rồi mới vứt bớt. Kết quả sai:
+    " tích "chỉ lỗi" mà N dòng mới nhất toàn thành công thì màn hình
+    " rỗng, trong khi lỗi vẫn còn ở các dòng cũ hơn. Đưa vào WHERE để
+    " UP TO ... ROWS đếm trên tập ĐÃ lọc.
+    "
+    " Range rỗng = không lọc (col IN <range rỗng> luôn đúng), nên không
+    " cần tách thành hai câu SELECT.
+    DATA lr_test  TYPE RANGE OF xfeld.
+    DATA lr_msgty TYPE RANGE OF symsgty.
+    DATA lr_hcode TYPE RANGE OF zde_hddt_size.
+
+    IF p_test = abap_false.
+      lr_test = VALUE #( ( sign = 'I' option = 'EQ' low = space ) ).
+    ENDIF.
+
+    IF p_onlyer = abap_true.
+      " "Lỗi" = message type E/A, HOẶC http code ngoài dải 2xx.
+      " Hai range ghép bằng OR nên phải cùng rỗng khi không lọc.
+      lr_msgty = VALUE #( ( sign = 'I' option = 'EQ' low = 'E' )
+                          ( sign = 'I' option = 'EQ' low = 'A' ) ).
+      lr_hcode = VALUE #( ( sign = 'I' option = 'LT' low = 200 )
+                          ( sign = 'I' option = 'GE' low = 300 ) ).
+    ENDIF.
+
     " Không đọc REQ_BODY / RES_BODY ở đây: payload có thể vài trăm KB
     " mỗi dòng, đọc cả danh sách là vô ích. Chỉ đọc khi người dùng bấm
     " xem đúng một dòng (READ_PAYLOAD).
@@ -214,20 +253,21 @@ CLASS lcl_log IMPLEMENTATION.
         AND provider   IN @s_prov
         AND action     IN @s_action
         AND http_code  IN @s_code
+        AND test_run   IN @lr_test
+        AND ( msgty     IN @lr_msgty
+           OR http_code IN @lr_hcode )
       ORDER BY created_at DESCENDING
       INTO CORRESPONDING FIELDS OF TABLE @gt_log
       UP TO @lv_max ROWS.
 
-    IF p_test = abap_false.
-      DELETE gt_log WHERE test_run = abap_true.
-    ENDIF.
-
-    IF p_onlyer = abap_true.
-      DELETE gt_log WHERE msgty <> 'E' AND msgty <> 'A'
-                      AND ( http_code >= 200 AND http_code < 300 ).
-    ENDIF.
-
     LOOP AT gt_log ASSIGNING FIELD-SYMBOL(<fs_log>).
+      " Đổi UTC -> múi giờ người dùng (SY-ZONLO). Trên hệ này TTZCU khai
+      " cả múi hệ thống lẫn múi mặc định của user là UTC+7 nên ra giờ
+      " Hà Nội; user ở múi khác thì thấy giờ của họ, đúng nghĩa "lúc tôi
+      " gọi API".
+      CONVERT TIME STAMP <fs_log>-created_at TIME ZONE sy-zonlo
+              INTO DATE <fs_log>-log_date TIME <fs_log>-log_time.
+
       <fs_log>-light = map_light( i_code  = <fs_log>-http_code
                                   i_msgty = <fs_log>-msgty ).
     ENDLOOP.
@@ -321,7 +361,19 @@ CLASS lcl_log IMPLEMENTATION.
         CAST cl_salv_column_table( lo_cols->get_column( 'LIGHT' )
           )->set_icon( abap_true ).
 
-        lo_cols->get_column( 'CREATED_AT' )->set_medium_text( 'Thời điểm' ).
+        lo_cols->get_column( 'LOG_DATE' )->set_short_text( 'Ngày' ).
+        lo_cols->get_column( 'LOG_DATE' )->set_medium_text( 'Ngày ghi log' ).
+        lo_cols->get_column( 'LOG_DATE' )->set_long_text( 'Ngày ghi log (giờ địa phương)' ).
+        lo_cols->get_column( 'LOG_TIME' )->set_short_text( 'Giờ' ).
+        lo_cols->get_column( 'LOG_TIME' )->set_medium_text( 'Giờ ghi log' ).
+        lo_cols->get_column( 'LOG_TIME' )->set_long_text( 'Giờ ghi log (giờ địa phương)' ).
+
+        " Giữ cột UTC nhưng ẩn mặc định: nó là mốc chung khi đối chiếu
+        " với nhà cung cấp / cơ quan thuế, cần thì người dùng tự bật lên
+        lo_cols->get_column( 'CREATED_AT' )->set_short_text( 'UTC' ).
+        lo_cols->get_column( 'CREATED_AT' )->set_medium_text( 'Thời điểm (UTC)' ).
+        lo_cols->get_column( 'CREATED_AT' )->set_long_text( 'Thời điểm ghi log (UTC)' ).
+        lo_cols->get_column( 'CREATED_AT' )->set_visible( abap_false ).
         lo_cols->get_column( 'SRC_DOCNO' )->set_medium_text( 'Số chứng từ' ).
         lo_cols->get_column( 'ATTEMPT' )->set_medium_text( 'Lần thứ' ).
         lo_cols->get_column( 'DURATION_MS' )->set_medium_text( 'Thời gian (ms)' ).

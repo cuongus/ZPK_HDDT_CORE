@@ -44,22 +44,7 @@ ENDCLASS.
 
 
 
-CLASS zcl_hddt_secret IMPLEMENTATION.
-
-  METHOD get_secret.
-
-    DATA(lo_plugin) = get_plugin( ).
-
-    IF lo_plugin IS BOUND.
-      r_secret = lo_plugin->get_secret( is_cred ).
-      IF r_secret IS NOT INITIAL.
-        RETURN.
-      ENDIF.
-    ENDIF.
-
-    r_secret = is_cred-apisecret.
-
-  ENDMETHOD.
+CLASS ZCL_HDDT_SECRET IMPLEMENTATION.
 
 
   METHOD get_plugin.
@@ -94,4 +79,19 @@ CLASS zcl_hddt_secret IMPLEMENTATION.
 
   ENDMETHOD.
 
+
+  METHOD get_secret.
+
+    DATA(lo_plugin) = get_plugin( ).
+
+    IF lo_plugin IS BOUND.
+      r_secret = lo_plugin->get_secret( is_cred ).
+      IF r_secret IS NOT INITIAL.
+        RETURN.
+      ENDIF.
+    ENDIF.
+
+    r_secret = is_cred-apisecret.
+
+  ENDMETHOD.
 ENDCLASS.

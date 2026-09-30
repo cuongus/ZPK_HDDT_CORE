@@ -70,9 +70,10 @@ ENDCLASS.
 
 
 
-CLASS zcx_hddt_error IMPLEMENTATION.
+CLASS ZCX_HDDT_ERROR IMPLEMENTATION.
 
-  METHOD constructor.
+
+  METHOD constructor ##ADT_SUPPRESS_GENERATION.
 
     DATA lv_rest TYPE string.
 
@@ -113,17 +114,6 @@ CLASS zcx_hddt_error IMPLEMENTATION.
   ENDMETHOD.
 
 
-  METHOD raise_text.
-
-    RAISE EXCEPTION TYPE zcx_hddt_error
-      EXPORTING
-        i_text      = i_text
-        i_http_code = i_http_code
-        previous     = io_previous.
-
-  ENDMETHOD.
-
-
   METHOD get_text_long.
 
     IF mv_text IS NOT INITIAL.
@@ -134,4 +124,14 @@ CLASS zcx_hddt_error IMPLEMENTATION.
 
   ENDMETHOD.
 
+
+  METHOD raise_text.
+
+    RAISE EXCEPTION TYPE zcx_hddt_error
+      EXPORTING
+        i_text      = i_text
+        i_http_code = i_http_code
+        previous     = io_previous.
+
+  ENDMETHOD.
 ENDCLASS.

@@ -3,17 +3,17 @@
  <asx:abap xmlns:asx="http://www.sap.com/abapxml" version="1.0">
   <asx:values>
    <TSTC>
-    <TCODE>ZFI003</TCODE>
-    <PGMNA>ZPG_HDDT_LOG</PGMNA>
+    <TCODE>ZHD001</TCODE>
+    <PGMNA>ZPG_HDDT_INTEGRATION</PGMNA>
    </TSTC>
    <TSTCC>
-    <TCODE>ZFI003</TCODE>
+    <TCODE>ZHD001</TCODE>
     <S_WEBGUI>2</S_WEBGUI>
    </TSTCC>
    <TSTCT>
     <SPRSL>E</SPRSL>
-    <TCODE>ZFI003</TCODE>
-    <TTEXT>Log tích hợp hoá đơn điện tử</TTEXT>
+    <TCODE>ZHD001</TCODE>
+    <TTEXT>Tích hợp hoá đơn điện tử</TTEXT>
    </TSTCT>
   </asx:values>
  </asx:abap>

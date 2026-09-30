@@ -4,8 +4,9 @@
 Chay:   python tools/gen_ddic.py
 Ghi ra: src/ddic/<ten>.doma.xml, .dtel.xml, .tabl.xml
 
-DDIC text dung tieng Viet KHONG dau de tranh loi codepage khi master
-language cua repo la EN. Tieng Viet co dau nam trong comment ABAP va docs.
+Nhan bang / data element dung tieng Viet CO DAU, dung nhu tren he (DS4, doi
+chieu 30/09/2026). Moi thay doi DDIC tren he phai sua lai o day, khong thi chay
+generator se ghi de nguoc len repo.
 """
 import os
 
@@ -89,6 +90,8 @@ DOMAINS = [
         ("MM", "MM invoice (RBKP/RSEG)"),
         ("GOM", "Chứng từ gom"),
         ("CUST", "Nguồn do khách hàng tự cài đặt"),
+        # FS v0.17 muc 3.3 Nhom 2 - hoa don dau vao tra lai hang NCC
+        ("PO", "Trả lại hàng NCC (đơn hàng mua)"),
     ]),
     ("ZDO_HDDT_ITEMTYPE", "CHAR", 1, 0, "HDDT: Hinh thuc dong hang hoa", [
         ("0", "Hàng hoá / dịch vụ bình thường"),
@@ -140,18 +143,43 @@ DTELS = [
     ("ZDE_HDDT_MAPTYPE", "ZDO_HDDT_MAPTYPE", "Loại AX", "Loại ánh xạ", "Loại ánh xạ giá trị", "Loại AX", "Loại ánh xạ giá trị"),
     ("ZDE_HDDT_SRCTYPE", "ZDO_HDDT_SRCTYPE", "Nguồn", "Loại nguồn", "Loại nguồn dữ liệu", "Nguồn", "Loại nguồn dữ liệu SAP"),
     ("ZDE_HDDT_ITEMTYPE", "ZDO_HDDT_ITEMTYPE", "H.thức", "Hình thức dòng", "Hình thức dòng hàng hoá", "HT", "Hình thức dòng hàng hoá"),
+    # Co checkbox: dung lai domain XFELD (CHAR 1) de SM30 van ve o tick,
+    # nhung co nhan rieng nen maintenance view sinh ra da co chu san,
+    # khong phai vao sua view dien tay.
+    ("ZDE_HDDT_ACTIVE", "XFELD", "Kích hoạt", "Đang kích hoạt",
+     "Dòng cấu hình đang kích hoạt", "Kích hoạt",
+     "Dòng cấu hình đang kích hoạt"),
+    # FS v0.17 muc I: nguoi mua cua hoa don dau vao (tra lai hang NCC) la
+    # NHA CUNG CAP, nen cot ma doi tac phai chua duoc ca KUNNR lan LIFNR.
+    # CHAR 10 khong gan check table de khong keo theo search help / foreign
+    # key cua rieng khach hang.
+    ("ZDE_HDDT_PARTNER", "CHAR10", "Mã ĐT", "Mã đối tác",
+     "Mã khách hàng hoặc nhà cung cấp", "Mã ĐT",
+     "Mã đối tác trên hoá đơn: khách hàng (KUNNR) hoặc NCC (LIFNR)"),
+    ("ZDE_HDDT_BSART", "BSART", "Loại ĐH", "Loại đơn hàng mua",
+     "Loại đơn hàng mua được phát hành HĐ", "Loại ĐH",
+     "Loại đơn hàng mua được phép phát hành hoá đơn điện tử"),
+    ("ZDE_HDDT_MWSPAT", "CHAR10", "Mẫu thuế", "Mẫu mã thuế vào",
+     "Mẫu mã thuế GTGT đầu vào", "Mẫu thuế",
+     "Mẫu mã thuế GTGT đầu vào, ví dụ I*"),
+    ("ZDE_HDDT_HKONTP", "CHAR10", "TK thuế", "TK thuế GTGT vào",
+     "Tài khoản thuế GTGT đầu vào", "TK thuế",
+     "Mẫu tài khoản thuế GTGT đầu vào, ví dụ 1331*"),
+    ("ZDE_HDDT_DEFAULT", "XFELD", "Mặc định", "Dải số mặc định",
+     "Dải số mặc định của đơn vị", "Mặc định",
+     "Dải số hoá đơn mặc định của đơn vị"),
     ("ZDE_HDDT_CLASS", ("CHAR", 30, 0), "Lớp ABAP", "Lớp thực thi", "Lớp ABAP thực thi", "Lớp ABAP", "Tên lớp ABAP thực thi (adapter)"),
     ("ZDE_HDDT_CONNID", ("CHAR", 10, 0), "Kết nối", "Mã kết nối", "Mã kết nối API", "Kết nối", "Mã kết nối API"),
     ("ZDE_HDDT_URL", ("CHAR", 255, 0), "URL", "Base URL", "Base URL của API", "URL", "Base URL của API"),
     ("ZDE_HDDT_PATH", ("CHAR", 255, 0), "Path", "Đường dẫn API", "Đường dẫn API", "Path", "Đường dẫn API - hỗ trợ placeholder"),
     ("ZDE_HDDT_TAXCODE", ("CHAR", 20, 0), "MST", "Mã số thuế", "Mã số thuế", "MST", "Mã số thuế"),
-    ("ZDE_HDDT_TEMPL", ("CHAR", 20, 0), "Mẫu HĐ", "Mẫu hoá đơn", "Mẫu số hoá đơn", "Mẫu HĐ", "Mẫu số hoá đơn"),
+    ("ZDE_HDDT_TEMPL", ("CHAR", 20, 0), "Mẫu HĐ", "Mẫu hoá đơn", "Mẫu hoá đơn", "Mẫu HĐ", "Mẫu số hoá đơn"),
     ("ZDE_HDDT_SERIAL", ("CHAR", 20, 0), "Ký hiệu", "Ký hiệu HĐ", "Ký hiệu hoá đơn", "Ký hiệu", "Ký hiệu (serial) hoá đơn"),
     ("ZDE_HDDT_SEQ", ("CHAR", 20, 0), "Số HĐ", "Số hoá đơn", "Số hoá đơn", "Số HĐ", "Số hoá đơn do NCC cấp"),
     ("ZDE_HDDT_IDKEY", ("CHAR", 40, 0), "IDKey", "Khoá đối chiếu", "Khoá đối chiếu SAP-HĐĐT", "IDKey", "Khoá đối chiếu SAP - HĐĐT"),
     ("ZDE_HDDT_INVTYPE", ("CHAR", 10, 0), "Loại HĐ", "Loại hoá đơn", "Loại hoá đơn", "Loại HĐ", "Loại hoá đơn (01GTKT, 02GTTT)"),
-    ("ZDE_HDDT_USER", ("CHAR", 60, 0), "User API", "Tài khoản API", "Tài khoản API", "User API", "Tài khoản đăng nhập API"),
-    ("ZDE_HDDT_SECRET", ("CHAR", 128, 0), "Secret", "Mật khẩu API", "Mật khẩu / secret API", "Secret", "Mật khẩu API - nên dùng SECKEY"),
+    ("ZDE_HDDT_USER", "TEXT60", "User API", "Tài khoản API", "Tài khoản API", "User API", "Tài khoản đăng nhập API"),
+    ("ZDE_HDDT_SECRET", "TEXT128", "Secret", "Mật khẩu API", "Mật khẩu / secret API", "Secret", "Mật khẩu API - nên dùng SECKEY"),
     ("ZDE_HDDT_SECKEY", ("CHAR", 40, 0), "SecKey", "Khoá secure", "Khoá secure store", "SecKey", "Khoá tra cứu trong secure storage"),
     ("ZDE_HDDT_TOKEN", ("STRG", 0, 0), "Token", "Access token", "Access token", "Token", "Access token (JWT)"),
     ("ZDE_HDDT_JSON", ("STRG", 0, 0), "JSON", "Nội dung JSON", "Nội dung JSON", "JSON", "Nội dung payload JSON"),
@@ -161,7 +189,7 @@ DTELS = [
     ("ZDE_HDDT_LOGID", ("CHAR", 32, 0), "Log ID", "ID bản ghi log", "ID bản ghi log", "Log ID", "ID bản ghi log (GUID)"),
     ("ZDE_HDDT_MSCQT", ("CHAR", 40, 0), "Mã CQT", "Mã CQT cấp", "Mã cơ quan thuế cấp", "Mã CQT", "Mã số do cơ quan thuế cấp"),
     ("ZDE_HDDT_SEC", ("CHAR", 20, 0), "Mã tra cứu", "Mã tra cứu HĐ", "Mã tra cứu hoá đơn", "Mã tra cứu", "Mã tra cứu hoá đơn"),
-    ("ZDE_HDDT_LINK", ("CHAR", 255, 0), "Link", "Link tra cứu", "Link tra cứu hoá đơn", "Link", "Link tra cứu hoá đơn"),
+    ("ZDE_HDDT_LINK", "CHAR255", "Link", "Link tra cứu", "Link tra cứu hoá đơn", "Link", "Link tra cứu hoá đơn"),
     ("ZDE_HDDT_PARMKEY", ("CHAR", 40, 0), "Tham số", "Tên tham số", "Tên tham số cấu hình", "Tham số", "Tên tham số cấu hình"),
     ("ZDE_HDDT_PARMVAL", ("CHAR", 255, 0), "Giá trị", "Giá trị tham số", "Giá trị tham số", "Giá trị", "Giá trị tham số cấu hình"),
     ("ZDE_HDDT_TIMEOUT", ("INT4", 10, 0), "Timeout", "Timeout (giây)", "Timeout gọi API (giây)", "Timeout", "Timeout gọi API tính bằng giây"),
@@ -224,76 +252,113 @@ def F(n, r):
 
 
 TABLES = [
-    ("ZTB_HDDT_PROV", "C", "HDDT: Danh muc nha cung cap", [
+    ("ZTB_HDDT_PROV", "C", "HDDT: Danh mục nhà cung cấp", [
         K("MANDT", "MANDT"), K("PROVIDER", "ZDE_HDDT_PROV"),
         F("CLASSNAME", "ZDE_HDDT_CLASS"), F("DESCR", "ZDE_HDDT_DESCR"),
-        F("XACTIVE", "XFELD"),
+        F("XACTIVE", "ZDE_HDDT_ACTIVE"),
+        F("CREATED_BY", "SYUNAME"), F("CREATED_AT", "TIMESTAMPL"),
+        F("CHANGED_BY", "SYUNAME"), F("CHANGED_AT", "TIMESTAMPL"),
     ]),
-    ("ZTB_HDDT_CONN", "C", "HDDT: Cau hinh ket noi API", [
+    ("ZTB_HDDT_CONN", "C", "HDDT: Cấu hình kết nối API", [
         K("MANDT", "MANDT"), K("PROVIDER", "ZDE_HDDT_PROV"), K("CONNID", "ZDE_HDDT_CONNID"),
         F("RFCDEST", "RFCDEST"), F("BASE_URL", "ZDE_HDDT_URL"),
         F("AUTH_MODE", "ZDE_HDDT_AUTH"), F("TOKEN_ACTION", "ZDE_HDDT_ACTION"),
         F("TOKEN_TTL", "ZDE_HDDT_TIMEOUT"), F("TIMEOUT", "ZDE_HDDT_TIMEOUT"),
-        F("SSL_ID", "SSFAPPLSSL"), F("DESCR", "ZDE_HDDT_DESCR"), F("XACTIVE", "XFELD"),
+        F("SSL_ID", "SSFAPPLSSL"), F("DESCR", "ZDE_HDDT_DESCR"), F("XACTIVE", "ZDE_HDDT_ACTIVE"),
+        F("CREATED_BY", "SYUNAME"), F("CREATED_AT", "TIMESTAMPL"),
+        F("CHANGED_BY", "SYUNAME"), F("CHANGED_AT", "TIMESTAMPL"),
     ]),
-    ("ZTB_HDDT_ACT", "C", "HDDT: Danh muc endpoint theo nghiep vu", [
+    ("ZTB_HDDT_ACT", "C", "HDDT: Danh mục endpoint theo nghiệp vụ", [
         K("MANDT", "MANDT"), K("PROVIDER", "ZDE_HDDT_PROV"), K("ACTION", "ZDE_HDDT_ACTION"),
         F("HTTP_METHOD", "ZDE_HDDT_METHOD"), F("API_PATH", "ZDE_HDDT_PATH"),
         F("CONT_TYPE", "ZDE_HDDT_PARMVAL"), F("ACCEPT_TYPE", "ZDE_HDDT_PARMVAL"),
-        F("DESCR", "ZDE_HDDT_DESCR"), F("XACTIVE", "XFELD"),
+        F("DESCR", "ZDE_HDDT_DESCR"), F("XACTIVE", "ZDE_HDDT_ACTIVE"),
+        F("CREATED_BY", "SYUNAME"), F("CREATED_AT", "TIMESTAMPL"),
+        F("CHANGED_BY", "SYUNAME"), F("CHANGED_AT", "TIMESTAMPL"),
     ]),
     # SERIAL nam trong KHOA: mot don vi co the dung nhieu dai so trong cung
     # mot nam (moi dai so mot ky hieu). XDEFAULT danh dau dai so duoc man
     # hinh tham so tu chon; chi duoc phep MOT dong X cho moi
     # PROVIDER + BUKRS + INV_TYPE con hieu luc.
-    ("ZTB_HDDT_CRED", "C", "HDDT: Tai khoan va dai so theo cong ty", [
+    ("ZTB_HDDT_CRED", "C", "HDDT: Tài khoản và dải số theo công ty", [
         K("MANDT", "MANDT"), K("PROVIDER", "ZDE_HDDT_PROV"), K("BUKRS", "BUKRS"),
-        K("INV_TYPE", "ZDE_HDDT_INVTYPE"), K("SERIAL", "ZDE_HDDT_SERIAL"),
+        # FS v0.17 muc L: mot phap nhan dang ky NHIEU dai so trong CUNG
+        # MOT nam, va moi nam lai dang ky dai so khac nhau -> GJAHR vao
+        # khoa, co Mac dinh duy nhat theo BUKRS + GJAHR.
+        K("GJAHR", "GJAHR"),
+        K("INV_TYPE", "ZDE_HDDT_INVTYPE"), K("TEMPLATE", "ZDE_HDDT_TEMPL"),
+        K("SERIAL", "ZDE_HDDT_SERIAL"),
         F("CONNID", "ZDE_HDDT_CONNID"), F("TAXCODE", "ZDE_HDDT_TAXCODE"),
-        F("TEMPLATE", "ZDE_HDDT_TEMPL"),
         F("APIUSER", "ZDE_HDDT_USER"), F("SECKEY", "ZDE_HDDT_SECKEY"),
         F("APISECRET", "ZDE_HDDT_SECRET"),
         F("VALID_FROM", "DATS"), F("VALID_TO", "DATS"),
-        F("XDEFAULT", "XFELD"), F("XACTIVE", "XFELD"),
+        F("XDEFAULT", "ZDE_HDDT_DEFAULT"), F("XACTIVE", "ZDE_HDDT_ACTIVE"),
+        F("CREATED_BY", "SYUNAME"), F("CREATED_AT", "TIMESTAMPL"),
+        F("CHANGED_BY", "SYUNAME"), F("CHANGED_AT", "TIMESTAMPL"),
     ]),
-    ("ZTB_HDDT_STAT", "C", "HDDT: Anh xa trang thai NCC sang SAP", [
+    # FS v0.17 muc I: bang cau hinh loai don hang mua duoc phat hanh hoa
+    # don (nghiep vu tra lai hang nha cung cap). Tuong duong ZEINVCONFIPO
+    # trong FS. Gia tri khoi tao cho MAG: BSART = ZPO6, MWSKZ_PAT = I*,
+    # HKONT_TAX = 1331*.
+    ("ZTB_HDDT_PO", "C", "HDDT: Loại đơn hàng mua được phát hành hoá đơn", [
+        K("MANDT", "MANDT"), K("BUKRS", "BUKRS"),
+        K("BSART", "ZDE_HDDT_BSART"),
+        F("MWSKZ_PAT", "ZDE_HDDT_MWSPAT"), F("HKONT_TAX", "ZDE_HDDT_HKONTP"),
+        F("SRC_TYPE", "ZDE_HDDT_SRCTYPE"),
+        F("DESCR", "ZDE_HDDT_DESCR"), F("XACTIVE", "ZDE_HDDT_ACTIVE"),
+        F("CREATED_BY", "SYUNAME"), F("CREATED_AT", "TIMESTAMPL"),
+        F("CHANGED_BY", "SYUNAME"), F("CHANGED_AT", "TIMESTAMPL"),
+    ]),
+    ("ZTB_HDDT_STAT", "C", "HDDT: Ánh xạ trạng thái NCC sang SAP", [
         K("MANDT", "MANDT"), K("PROVIDER", "ZDE_HDDT_PROV"), K("ACTION", "ZDE_HDDT_ACTION"),
         K("RC_CODE", "ZDE_HDDT_RCCODE"),
         F("SAP_STATUS", "ZDE_HDDT_STATUS"), F("MSGTY", "SYMSGTY"),
         F("MSG_TEXT", "ZDE_HDDT_MSG"),
+        F("CREATED_BY", "SYUNAME"), F("CREATED_AT", "TIMESTAMPL"),
+        F("CHANGED_BY", "SYUNAME"), F("CHANGED_AT", "TIMESTAMPL"),
     ]),
-    ("ZTB_HDDT_MAP", "C", "HDDT: Anh xa gia tri SAP - NCC", [
+    ("ZTB_HDDT_MAP", "C", "HDDT: Ánh xạ giá trị SAP - NCC", [
         K("MANDT", "MANDT"), K("PROVIDER", "ZDE_HDDT_PROV"), K("MAP_TYPE", "ZDE_HDDT_MAPTYPE"),
         K("SAP_VALUE", "ZDE_HDDT_MAPVAL"),
         F("EXT_VALUE", "ZDE_HDDT_MAPVAL"), F("EXT_TEXT", "ZDE_HDDT_DESCR"),
+        F("CREATED_BY", "SYUNAME"), F("CREATED_AT", "TIMESTAMPL"),
+        F("CHANGED_BY", "SYUNAME"), F("CHANGED_AT", "TIMESTAMPL"),
     ]),
-    ("ZTB_HDDT_PARM", "C", "HDDT: Tham so cau hinh chung", [
+    ("ZTB_HDDT_PARM", "C", "HDDT: Tham số cấu hình chung", [
         K("MANDT", "MANDT"), K("PROVIDER", "ZDE_HDDT_PROV"), K("BUKRS", "BUKRS"),
         K("PARM_KEY", "ZDE_HDDT_PARMKEY"),
         F("PARM_VAL", "ZDE_HDDT_PARMVAL"), F("DESCR", "ZDE_HDDT_DESCR"),
+        F("CREATED_BY", "SYUNAME"), F("CREATED_AT", "TIMESTAMPL"),
+        F("CHANGED_BY", "SYUNAME"), F("CHANGED_AT", "TIMESTAMPL"),
     ]),
-    ("ZTB_HDDT_DATE", "C", "HDDT: Nguon ngay lap hoa don theo cong ty", [
+    ("ZTB_HDDT_DATE", "C", "HDDT: Nguồn ngày lập hóa đơn theo công ty", [
         K("MANDT", "MANDT"), K("BUKRS", "BUKRS"),
         F("DATE_SRC", "ZDE_HDDT_DATESRC"), F("TIME_CUT", "UZEIT"),
         F("DESCR", "ZDE_HDDT_DESCR"),
+        F("CREATED_BY", "SYUNAME"), F("CREATED_AT", "TIMESTAMPL"),
+        F("CHANGED_BY", "SYUNAME"), F("CHANGED_AT", "TIMESTAMPL"),
     ]),
-    ("ZTB_HDDT_SRC", "C", "HDDT: Lop doc du lieu nguon", [
+    ("ZTB_HDDT_SRC", "C", "HDDT: Lớp đọc dữ liệu nguồn", [
         K("MANDT", "MANDT"), K("BUKRS", "BUKRS"), K("SRC_TYPE", "ZDE_HDDT_SRCTYPE"),
         F("CLASSNAME", "ZDE_HDDT_CLASS"), F("DESCR", "ZDE_HDDT_DESCR"),
-        F("XACTIVE", "XFELD"),
+        F("XACTIVE", "ZDE_HDDT_ACTIVE"),
+        F("CREATED_BY", "SYUNAME"), F("CREATED_AT", "TIMESTAMPL"),
+        F("CHANGED_BY", "SYUNAME"), F("CHANGED_AT", "TIMESTAMPL"),
     ]),
-    ("ZTB_HDDT_TPL", "C", "HDDT: Mau payload theo nghiep vu", [
+    ("ZTB_HDDT_TPL", "C", "HDDT: Mẫu payload theo nghiệp vụ", [
         K("MANDT", "MANDT"), K("PROVIDER", "ZDE_HDDT_PROV"), K("ACTION", "ZDE_HDDT_ACTION"),
-        F("DESCR", "ZDE_HDDT_DESCR"), F("XACTIVE", "XFELD"),
+        F("DESCR", "ZDE_HDDT_DESCR"), F("XACTIVE", "ZDE_HDDT_ACTIVE"),
         F("TPL_BODY", "ZDE_HDDT_JSON"),
+        F("CREATED_BY", "SYUNAME"), F("CREATED_AT", "TIMESTAMPL"),
+        F("CHANGED_BY", "SYUNAME"), F("CHANGED_AT", "TIMESTAMPL"),
     ]),
-    ("ZTB_HDDT_TOK", "A", "HDDT: Bo dem access token", [
+    ("ZTB_HDDT_TOK", "A", "HDDT: Bộ đệm access token", [
         K("MANDT", "MANDT"), K("PROVIDER", "ZDE_HDDT_PROV"), K("CONNID", "ZDE_HDDT_CONNID"),
         K("BUKRS", "BUKRS"), K("APIUSER", "ZDE_HDDT_USER"),
         F("VALID_TO", "TIMESTAMPL"), F("CREATED_AT", "TIMESTAMPL"),
         F("TOKEN", "ZDE_HDDT_TOKEN"),
     ]),
-    ("ZTB_HDDT_INV", "A", "HDDT: So dang ky hoa don dien tu", [
+    ("ZTB_HDDT_INV", "A", "HDDT: Sổ đăng ký hóa đơn điện tử", [
         K("MANDT", "MANDT"), K("BUKRS", "BUKRS"), K("GJAHR", "GJAHR"),
         K("SRC_TYPE", "ZDE_HDDT_SRCTYPE"), K("SRC_DOCNO", "ZDE_HDDT_DOCNO"),
         F("PROVIDER", "ZDE_HDDT_PROV"), F("IDKEY", "ZDE_HDDT_IDKEY"),
@@ -303,11 +368,11 @@ TABLES = [
         F("ISSUE_DATE", "DATS"), F("CANCEL_DATE", "DATS"),
         F("ADJ_TYPE", "ZDE_HDDT_ADJTYPE"),
         F("REF_DOCNO", "ZDE_HDDT_DOCNO"), F("REF_GJAHR", "GJAHR"),
-        F("SUPP_TAXCODE", "ZDE_HDDT_TAXCODE"), F("MSCQT", "ZDE_HDDT_MSCQT"),
+        F("SUPP_TAXCODE", "ZDE_HDDT_TAXCODE"), F("MSCQT", "ZDE_HDDT_TAXCODE"),
         F("SEC_CODE", "ZDE_HDDT_SEC"), F("INV_LINK", "ZDE_HDDT_LINK"),
         F("STATUS", "ZDE_HDDT_STATUS"), F("PROV_STATUS", "ZDE_HDDT_RCCODE"),
         F("MESSAGE", "ZDE_HDDT_MSG"),
-        F("BUYER_CODE", "KUNNR"), F("BUYER_NAME", "ZDE_HDDT_NAME"),
+        F("BUYER_CODE", "ZDE_HDDT_PARTNER"), F("BUYER_NAME", "ZDE_HDDT_NAME"),
         F("BUYER_TAX", "ZDE_HDDT_TAXCODE"), F("BUYER_ADDR", "ZDE_HDDT_NAME"),
         F("BUYER_MAIL", "ZDE_HDDT_NAME"),
         F("WAERS", "WAERS"), F("EXRATE", "UKURS_CURR"),
@@ -321,7 +386,7 @@ TABLES = [
         F("CREATED_BY", "SYUNAME"), F("CREATED_AT", "TIMESTAMPL"),
         F("CHANGED_BY", "SYUNAME"), F("CHANGED_AT", "TIMESTAMPL"),
     ]),
-    ("ZTB_HDDT_GOM", "A", "HDDT: Chung tu thanh vien cua hoa don gom", [
+    ("ZTB_HDDT_GOM", "A", "HDDT: Chứng từ thành viên của hóa đơn gộp", [
         K("MANDT", "MANDT"), K("BUKRS", "BUKRS"), K("GJAHR", "GJAHR"),
         K("GOM_NO", "ZDE_HDDT_DOCNO"),
         K("SRC_TYPE", "ZDE_HDDT_SRCTYPE"), K("SRC_DOCNO", "ZDE_HDDT_DOCNO"),
@@ -329,7 +394,7 @@ TABLES = [
         F("CREATED_BY", "SYUNAME"), F("CREATED_AT", "TIMESTAMPL"),
         F("CANCEL_BY", "SYUNAME"), F("CANCEL_AT", "TIMESTAMPL"),
     ]),
-    ("ZTB_HDDT_ITEM", "A", "HDDT: Chi tiet hang hoa da phat hanh", [
+    ("ZTB_HDDT_ITEM", "A", "HDDT: Chi tiết hàng hóa đã phát hành", [
         K("MANDT", "MANDT"), K("BUKRS", "BUKRS"), K("GJAHR", "GJAHR"),
         K("SRC_TYPE", "ZDE_HDDT_SRCTYPE"), K("SRC_DOCNO", "ZDE_HDDT_DOCNO"),
         K("LINE_NO", "ZDE_HDDT_LINENO"),
@@ -340,8 +405,10 @@ TABLES = [
         F("TAX_AMOUNT", "ZDE_HDDT_AMOUNT"), F("TOTAL", "ZDE_HDDT_AMOUNT"),
         F("DISC_PCT", "ZDE_HDDT_RATE"), F("DISC_AMT", "ZDE_HDDT_AMOUNT"),
         F("NOTE", "ZDE_HDDT_NAME"),
+        F("CREATED_BY", "SYUNAME"), F("CREATED_AT", "TIMESTAMPL"),
+        F("CHANGED_BY", "SYUNAME"), F("CHANGED_AT", "TIMESTAMPL"),
     ]),
-    ("ZTB_HDDT_LOG", "A", "HDDT: Log goi API", [
+    ("ZTB_HDDT_LOG", "A", "HDDT: Log gọi API", [
         K("MANDT", "MANDT"), K("LOG_ID", "ZDE_HDDT_LOGID"),
         # --- dinh danh nghiep vu
         F("PROVIDER", "ZDE_HDDT_PROV"), F("CONNID", "ZDE_HDDT_CONNID"),
@@ -378,6 +445,16 @@ TABLES = [
     ]),
 ]
 
+# Co bao tri bang (SE11 "Data Browser/Table View Maint."). Mac dinh theo
+# delivery class: C = cho bao tri, A = khong. Ngoai le lay tu he that.
+# XML abapGit PHAI ghi MAINFLAG, thieu thi bang ve che do "co han che".
+MAINT_OVERRIDE = {"ZTB_HDDT_TOK": "ALLOWED"}
+
+
+def maint_of(tab, delivery):
+    return MAINT_OVERRIDE.get(tab, "ALLOWED" if delivery == "C" else "NOT_ALLOWED")
+
+
 for tab, delivery, text, fields in TABLES:
     b = "   <DD02V>\n"
     b += "    <TABNAME>%s</TABNAME>\n" % tab
@@ -388,6 +465,8 @@ for tab, delivery, text, fields in TABLES:
     b += "    <MASTERLANG>E</MASTERLANG>\n"
     b += "    <CONTFLAG>%s</CONTFLAG>\n" % delivery
     b += "    <EXCLASS>1</EXCLASS>\n"
+    b += "    <MAINFLAG>%s</MAINFLAG>\n" % (
+        "X" if maint_of(tab, delivery) == "ALLOWED" else "N")
     b += "   </DD02V>\n"
     b += "   <DD09L>\n"
     b += "    <TABNAME>%s</TABNAME>\n" % tab
@@ -404,6 +483,14 @@ for tab, delivery, text, fields in TABLES:
     for fname, roll, keyflag in fields:
         b += "    <DD03P>\n"
         b += "     <FIELDNAME>%s</FIELDNAME>\n" % fname
+        if fname == ".INCLUDE":
+            # Structure include: ten structure nam o PRECFIELD, khong
+            # phai ROLLNAME; COMPTYPE = 'S'
+            b += "     <ADMINFIELD>0</ADMINFIELD>\n"
+            b += "     <PRECFIELD>%s</PRECFIELD>\n" % roll
+            b += "     <COMPTYPE>S</COMPTYPE>\n"
+            b += "    </DD03P>\n"
+            continue
         if keyflag:
             b += "     <KEYFLAG>X</KEYFLAG>\n"
         b += "     <ROLLNAME>%s</ROLLNAME>\n" % roll
@@ -414,6 +501,29 @@ for tab, delivery, text, fields in TABLES:
         b += "    </DD03P>\n"
     b += "   </DD03P_TABLE>\n"
     write(tab, "tabl", "LCL_OBJECT_TABL", b)
+
+    # Ban DDL de deploy thang qua ADT (deploy_adt.py PUT vao
+    # /ddic/tables/<ten>/source/main). dist/ nam trong .gitignore.
+    ddl = "@EndUserText.label : '%s'\n" % text.replace("'", "''")
+    ddl += "@AbapCatalog.enhancement.category : #NOT_EXTENSIBLE\n"
+    ddl += "@AbapCatalog.tableCategory : #TRANSPARENT\n"
+    ddl += "@AbapCatalog.deliveryClass : #%s\n" % delivery
+    ddl += "@AbapCatalog.dataMaintenance : #%s\n" % maint_of(tab, delivery)
+    ddl += "define table %s {\n\n" % tab.lower()
+    for fname, roll, keyflag in fields:
+        if fname == ".INCLUDE":
+            ddl += "  include %s;\n" % roll.lower()
+            continue
+        ddl += "  %s%s : %s not null;\n" % (
+            "key " if keyflag else "", fname.lower(), roll.lower())
+    ddl += "\n}\n"
+    ddl_dir = os.path.join(os.path.dirname(OUT), "..", "dist", "ddl")
+    ddl_dir = os.path.normpath(ddl_dir)
+    if not os.path.isdir(ddl_dir):
+        os.makedirs(ddl_dir)
+    with open(os.path.join(ddl_dir, "%s.tabl.abap" % tab.lower()),
+              "w", encoding="utf-8", newline="\n") as fh:
+        fh.write(ddl)
 
 
 # ---------------------------------------------------------------------------
