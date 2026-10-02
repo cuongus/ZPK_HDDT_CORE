@@ -385,77 +385,73 @@ nguồn. Nên chốt với kế toán phạm vi được sửa trước khi mở
 nên lần vào 0200 thứ hai báo `CC_ITEM` đã tồn tại. `FREE_ITEM_GRID` gọi
 `free( )` của control rồi mới `CLEAR`, chạy ở cả nhánh Save và nhánh Cancel.
 
-## 9. Dynpro 0300 — bảo trì ZTB_HDDT_TPL bằng ALV
+## 9. Bảo trì ZTB_HDDT_TPL / ZTB_HDDT_TOK bằng ALV (selection screen 1002 / 1003)
 
-SE54 không sinh được Table Maintenance Generator cho `ZTB_HDDT_TPL` vì
-`TPL_BODY` khai `ZDE_HDDT_JSON` = `STRG`. ALV grid **cũng** không hiển thị
-được cột STRING, nên màn hình chia hai tầng.
+SE54 không sinh được Table Maintenance Generator cho `ZTB_HDDT_TPL` (`TPL_BODY`
+= `ZDE_HDDT_JSON`, kiểu `STRG`) và `ZTB_HDDT_TOK` (`TOKEN` kiểu `STRG`). ALV grid
+**cũng** không hiển thị được cột STRING, nên màn hình mẫu payload chia hai tầng.
 
-### 9.1 Tạo dynpro
+### 9.1 Không tạo dynpro / GUI status bằng tay
 
-SE51 → program `ZPG_HDDT_CONFIG`, screen `0300`, Screen type **Normal**,
-layout **để RỖNG** (docking container chiếm toàn bộ, giống dynpro 0100 của
-`ZPG_HDDT_INTEGRATION`).
+Hai màn hình là **selection screen 1002 và 1003** khai ngay trong source, hệ thống
+tự sinh khi activate (đã kiểm `D020S` trên DS4: 1001, 1002, 1003 loại S). Docking
+container gắn ở `AT SELECTION-SCREEN OUTPUT` (`PBO_1002` / `PBO_1003`), cùng cách
+với lưới danh sách bảng 1001. `SEL_STATUS` bỏ Execute / biến thể / In khỏi status.
+Bản thiết kế trước (commit `a753ff6`, dynpro 0300 + status `ZCFG_TPL` tạo tay ở
+SE51 / SE41) **không dùng**.
 
-Flow logic đúng bốn dòng:
+Mọi nút nằm trên toolbar của chính lưới (`ON_TOOLBAR_TPL` / `ON_TOOLBAR_TOK`).
+Nút sửa dòng chuẩn của lưới (thêm / chèn / xoá / copy / dán / undo) bị tắt bằng
+`GRID_EXCL`: thêm và xoá dòng phải đi nút riêng để giữ mối nối với nội dung mẫu.
 
-```abap
-PROCESS BEFORE OUTPUT.
-  MODULE status_0300.
+### 9.2 ZTB_HDDT_TPL — thêm / sửa / xoá
 
-PROCESS AFTER INPUT.
-  MODULE user_command_0300.
-```
+| Nút | Việc |
+|---|---|
+| Thêm dòng | dòng mới, hiệu lực = X, ô soạn thảo chuyển sang dòng đó |
+| Xoá dòng | bỏ các dòng chọn khỏi lưới (chưa đụng bảng) |
+| Nạp từ file | nạp file JSON (UTF-8) vào ô soạn thảo của dòng đang chọn |
+| Lưu ra file | ghi nội dung dòng đang chọn ra file JSON UTF-8 |
+| Đọc lại | bỏ thay đổi chưa lưu, đọc lại bảng |
+| Lưu | ghi vào bảng |
 
-### 9.2 GUI status ZCFG_TPL
+Trên là `CL_GUI_ALV_GRID` sửa trực tiếp nhà cung cấp, mã nghiệp vụ, diễn giải,
+hiệu lực; dưới là `CL_GUI_TEXTEDIT` soạn `TPL_BODY`. Nhấn icon cột **Nội dung**
+để chuyển ô soạn thảo sang dòng khác. Mối nối hai tầng là `RID` (khoá nội bộ chạy
+số), không phải khoá bảng, vì người dùng sửa được `PROVIDER` / `ACTION`.
 
-SE41 → status `ZCFG_TPL`, **Normal screen**, bấm Display Standards, để
-Application Toolbar **TRỐNG**. Bốn mã: `BACK`, `EXIT`, `CANC` và `SAVE`
-(gán `SAVE` vào ô Save của Standard Toolbar và F11 để Ctrl+S cũng lưu).
+`GET_TEXTSTREAM` chỉ điền biến **sau** `CL_GUI_CFW=>FLUSH` — thiếu FLUSH thì nội
+dung vừa gõ bị ghi đè bằng chuỗi rỗng.
 
-Bốn nút nghiệp vụ — Thêm dòng, Xoá dòng, Nạp từ file, Lưu ra file — nằm trên
-toolbar của chính lưới, do `ON_TOOLBAR_TPL` thêm, không cần khai trong status.
+**Khoá:** `MAINTAIN_TPL` khoá `EZTB_HDDT_TPL` **cả bảng** (chỉ truyền `MANDT`)
+suốt lúc màn hình mở, giống SM30. Người vào sau vẫn mở được nhưng ở chế độ CHỈ
+XEM (lưới và ô soạn thảo khoá, không có nút ghi). Thoát màn hình thì nhả khoá.
 
-### 9.3 Cách màn hình làm việc
-
-Docking → splitter 2 dòng: **trên** là `CL_GUI_ALV_GRID` sửa trực tiếp được
-các field ngắn (nhà cung cấp, mã nghiệp vụ, diễn giải, hiệu lực); **dưới** là
-`CL_GUI_TEXTEDIT` soạn `TPL_BODY`. Nhấn icon ở cột **Nội dung** để chuyển ô
-soạn thảo sang dòng khác.
-
-Mối nối giữa hai tầng là `RID` — khoá nội bộ chạy số, không phải khoá bảng.
-Phải vậy vì người dùng sửa được `PROVIDER` / `ACTION`, lấy khoá bảng làm mối
-nối thì sửa khoá là mất nội dung.
-
-`GET_TEXTSTREAM` chỉ điền biến **sau** khi `CL_GUI_CFW=>FLUSH`. Thiếu FLUSH
-thì biến luôn rỗng và nội dung người dùng vừa gõ bị ghi đè bằng chuỗi rỗng —
-bẫy kinh điển của control framework.
-
-### 9.4 Lưu
-
-`Save` mới đụng tới bảng, trước đó mọi thay đổi chỉ nằm trong bộ nhớ:
+**Lưu (`TPL_SAVE`):**
 
 1. `CHECK_CHANGED_DATA` + hút nội dung ô soạn thảo về bảng
-2. Kiểm **trước khi khoá**: thiếu khoá chính, trùng khoá, dòng hiệu lực mà
-   nội dung rỗng
-3. `ENQUEUE_EZTB_HDDT_TPL` khoá **cả bảng** (chỉ truyền `MANDT`) — vì có
-   DELETE những dòng người dùng đã bỏ khỏi lưới
-4. `MODIFY` từng dòng, `ZCL_HDDT_LOG=>SET_ADMIN` với `I_NEW` tính theo việc
-   khoá đã có trong bảng hay chưa
-5. `DELETE` dòng còn trong bảng mà không còn trên lưới
-6. `COMMIT WORK AND WAIT` + `ZCL_HDDT_FACTORY=>RESET` + `DEQUEUE`
+2. Kiểm cả lưới: thiếu khoá, nhà cung cấp chưa có ở `ZTB_HDDT_PROV`, trùng khoá,
+   dòng hiệu lực mà nội dung rỗng — sai thì không ghi dòng nào
+3. So với ảnh chụp lúc đọc (`MT_TPL_SNAP`): dòng **không đổi thì không ghi** (giữ
+   nguyên người sửa / ngày sửa); dòng đổi hoặc mới → `MODIFY`, `SET_ADMIN` với
+   `I_SOURCE = MANUAL`, dòng cũ giữ `ZCREATED_*`
+4. Khoá có lúc đọc mà không còn trên lưới (đã xoá hoặc đã đổi khoá) → `DELETE`
+5. `COMMIT WORK AND WAIT` + `ZCL_HDDT_FACTORY=>RESET`, đọc lại
 
-Đường ghi cũ (`LOAD_TPL`: pop-up SVAL hỏi khoá rồi nạp đè một dòng từ file) đã
-**bỏ**. Hai đường ghi vào cùng một bảng là nguồn gốc của ghi đè chéo; nạp file
-giờ là một nút trong lưới, nội dung vào ô soạn thảo và chỉ ghi khi bấm Save.
+**Thoát khi còn thay đổi:** `AT SELECTION-SCREEN ON EXIT-COMMAND` → `EXIT_1002`
+hỏi *Lưu / Không lưu / Huỷ*. Huỷ hoặc lưu lỗi thì E message giữ người dùng ở
+lại màn hình.
 
-### 9.5 ZTB_HDDT_TOK vẫn chỉ xem và xoá
+Đường ghi cũ `LOAD_TPL` (pop-up hỏi khoá rồi nạp đè một dòng từ file) đã **bỏ**,
+thân method để dạng comment.
 
-Bảng này là **bộ đệm access token** do `ZCL_HDDT_TOKEN` ghi, không phải bảng
-khai báo. Cho sửa tay nghĩa là cho dán token giả, mà token phải do nhà cung
-cấp ký nên cũng không dùng được. Giữ nguyên xem + xoá, chỉ bổ sung: pop-up
-cho **chọn nhiều dòng** rồi xoá đúng các dòng đó; không chọn dòng nào thì hỏi
-xoá toàn bộ như cũ.
+### 9.3 ZTB_HDDT_TOK — chỉ xem và xoá
+
+Bảng là **bộ đệm access token** do `ZCL_HDDT_TOKEN` ghi. Token do nhà cung cấp
+ký nên **không cho thêm / sửa tay**. Lưới 1003 hiện dòng của công ty đang làm và
+dòng không gắn công ty; **không hiện token**, chỉ hiện độ dài và đèn còn hạn /
+hết hạn. Nút *Xoá dòng chọn*, *Xoá tất cả* (mọi dòng đang hiện), *Đọc lại*. Lúc
+xoá khoá `EZTB_HDDT_TOK` cả bảng để không xoá nhầm token một job nền vừa ghi.
 
 ## 10. Dải trống phía trên grid
 
