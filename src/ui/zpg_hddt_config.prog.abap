@@ -254,6 +254,8 @@ CLASS lcl_cfg DEFINITION FINAL CREATE PUBLIC.
     "! X = giữ được khoá cả bảng -> cho sửa; trống = người khác đang sửa,
     "! chỉ xem
     DATA mv_tpl_edit  TYPE abap_bool.
+    "! X = người dùng chọn Cancel (hoặc lưu lỗi) ở pop-up thoát -> mở lại 1002
+    DATA mv_tpl_stay  TYPE abap_bool.
 
     DATA mo_dock_tok  TYPE REF TO cl_gui_docking_container.
     DATA mo_grid_tok  TYPE REF TO cl_gui_alv_grid.
@@ -846,7 +848,15 @@ CLASS lcl_cfg IMPLEMENTATION.
       gv_c1002 = |CHỈ XEM - user { lv_user } đang bảo trì bảng này|.
     ENDIF.
 
-    CALL SELECTION-SCREEN 1002.
+    " Cancel ở pop-up thoát (EXIT_1002 đặt MV_TPL_STAY) -> mở lại 1002.
+    " Control chưa FREE nên lưới + ô soạn thảo hiện lại đúng như lúc rời.
+    DO.
+      CALL SELECTION-SCREEN 1002.
+      IF mv_tpl_stay = abap_false.
+        EXIT.
+      ENDIF.
+      CLEAR mv_tpl_stay.
+    ENDDO.
 
     " Về lại 1001: bỏ control của 1002 để lần mở sau dựng mới, nhả khoá
     tpl_free( ).
@@ -1445,6 +1455,10 @@ CLASS lcl_cfg IMPLEMENTATION.
   METHOD exit_1002.
 
 *   >>> Begin of change 20261002_01 F-CUONGUS TR DS4K900172 - CRUD TPL / TOK bằng ALV
+    " ON EXIT-COMMAND KHÔNG cho phát message E / W (dump
+    " DYNPRO_MSG_IN_HELP, test GUI 02/10/2026). Ở đây chỉ hỏi và ghi lựa
+    " chọn vào MV_TPL_STAY; MAINTAIN_TPL gọi lại 1002 khi cần ở lại.
+    CLEAR mv_tpl_stay.
     IF mv_tpl_edit = abap_false OR tpl_changed( ) = abap_false.
       RETURN.
     ENDIF.
@@ -1464,15 +1478,14 @@ CLASS lcl_cfg IMPLEMENTATION.
 
     CASE lv_answer.
       WHEN '1'.
-        " Lưu lỗi thì ở lại màn hình để người dùng sửa
-        IF tpl_save( ) = abap_false.
-          MESSAGE 'Chưa lưu được - sửa lỗi rồi lưu lại.' TYPE 'E'.
-        ENDIF.
+        " Lưu lỗi thì ở lại màn hình để người dùng sửa; TPL_SAVE đã báo
+        " lỗi cụ thể bằng message S
+        mv_tpl_stay = xsdbool( tpl_save( ) = abap_false ).
       WHEN '2'.
         " Thoát, bỏ thay đổi
       WHEN OTHERS.
-        " Cancel: E message ở AT SELECTION-SCREEN giữ người dùng lại màn hình
-        MESSAGE 'Tiếp tục bảo trì mẫu payload.' TYPE 'E'.
+        " Cancel: ở lại màn hình, giữ nguyên thay đổi đang sửa
+        mv_tpl_stay = abap_true.
     ENDCASE.
 *   <<< End of change 20261002_01
 

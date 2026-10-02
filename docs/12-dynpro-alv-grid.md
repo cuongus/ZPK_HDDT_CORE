@@ -439,8 +439,11 @@ XEM (lưới và ô soạn thảo khoá, không có nút ghi). Thoát màn hình
 5. `COMMIT WORK AND WAIT` + `ZCL_HDDT_FACTORY=>RESET`, đọc lại
 
 **Thoát khi còn thay đổi:** `AT SELECTION-SCREEN ON EXIT-COMMAND` → `EXIT_1002`
-hỏi *Lưu / Không lưu / Huỷ*. Huỷ hoặc lưu lỗi thì E message giữ người dùng ở
-lại màn hình.
+hỏi *Lưu / Không lưu / Huỷ*. Event này **không cho phát message E / W** (dump
+`DYNPRO_MSG_IN_HELP`, đã gặp khi test GUI 02/10/2026), nên `EXIT_1002` chỉ ghi
+lựa chọn vào `MV_TPL_STAY`; Huỷ hoặc lưu lỗi thì `MAINTAIN_TPL` gọi lại
+`CALL SELECTION-SCREEN 1002` trong vòng `DO` — control chưa FREE nên lưới và ô
+soạn thảo hiện lại nguyên trạng.
 
 Đường ghi cũ `LOAD_TPL` (pop-up hỏi khoá rồi nạp đè một dòng từ file) đã **bỏ**,
 thân method để dạng comment.
