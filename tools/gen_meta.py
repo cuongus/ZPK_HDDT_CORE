@@ -72,8 +72,8 @@ CLASSES = [
     ("engine", "ZCL_HDDT_WRITEBACK_FI", "HDDT: Ghi nguoc BKPF-XBLNR / XREF2_HD", False, False, None),
     ("engine", "ZCL_HDDT_MAIL", "HDDT: Gui email hoa don (PDF) qua BCS", False, False, None),
     # FS v0.17 (23/09/2026): huy chung tu bang chuc nang chuan + nguon Nhom 2
-    ("engine", "ZCL_HDDT_REVERSAL", "HDDT: Huy chung tu chuan VF11 / MR8M / FB08", False, False, None),
-    ("engine", "ZCL_HDDT_SRC_PO", "HDDT: Doc chung tu tra lai hang NCC (Nhom 2)", False, False, None),
+    ("engine", "ZCL_HDDT_REVERSAL", "HĐĐT: Huỷ chứng từ chuẩn VF11 / MR8M / FB08", False, False, None),
+    ("engine", "ZCL_HDDT_SRC_PO", "HĐĐT: Đọc chứng từ trả lại hàng NCC (Nhóm 2)", False, False, None),
     ("prov", "ZCL_HDDT_PROV_BASE", "HDDT: Lop cha truu tuong cho adapter", False, True, None),
     ("prov", "ZCL_HDDT_PROV_VIETTEL", "HDDT: Adapter Viettel SInvoice", True, False, None),
     ("prov", "ZCL_HDDT_PROV_FPT", "HDDT: Adapter FPT eInvoice", True, False, None),
