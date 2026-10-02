@@ -139,7 +139,7 @@ và request điều chỉnh lấy provider từ sổ đăng ký của chứng t�
 - [ ] Table Maintenance Generator đã sinh cho 14 bảng
 - [ ] STRUST đã có chain CA của môi trường **PROD** của nhà cung cấp
 - [ ] SM59 destination test connection thành công (nút "Connection Test")
-- [ ] Không còn `abapGit` ở cột Transport trong header các object
+- [ ] Cột Transport trong header các object đã ghi mã TR thật
 - [ ] `ZTB_HDDT_CONN` PROD dùng URL **PROD**, không phải `api-uat…`
 
 ### Nghiệp vụ

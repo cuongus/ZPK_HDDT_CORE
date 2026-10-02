@@ -6,7 +6,6 @@
 |---|---|
 | Nền tảng | SAP S/4HANA **Private Cloud** hoặc on-premise (ABAP cổ điển) |
 | Release ABAP tối thiểu | 7.50 — code dùng `NEW`, table expression ghi, `COND`/`VALUE`/`CONV`, inline declaration |
-| abapGit | bản báo cáo độc lập `ZABAPGIT` (SE38) hoặc plugin ADT |
 | Giao diện | SAP GUI (`CL_SALV_TABLE`, `CL_GUI_FRONTEND_SERVICES`) |
 | Kết nối ra ngoài | HTTPS ra Internet, hoặc qua proxy / reverse proxy của doanh nghiệp |
 
@@ -16,21 +15,16 @@
 > `ZCL_HDDT_HTTP` (dùng `CL_WEB_HTTP_CLIENT_MANAGER`) và bỏ `WRITE ... TO`
 > trong `ZCL_HDDT_JSON=>FORMAT_NUMBER` — các lớp khác giữ nguyên.
 
-## 2. Import từ Git
+## 2. Cài đặt bằng transport request
 
 ```
-1. SE80 → tạo package ZPK_HDDT_CORE
+1. SE80 → tạo package ZPK_INT_HDDT (nếu hệ đích chưa có)
    - Software component: HOME
    - Transport layer: layer của khách hàng
    - Package type: development
 
-2. SE38 → ZABAPGIT → + New Online
-   URL     : https://github.com/cuongus/ZPK_HDDT_CORE.git
-   Package : ZPK_HDDT_CORE
-   Branch  : main
-
-3. Pull. abapGit tự tạo 4 subpackage con:
-   ZPK_HDDT_CORE_DDIC / _ENGINE / _PROV / _UI
+2. STMS → import transport request chứa toàn bộ object của package
+   (danh sách object: docs/14 mục 2)
 ```
 
 ## 3. Kích hoạt — theo đúng thứ tự
@@ -105,7 +99,7 @@ Vậy chỉ sinh TMG cho 11 bảng còn lại. Mẫu payload nạp trực tiếp
 
 ### Object phân quyền theo chức năng (FS MAG 3.10)
 
-Tạo bằng SU21 (không đi qua abapGit): object `Z_FI_HDDT` (hoặc tên khác), field
+Tạo bằng SU21 (không nằm trong transport của package): object `Z_FI_HDDT` (hoặc tên khác), field
 `BUKRS` và `ACTVT` với 01 (tạo/huỷ nháp), 02 (phát hành, điều chỉnh, gom), 03
 (xem, tra cứu, email, lấy file). Khai tên object vào tham số `AUTH_OBJECT`.
 
@@ -243,5 +237,5 @@ còn 60 ký tự). Tcode `ZHD001`–`ZHD003`: kiểm SE93 xem số còn trống 
 import, nếu trùng thì đổi số trong `tools/gen_meta.py` (TRANS) và tài liệu.
 
 Trước khi release TR đầu tiên, cập nhật cột **Transport** trong khối changelog ở
-header của **mọi** object: đổi `abapGit` thành mã TR thật (ví dụ `PRDK900123`).
+header của **mọi** object: ghi mã TR thật (ví dụ `PRDK900123`) thay cho giá trị tạm.
 Đây là yêu cầu của chuẩn `fis-sap-cuongus-naming` §4.

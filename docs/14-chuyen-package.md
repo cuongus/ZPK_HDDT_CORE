@@ -14,12 +14,6 @@ phải activate lại và không sửa một dòng code nào.
 **đã tồn tại sẵn** trong TDEVC (DLVUNIT `HOME`, PARENTCL rỗng), không phải tạo
 mới. Vì vậy chuyển là **một package sang một package**, không tách 4 package con.
 
-Cấu trúc repo lại chia 4 thư mục con (`src/ddic`, `src/engine`, `src/prov`,
-`src/ui`) và `.abapgit.xml` khai `FOLDER_LOGIC = PREFIX`. Nghĩa là nếu sau này
-pull repo bằng abapGit vào `ZPK_INT_HDDT` thì abapGit **sẽ đòi** 4 sub-package
-`ZPK_INT_HDDT_DDIC` / `_ENGINE` / `_PROV` / `_UI`. Hai chuyện độc lập nhau:
-hệ đang phẳng vẫn đúng, chỉ cần nhớ điều này trước khi clone lại repo.
-
 ## 2. Object thật trong package nguồn — 139 object + 1 DEVC
 
 | Loại | Số lượng | Có URI ADT | Ghi chú |
@@ -256,15 +250,3 @@ ZCL_HDDT_SERVICE  ZCL_HDDT_SRC_BASE  ZCL_HDDT_SRC_FI
 ZCL_HDDT_SRC_GOM  ZCL_HDDT_SRC_SD  ZCL_HDDT_TOKEN
 ZCL_HDDT_WRITEBACK_FI  ZCX_HDDT_ERROR
 ```
-
-## 7. abapGit
-
-Repo không phải sửa gì cho việc chuyển package: `.abapgit.xml` và 5 file
-`package.devc.xml` chỉ chứa `CTEXT`, không chỗ nào ghi tên package.
-
-Nếu muốn nối lại repo với `ZPK_INT_HDDT`: abapGit → **Advanced → Remove** (chỉ
-bỏ liên kết) → Clone lại. Đọc kỹ chữ trước khi bấm: **Remove** bỏ liên kết,
-**Uninstall** XOÁ object khỏi hệ. Nhớ chuyện `FOLDER_LOGIC = PREFIX` ở mục 1:
-với layout repo hiện tại, abapGit cần 4 sub-package
-`ZPK_INT_HDDT_DDIC` / `_ENGINE` / `_PROV` / `_UI`, hoặc phải làm phẳng repo về
-một thư mục `/src/` cho khớp hệ.
