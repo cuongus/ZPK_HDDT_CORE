@@ -113,6 +113,12 @@
     </item>
     <item>
      <ID>S</ID>
+     <KEY>P_SERI</KEY>
+     <ENTRY>Ký hiệu hoá đơn (dải số)</ENTRY>
+     <LENGTH>24</LENGTH>
+    </item>
+    <item>
+     <ID>S</ID>
      <KEY>S_SRCT</KEY>
      <ENTRY>Loại nguồn dữ liệu</ENTRY>
      <LENGTH>18</LENGTH>

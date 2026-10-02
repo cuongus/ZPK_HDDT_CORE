@@ -130,6 +130,7 @@ PROGS = [
         ("S", "S_SEQ", "Số hoá đơn điện tử"),
         ("S", "S_GOM", "Số chứng từ gom"),
         ("S", "P_ITYP", "Mẫu hoá đơn phát hành"),
+        ("S", "P_SERI", "Ký hiệu hoá đơn (dải số)"),
         ("S", "S_SRCT", "Loại nguồn dữ liệu"),
         ("S", "P_PROV", "NCC (trống = theo cấu hình)"),
         ("S", "S_STAT", "Trạng thái HĐĐT"),
