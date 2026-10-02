@@ -244,4 +244,4 @@ import, nếu trùng thì đổi số trong `tools/gen_meta.py` (TRANS) và tài
 
 Trước khi release TR đầu tiên, cập nhật cột **Transport** trong khối changelog ở
 header của **mọi** object: đổi `abapGit` thành mã TR thật (ví dụ `PRDK900123`).
-Đây là yêu cầu của chuẩn `fis-sap-naming-convention-cuongus` §4.
+Đây là yêu cầu của chuẩn `fis-sap-cuongus-naming` §4.

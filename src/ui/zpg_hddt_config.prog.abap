@@ -48,6 +48,11 @@
 *=====================================================================
 REPORT zpg_hddt_config MESSAGE-ID zms_hddt.
 
+*   >>> Begin of change 20261002_01 F-CUONGUS TR DS4K900xxx - CRUD ZTB_HDDT_TPL bang ALV
+" Hằng số ICON_* dùng cho toolbar của lưới mẫu payload
+TYPE-POOLS icon.
+*   <<< End of change 20261002_01
+
 TYPES: BEGIN OF ty_entry,
          seq      TYPE n LENGTH 2,
          area     TYPE c LENGTH 30,
@@ -73,6 +78,64 @@ SELECTION-SCREEN COMMENT /1(79) gv_c1001.
 SELECTION-SCREEN END OF SCREEN 1001.
 *   <<< End of change 20260930_02
 
+*   >>> Begin of change 20261002_01 F-CUONGUS TR DS4K900xxx - CRUD ZTB_HDDT_TPL bang ALV
+*---------------------------------------------------------------------*
+* Bảo trì ZTB_HDDT_TPL bằng ALV trên dynpro 0300
+*---------------------------------------------------------------------*
+" ALV grid KHÔNG hiển thị được cột kiểu STRING, nên TPL_BODY tách ra
+" bảng song song và nối với dòng lưới bằng RID (khoá nội bộ, không phải
+" khoá bảng — người dùng sửa được PROVIDER / ACTION nên không lấy khoá
+" bảng làm mối nối được).
+TYPES: BEGIN OF gty_tpl_alv,
+         rid        TYPE i,
+         edit_icon  TYPE c LENGTH 4,
+         provider   TYPE zde_hddt_prov,
+         action     TYPE zde_hddt_action,
+         descr      TYPE zde_hddt_descr,
+         xactive    TYPE zde_hddt_active,
+         body_len   TYPE i,
+         created_by TYPE syuname,
+         created_at TYPE timestampl,
+         changed_by TYPE syuname,
+         changed_at TYPE timestampl,
+       END OF gty_tpl_alv.
+TYPES gty_t_tpl_alv TYPE STANDARD TABLE OF gty_tpl_alv WITH EMPTY KEY.
+
+TYPES: BEGIN OF gty_tpl_body,
+         rid  TYPE i,
+         body TYPE string,
+       END OF gty_tpl_body.
+TYPES gty_t_tpl_body TYPE STANDARD TABLE OF gty_tpl_body WITH EMPTY KEY.
+
+" Nhãn cột của lưới mẫu payload
+TYPES: BEGIN OF gty_tpl_col,
+         field  TYPE lvc_fname,
+         text   TYPE scrtext_m,
+         outlen TYPE lvc_outlen,
+         edit   TYPE abap_bool,
+         chk    TYPE abap_bool,
+       END OF gty_tpl_col.
+TYPES gty_t_tpl_col TYPE STANDARD TABLE OF gty_tpl_col WITH EMPTY KEY.
+
+DATA gt_tpl_alv  TYPE gty_t_tpl_alv.
+DATA gt_tpl_body TYPE gty_t_tpl_body.
+" RID đang hiện trong ô soạn thảo và bộ đếm cấp RID cho dòng mới
+DATA gv_tpl_cur  TYPE i.
+DATA gv_tpl_max  TYPE i.
+
+" Dynpro 0300: layout RỖNG, docking chiếm hết, chia hai: trên là lưới,
+" dưới là ô soạn thảo nội dung mẫu. GUI status ZCFG_TPL chỉ cần
+" BACK / EXIT / CANC / SAVE; bốn nút nghiệp vụ nằm trên toolbar của lưới.
+CONSTANTS gc_dynnr_tpl  TYPE sydynnr VALUE '0300' ##NO_TEXT.
+CONSTANTS gc_pfstat_tpl TYPE sypfkey VALUE 'ZCFG_TPL' ##NO_TEXT.
+CONSTANTS: BEGIN OF gc_fc_tpl,
+             ins TYPE ui_func VALUE 'ZINS',
+             del TYPE ui_func VALUE 'ZDEL',
+             upl TYPE ui_func VALUE 'ZUPL',
+             dwl TYPE ui_func VALUE 'ZDWL',
+           END OF gc_fc_tpl.
+*   <<< End of change 20261002_01
+
 *---------------------------------------------------------------------*
 * Biến toàn cục nhận giá trị từ CL_GUI_FRONTEND_SERVICES (quy ước:
 * không dùng biến cục bộ — bẫy SYSTEM_POINTER_PENDING)
@@ -82,6 +145,11 @@ DATA gt_file_bin  TYPE solix_tab.
 DATA gv_file_full TYPE string.
 DATA gv_file_rc   TYPE i.
 DATA gv_file_len  TYPE i.
+*   >>> Begin of change 20261002_01 F-CUONGUS TR DS4K900xxx - CRUD ZTB_HDDT_TPL bang ALV
+DATA gv_file_name   TYPE string.
+DATA gv_file_path   TYPE string.
+DATA gv_file_action TYPE i.
+*   <<< End of change 20261002_01
 
 CLASS lcl_cfg DEFINITION FINAL CREATE PUBLIC.
   PUBLIC SECTION.
@@ -97,6 +165,25 @@ CLASS lcl_cfg DEFINITION FINAL CREATE PUBLIC.
       FOR EVENT double_click OF cl_salv_events_table
       IMPORTING row column.
 *   <<< End of change 20260930_02
+*   >>> Begin of change 20261002_01 F-CUONGUS TR DS4K900xxx - CRUD ZTB_HDDT_TPL bang ALV
+    "! PBO / PAI của dynpro 0300 — bảo trì mẫu payload ZTB_HDDT_TPL
+    METHODS pbo_0300.
+    METHODS pai_0300
+      IMPORTING i_ucomm TYPE syucomm.
+
+    "! Bốn nút nghiệp vụ nằm trên toolbar của lưới, không cần GUI status
+    METHODS on_toolbar_tpl
+      FOR EVENT toolbar OF cl_gui_alv_grid
+      IMPORTING e_object.
+    METHODS on_user_command_tpl
+      FOR EVENT user_command OF cl_gui_alv_grid
+      IMPORTING e_ucomm.
+
+    "! Nhấn vào icon ở cột đầu: đưa nội dung dòng đó xuống ô soạn thảo
+    METHODS on_hotspot_tpl
+      FOR EVENT hotspot_click OF cl_gui_alv_grid
+      IMPORTING e_row_id e_column_id.
+*   <<< End of change 20261002_01
   PRIVATE SECTION.
 *   >>> Begin of change 20260930_02 F-CUONGUS TR DS4K900172 - Tách 2 ALV cấu hình / chỉ xem
 *    DATA mo_alv TYPE REF TO cl_salv_table.
@@ -107,6 +194,12 @@ CLASS lcl_cfg DEFINITION FINAL CREATE PUBLIC.
     DATA mo_alv_cfg  TYPE REF TO cl_salv_table.
     DATA mo_alv_view TYPE REF TO cl_salv_table.
 *   <<< End of change 20260930_02
+*   >>> Begin of change 20261002_01 F-CUONGUS TR DS4K900xxx - CRUD ZTB_HDDT_TPL bang ALV
+    DATA mo_dock_tpl  TYPE REF TO cl_gui_docking_container.
+    DATA mo_split_tpl TYPE REF TO cl_gui_splitter_container.
+    DATA mo_grid_tpl  TYPE REF TO cl_gui_alv_grid.
+    DATA mo_edit_tpl  TYPE REF TO cl_gui_textedit.
+    DATA mt_fcat_tpl  TYPE lvc_t_fcat.
     "! Company code người dùng nhập ở pop-up đầu tiên (FS v0.17 mục 3.2)
     DATA mv_bukrs TYPE bukrs.
 
@@ -139,16 +232,41 @@ CLASS lcl_cfg DEFINITION FINAL CREATE PUBLIC.
       IMPORTING i_tabname TYPE tabname.
 *   <<< End of change 20260930_02
 
-    "! ZTB_HDDT_TPL không sinh được Table Maintenance Generator vì có
-    "! field kiểu STRING; bảo trì bằng nạp mẫu payload từ file JSON.
+    "! ZTB_HDDT_TPL không sinh được Table Maintenance Generator vì
+    "! TPL_BODY kiểu STRING (SE54: Data type STRING is not supported).
+    "! Bảo trì bằng lưới ALV trên dynpro 0300: thêm / sửa / xoá dòng,
+    "! nội dung mẫu soạn ở ô bên dưới hoặc nạp từ file JSON.
     METHODS maintain_tpl.
 
-    "! Phần việc của MAINTAIN_TPL chạy TRONG khoá. Tách riêng để mọi
-    "! đường thoát (RETURN) đều quay về MAINTAIN_TPL và nhả khoá đúng
-    "! một chỗ — ABAP không có finally cho luồng thường.
-    METHODS load_tpl
-      IMPORTING i_provider TYPE zde_hddt_prov
-                i_action   TYPE zde_hddt_action.
+*   >>> Begin of change 20261002_01 F-CUONGUS TR DS4K900xxx - CRUD ZTB_HDDT_TPL bang ALV
+    "! Đọc ZTB_HDDT_TPL vào lưới + bảng nội dung song song
+    METHODS tpl_select.
+
+    "! Field catalog của lưới mẫu payload
+    METHODS tpl_fcat
+      RETURNING VALUE(rt_fcat) TYPE lvc_t_fcat.
+
+    METHODS tpl_insert.
+    METHODS tpl_delete.
+    METHODS tpl_save.
+
+    "! Đưa nội dung của RID xuống ô soạn thảo; trước đó hút nội dung
+    "! đang soạn về bảng để không mất chữ vừa gõ
+    METHODS tpl_show_body
+      IMPORTING i_rid TYPE i.
+    METHODS tpl_pull_body.
+    METHODS tpl_refresh.
+    METHODS tpl_free.
+
+    "! Nạp / lưu nội dung mẫu bằng file JSON cho dòng đang chọn
+    METHODS tpl_upload.
+    METHODS tpl_download.
+
+    "! Chọn file JSON rồi trả về nội dung dạng string. Tách riêng để
+    "! LOAD_TPL (đường cũ) và TPL_UPLOAD (lưới) dùng chung.
+    METHODS read_json_file
+      RETURNING VALUE(r_body) TYPE string.
+*   <<< End of change 20261002_01
 
     "! ZTB_HDDT_TOK là bộ đệm token, chỉ xem và xoá khi cần đăng nhập lại.
     METHODS maintain_tok.
@@ -534,114 +652,522 @@ CLASS lcl_cfg IMPLEMENTATION.
 
   ENDMETHOD.
 
+*   >>> Begin of change 20261002_01 F-CUONGUS TR DS4K900xxx - CRUD ZTB_HDDT_TPL bang ALV
   METHOD maintain_tpl.
 
-    DATA lt_fields TYPE STANDARD TABLE OF sval WITH DEFAULT KEY.
-    DATA lv_rc     TYPE c LENGTH 1.
-
-    lt_fields = VALUE #(
-      ( tabname = 'ZTB_HDDT_TPL' fieldname = 'PROVIDER' fieldtext = 'Nhà cung cấp' )
-      ( tabname = 'ZTB_HDDT_TPL' fieldname = 'ACTION'   fieldtext = 'Mã nghiệp vụ' ) ).
-
-    CALL FUNCTION 'POPUP_GET_VALUES'
-      EXPORTING
-        popup_title     = 'Mẫu payload cần bảo trì'
-      IMPORTING
-        returncode      = lv_rc
-      TABLES
-        fields          = lt_fields
-      EXCEPTIONS
-        error_in_fields = 1
-        OTHERS          = 2.
-    IF sy-subrc <> 0 OR lv_rc = 'A'.
-      RETURN.
-    ENDIF.
-
-    DATA ls_tpl TYPE ztb_hddt_tpl.
-    ls_tpl-provider = lt_fields[ 1 ]-value.
-    ls_tpl-action   = lt_fields[ 2 ]-value.
-    TRANSLATE ls_tpl-provider TO UPPER CASE.
-    TRANSLATE ls_tpl-action   TO UPPER CASE.
-    IF ls_tpl-provider IS INITIAL OR ls_tpl-action IS INITIAL.
-      MESSAGE 'Phải nhập nhà cung cấp và mã nghiệp vụ.' TYPE 'S' DISPLAY LIKE 'E'.
-      RETURN.
-    ENDIF.
-
-    " Khoá TRƯỚC khi đọc: dưới kia còn SELECT lấy độ dài mẫu hiện có để
-    " hỏi người dùng rồi mới ghi đè. Đọc-để-quyết-định mà không khoá là
-    " hai quản trị viên nạp cùng một mẫu thì người sau ghi đè người
-    " trước, không ai biết mẫu vừa nạp đã bị mất.
-    " _SCOPE = '1': khoá thuộc chương trình hội thoại, không chuyển sang
-    " update task; COMMIT WORK không tự nhả, mình nhả bằng DEQUEUE.
-    CALL FUNCTION 'ENQUEUE_EZTB_HDDT_TPL'
-      EXPORTING
-        mode_ztb_hddt_tpl = 'E'
-        mandt             = sy-mandt
-        provider          = ls_tpl-provider
-        action            = ls_tpl-action
-        _scope            = '1'
-      EXCEPTIONS
-        foreign_lock      = 1
-        system_failure    = 2
-        OTHERS            = 3.
-    IF sy-subrc = 1.
-*   >>> Begin of change 20260930_02 F-CUONGUS TR DS4K900172 - Tách 2 ALV cấu hình / chỉ xem
-*      MESSAGE e051(zms_hddt) WITH ls_tpl-provider ls_tpl-action sy-msgv1.
-*      RETURN.
-*    ELSEIF sy-subrc <> 0.
-*      MESSAGE e052(zms_hddt) WITH 'ZTB_HDDT_TPL'.
-
-      MESSAGE s051(zms_hddt) WITH ls_tpl-provider ls_tpl-action sy-msgv1 DISPLAY LIKE 'E'.
-      RETURN.
-    ELSEIF sy-subrc <> 0.
-      MESSAGE s052(zms_hddt) WITH 'ZTB_HDDT_TPL' DISPLAY LIKE 'E'.
-*   <<< End of change 20260930_02
-      RETURN.
-    ENDIF.
-
-    load_tpl( i_provider = ls_tpl-provider
-              i_action   = ls_tpl-action ).
-
-    CALL FUNCTION 'DEQUEUE_EZTB_HDDT_TPL'
-      EXPORTING
-        mode_ztb_hddt_tpl = 'E'
-        mandt             = sy-mandt
-        provider          = ls_tpl-provider
-        action            = ls_tpl-action
-        _scope            = '1'.
+    " Đường ghi cũ (SVAL hỏi khoá rồi nạp đè một dòng từ file) đã bỏ:
+    " hai đường ghi vào cùng một bảng là nguồn gốc của ghi đè chéo.
+    " Giờ chỉ còn một đường — lưới dưới đây, Save mới ghi.
+    tpl_select( ).
+    CALL SCREEN 300.
 
   ENDMETHOD.
 
 
-  METHOD load_tpl.
+  METHOD tpl_select.
 
-    DATA ls_tpl TYPE ztb_hddt_tpl.
-    ls_tpl-provider = i_provider.
-    ls_tpl-action   = i_action.
+    CLEAR: gt_tpl_alv, gt_tpl_body, gv_tpl_cur, gv_tpl_max.
 
-    SELECT SINGLE tpl_body
+    SELECT provider, action, descr, xactive, tpl_body,
+           created_by, created_at, changed_by, changed_at
       FROM ztb_hddt_tpl
-      WHERE provider = @ls_tpl-provider
-        AND action   = @ls_tpl-action
-      INTO @DATA(lv_old).
+      ORDER BY provider, action
+      INTO TABLE @DATA(lt_db).
 
-    DATA(lv_quest) = COND string(
-      WHEN sy-subrc = 0
-      THEN |Mẫu hiện có { strlen( lv_old ) } ký tự. Nạp lại từ file JSON?|
-      ELSE |Chưa có mẫu cho { ls_tpl-provider } / { ls_tpl-action }. Nạp từ file JSON?| ).
+    LOOP AT lt_db ASSIGNING FIELD-SYMBOL(<fs_db>).
+      gv_tpl_max = gv_tpl_max + 1.
+      APPEND VALUE gty_tpl_alv(
+        rid        = gv_tpl_max
+        edit_icon  = icon_change
+        provider   = <fs_db>-provider
+        action     = <fs_db>-action
+        descr      = <fs_db>-descr
+        xactive    = <fs_db>-xactive
+        body_len   = strlen( <fs_db>-tpl_body )
+        created_by = <fs_db>-created_by
+        created_at = <fs_db>-created_at
+        changed_by = <fs_db>-changed_by
+        changed_at = <fs_db>-changed_at ) TO gt_tpl_alv.
+      APPEND VALUE gty_tpl_body( rid  = gv_tpl_max
+                                 body = <fs_db>-tpl_body ) TO gt_tpl_body.
+    ENDLOOP.
 
-    DATA lv_answer TYPE c LENGTH 1.
-    CALL FUNCTION 'POPUP_TO_CONFIRM'
-      EXPORTING
-        titlebar      = 'Bảo trì mẫu payload'
-        text_question = lv_quest
-      IMPORTING
-        answer        = lv_answer
-      EXCEPTIONS
-        OTHERS        = 1.
-    IF lv_answer <> '1'.
+  ENDMETHOD.
+
+
+  METHOD tpl_fcat.
+
+    DATA lt_col TYPE gty_t_tpl_col.
+    lt_col = VALUE #(
+      ( field = 'EDIT_ICON'  text = 'Nội dung'      outlen = 8 )
+      ( field = 'PROVIDER'   text = 'Nhà cung cấp'  outlen = 10 edit = abap_true )
+      ( field = 'ACTION'     text = 'Mã nghiệp vụ'  outlen = 20 edit = abap_true )
+      ( field = 'DESCR'      text = 'Diễn giải'     outlen = 40 edit = abap_true )
+      ( field = 'XACTIVE'    text = 'Hiệu lực'      outlen = 8  edit = abap_true chk = abap_true )
+      ( field = 'BODY_LEN'   text = 'Số ký tự'      outlen = 10 )
+      ( field = 'CREATED_BY' text = 'Người tạo'     outlen = 12 )
+      ( field = 'CREATED_AT' text = 'Ngày tạo'      outlen = 21 )
+      ( field = 'CHANGED_BY' text = 'Người sửa'     outlen = 12 )
+      ( field = 'CHANGED_AT' text = 'Ngày sửa'      outlen = 21 ) ).
+
+    DATA lo_meta TYPE REF TO cl_salv_table.
+    TRY.
+        cl_salv_table=>factory( IMPORTING r_salv_table = lo_meta
+                                CHANGING  t_table      = gt_tpl_alv ).
+        rt_fcat = cl_salv_controller_metadata=>get_lvc_fieldcatalog(
+                    r_columns      = lo_meta->get_columns( )
+                    r_aggregations = lo_meta->get_aggregations( ) ).
+      CATCH cx_salv_error INTO DATA(lx_meta).
+        MESSAGE lx_meta->get_text( ) TYPE 'S' DISPLAY LIKE 'W'.
+    ENDTRY.
+
+    " RID là khoá nội bộ, không cho người dùng thấy
+    ASSIGN rt_fcat[ fieldname = 'RID' ] TO FIELD-SYMBOL(<fs_rid>).
+    IF sy-subrc = 0.
+      <fs_rid>-tech = abap_true.
+    ENDIF.
+
+    LOOP AT lt_col ASSIGNING FIELD-SYMBOL(<fs_col>).
+      ASSIGN rt_fcat[ fieldname = <fs_col>-field ] TO FIELD-SYMBOL(<fs_f>).
+      IF sy-subrc <> 0.
+        CONTINUE.
+      ENDIF.
+      <fs_f>-scrtext_s = <fs_col>-text.
+      <fs_f>-scrtext_m = <fs_col>-text.
+      <fs_f>-scrtext_l = <fs_col>-text.
+      <fs_f>-coltext   = <fs_col>-text.
+      <fs_f>-outputlen = <fs_col>-outlen.
+      <fs_f>-edit      = <fs_col>-edit.
+      <fs_f>-checkbox  = <fs_col>-chk.
+      IF <fs_col>-field = 'EDIT_ICON'.
+        <fs_f>-icon    = abap_true.
+        <fs_f>-hotspot = abap_true.
+      ENDIF.
+    ENDLOOP.
+
+  ENDMETHOD.
+
+
+  METHOD pbo_0300.
+
+    SET PF-STATUS gc_pfstat_tpl.
+
+    IF mo_grid_tpl IS BOUND.
       RETURN.
     ENDIF.
+
+    CREATE OBJECT mo_dock_tpl
+      EXPORTING
+        repid     = sy-repid
+        dynnr     = sy-dynnr
+        side      = cl_gui_docking_container=>dock_at_left
+        extension = 9999
+      EXCEPTIONS
+        OTHERS    = 1.
+    IF sy-subrc <> 0.
+      MESSAGE 'Không tạo được docking container cho màn hình mẫu payload.'
+              TYPE 'S' DISPLAY LIKE 'E'.
+      RETURN.
+    ENDIF.
+
+    " Trên lưới, dưới ô soạn thảo nội dung mẫu: xem được cả hai cùng lúc
+    " nên không cần pop-up riêng cho TPL_BODY
+    CREATE OBJECT mo_split_tpl
+      EXPORTING
+        parent  = mo_dock_tpl
+        rows    = 2
+        columns = 1
+      EXCEPTIONS
+        OTHERS  = 1.
+    IF sy-subrc <> 0.
+      MESSAGE 'Không chia được màn hình mẫu payload.' TYPE 'S' DISPLAY LIKE 'E'.
+      RETURN.
+    ENDIF.
+    mo_split_tpl->set_row_height( id = 1 height = 45 ).
+
+    " Lấy ra biến trước: gọi hàm ngay trong tham số của CREATE OBJECT có
+    " EXCEPTIONS làm câu lệnh khó đọc và bộ kiểm tĩnh báo nhầm
+    DATA(lo_top) = mo_split_tpl->get_container( row = 1 column = 1 ).
+    DATA(lo_bot) = mo_split_tpl->get_container( row = 2 column = 1 ).
+
+    CREATE OBJECT mo_grid_tpl
+      EXPORTING
+        i_parent = lo_top
+      EXCEPTIONS
+        OTHERS   = 1.
+    IF sy-subrc <> 0.
+      MESSAGE 'Không tạo được lưới mẫu payload.' TYPE 'S' DISPLAY LIKE 'E'.
+      RETURN.
+    ENDIF.
+
+    CREATE OBJECT mo_edit_tpl
+      EXPORTING
+        parent        = lo_bot
+        wordwrap_mode = cl_gui_textedit=>wordwrap_at_windowborder
+      EXCEPTIONS
+        OTHERS        = 1.
+    IF sy-subrc <> 0.
+      MESSAGE 'Không tạo được ô soạn thảo nội dung mẫu.' TYPE 'S' DISPLAY LIKE 'E'.
+      RETURN.
+    ENDIF.
+
+    SET HANDLER me->on_toolbar_tpl      FOR mo_grid_tpl.
+    SET HANDLER me->on_user_command_tpl FOR mo_grid_tpl.
+    SET HANDLER me->on_hotspot_tpl      FOR mo_grid_tpl.
+
+    mt_fcat_tpl = tpl_fcat( ).
+
+    DATA ls_layout TYPE lvc_s_layo.
+    ls_layout-grid_title = 'Mẫu payload ZTB_HDDT_TPL'.
+    ls_layout-zebra      = abap_true.
+    ls_layout-sel_mode   = 'A'.
+
+    mo_grid_tpl->set_table_for_first_display(
+      EXPORTING
+        is_layout       = ls_layout
+      CHANGING
+        it_fieldcatalog = mt_fcat_tpl
+        it_outtab       = gt_tpl_alv ).
+
+    " Lưới sửa được ngay: đây là màn hình bảo trì, không phải màn xem
+    mo_grid_tpl->set_ready_for_input( i_ready_for_input = 1 ).
+
+    IF gt_tpl_alv IS NOT INITIAL.
+      tpl_show_body( gt_tpl_alv[ 1 ]-rid ).
+    ENDIF.
+
+  ENDMETHOD.
+
+
+  METHOD pai_0300.
+
+    CASE i_ucomm.
+
+      WHEN 'SAVE' OR '&SAVE'.
+        tpl_save( ).
+
+      WHEN 'BACK' OR '&F03' OR 'CANC' OR '&F12'.
+        DATA lv_answer TYPE c LENGTH 1.
+        CALL FUNCTION 'POPUP_TO_CONFIRM'
+          EXPORTING
+            titlebar      = 'Bảo trì mẫu payload'
+            text_question = 'Thoát màn hình? Thay đổi chưa lưu sẽ mất.'
+          IMPORTING
+            answer        = lv_answer
+          EXCEPTIONS
+            OTHERS        = 1.
+        IF lv_answer = '1'.
+          tpl_free( ).
+          LEAVE TO SCREEN 0.
+        ENDIF.
+
+      WHEN 'EXIT' OR '&F15'.
+        tpl_free( ).
+        LEAVE PROGRAM.
+
+      WHEN OTHERS.
+
+    ENDCASE.
+
+  ENDMETHOD.
+
+
+  METHOD on_toolbar_tpl.
+
+    APPEND VALUE #( butn_type = 3 ) TO e_object->mt_toolbar.
+    APPEND VALUE #( function  = gc_fc_tpl-ins
+                    icon      = CONV #( icon_insert_row )
+                    text      = 'Thêm dòng'
+                    quickinfo = 'Them mot mau payload moi' ) TO e_object->mt_toolbar.
+    APPEND VALUE #( function  = gc_fc_tpl-del
+                    icon      = CONV #( icon_delete_row )
+                    text      = 'Xoá dòng'
+                    quickinfo = 'Xoa cac dong dang chon' ) TO e_object->mt_toolbar.
+    APPEND VALUE #( butn_type = 3 ) TO e_object->mt_toolbar.
+    APPEND VALUE #( function  = gc_fc_tpl-upl
+                    icon      = CONV #( icon_import )
+                    text      = 'Nạp từ file'
+                    quickinfo = 'Nap noi dung mau tu file JSON' ) TO e_object->mt_toolbar.
+    APPEND VALUE #( function  = gc_fc_tpl-dwl
+                    icon      = CONV #( icon_export )
+                    text      = 'Lưu ra file'
+                    quickinfo = 'Luu noi dung mau ra file JSON' ) TO e_object->mt_toolbar.
+
+  ENDMETHOD.
+
+
+  METHOD on_user_command_tpl.
+
+    CASE e_ucomm.
+      WHEN gc_fc_tpl-ins.
+        tpl_insert( ).
+      WHEN gc_fc_tpl-del.
+        tpl_delete( ).
+      WHEN gc_fc_tpl-upl.
+        tpl_upload( ).
+      WHEN gc_fc_tpl-dwl.
+        tpl_download( ).
+      WHEN OTHERS.
+    ENDCASE.
+
+  ENDMETHOD.
+
+
+  METHOD on_hotspot_tpl.
+
+    IF e_column_id-fieldname <> 'EDIT_ICON'.
+      RETURN.
+    ENDIF.
+    DATA(lv_idx) = CONV i( e_row_id-index ).
+    IF lv_idx < 1 OR lv_idx > lines( gt_tpl_alv ).
+      RETURN.
+    ENDIF.
+
+    tpl_show_body( gt_tpl_alv[ lv_idx ]-rid ).
+
+  ENDMETHOD.
+
+
+  METHOD tpl_show_body.
+
+    IF mo_edit_tpl IS NOT BOUND.
+      RETURN.
+    ENDIF.
+
+    " Hút nội dung đang soạn về bảng trước khi đổi sang dòng khác
+    tpl_pull_body( ).
+
+    DATA lv_body TYPE string.
+    ASSIGN gt_tpl_body[ rid = i_rid ] TO FIELD-SYMBOL(<fs_b>).
+    IF sy-subrc = 0.
+      lv_body = <fs_b>-body.
+    ENDIF.
+
+    mo_edit_tpl->set_textstream( lv_body ).
+    gv_tpl_cur = i_rid.
+
+  ENDMETHOD.
+
+
+  METHOD tpl_pull_body.
+
+    IF mo_edit_tpl IS NOT BOUND OR gv_tpl_cur = 0.
+      RETURN.
+    ENDIF.
+
+    " GET_TEXTSTREAM chỉ điền biến SAU khi FLUSH — đây là bẫy kinh điển
+    " của control framework: thiếu FLUSH thì LV_TXT luôn rỗng và nội dung
+    " người dùng vừa gõ bị ghi đè bằng chuỗi rỗng.
+    DATA lv_txt TYPE string.
+    mo_edit_tpl->get_textstream( IMPORTING text = lv_txt ).
+    cl_gui_cfw=>flush( EXCEPTIONS OTHERS = 0 ).
+
+    ASSIGN gt_tpl_body[ rid = gv_tpl_cur ] TO FIELD-SYMBOL(<fs_b>).
+    IF sy-subrc <> 0.
+      APPEND VALUE gty_tpl_body( rid = gv_tpl_cur ) TO gt_tpl_body.
+      ASSIGN gt_tpl_body[ rid = gv_tpl_cur ] TO <fs_b>.
+    ENDIF.
+    <fs_b>-body = lv_txt.
+
+    ASSIGN gt_tpl_alv[ rid = gv_tpl_cur ] TO FIELD-SYMBOL(<fs_a>).
+    IF sy-subrc = 0.
+      <fs_a>-body_len = strlen( lv_txt ).
+    ENDIF.
+
+  ENDMETHOD.
+
+
+  METHOD tpl_insert.
+
+    mo_grid_tpl->check_changed_data( ).
+    tpl_pull_body( ).
+
+    gv_tpl_max = gv_tpl_max + 1.
+    APPEND VALUE gty_tpl_alv( rid       = gv_tpl_max
+                              edit_icon = icon_change
+                              xactive   = abap_true ) TO gt_tpl_alv.
+    APPEND VALUE gty_tpl_body( rid = gv_tpl_max ) TO gt_tpl_body.
+
+    tpl_refresh( ).
+    tpl_show_body( gv_tpl_max ).
+
+  ENDMETHOD.
+
+
+  METHOD tpl_delete.
+
+    mo_grid_tpl->check_changed_data( ).
+    tpl_pull_body( ).
+
+    DATA lt_rows TYPE lvc_t_row.
+    mo_grid_tpl->get_selected_rows( IMPORTING et_index_rows = lt_rows ).
+    IF lt_rows IS INITIAL.
+      MESSAGE 'Chọn dòng cần xoá trước.' TYPE 'S' DISPLAY LIKE 'W'.
+      RETURN.
+    ENDIF.
+
+    " Chỉ xoá khỏi bảng nội bộ; bảng cơ sở dữ liệu đụng tới ở TPL_SAVE
+    SORT lt_rows BY index DESCENDING.
+    LOOP AT lt_rows ASSIGNING FIELD-SYMBOL(<fs_r>).
+      DATA(lv_idx) = CONV i( <fs_r>-index ).
+      IF lv_idx < 1 OR lv_idx > lines( gt_tpl_alv ).
+        CONTINUE.
+      ENDIF.
+      DATA(lv_rid) = gt_tpl_alv[ lv_idx ]-rid.
+      DELETE gt_tpl_alv INDEX lv_idx.
+      DELETE gt_tpl_body WHERE rid = lv_rid.
+      IF gv_tpl_cur = lv_rid.
+        CLEAR gv_tpl_cur.
+      ENDIF.
+    ENDLOOP.
+
+    IF gv_tpl_cur = 0 AND mo_edit_tpl IS BOUND.
+      mo_edit_tpl->set_textstream( space ).
+    ENDIF.
+    tpl_refresh( ).
+
+  ENDMETHOD.
+
+
+  METHOD tpl_refresh.
+
+    IF mo_grid_tpl IS NOT BOUND.
+      RETURN.
+    ENDIF.
+    DATA ls_stable TYPE lvc_s_stbl.
+    ls_stable-row = abap_true.
+    ls_stable-col = abap_true.
+    mo_grid_tpl->refresh_table_display(
+      EXPORTING
+        is_stable = ls_stable
+      EXCEPTIONS
+        OTHERS    = 0 ).
+
+  ENDMETHOD.
+
+
+  METHOD tpl_free.
+
+    IF mo_grid_tpl IS BOUND.
+      mo_grid_tpl->free( EXCEPTIONS OTHERS = 0 ).
+      CLEAR mo_grid_tpl.
+    ENDIF.
+    IF mo_edit_tpl IS BOUND.
+      mo_edit_tpl->free( EXCEPTIONS OTHERS = 0 ).
+      CLEAR mo_edit_tpl.
+    ENDIF.
+    IF mo_split_tpl IS BOUND.
+      mo_split_tpl->free( EXCEPTIONS OTHERS = 0 ).
+      CLEAR mo_split_tpl.
+    ENDIF.
+    IF mo_dock_tpl IS BOUND.
+      mo_dock_tpl->free( EXCEPTIONS OTHERS = 0 ).
+      CLEAR mo_dock_tpl.
+    ENDIF.
+    CLEAR gv_tpl_cur.
+
+  ENDMETHOD.
+
+
+  METHOD tpl_upload.
+
+    mo_grid_tpl->check_changed_data( ).
+    IF gv_tpl_cur = 0.
+      MESSAGE 'Nhấn icon ở cột Nội dung để chọn dòng trước.'
+              TYPE 'S' DISPLAY LIKE 'W'.
+      RETURN.
+    ENDIF.
+
+    DATA(lv_body) = read_json_file( ).
+    IF lv_body IS INITIAL.
+      RETURN.
+    ENDIF.
+
+    ASSIGN gt_tpl_body[ rid = gv_tpl_cur ] TO FIELD-SYMBOL(<fs_b>).
+    IF sy-subrc = 0.
+      <fs_b>-body = lv_body.
+    ENDIF.
+    ASSIGN gt_tpl_alv[ rid = gv_tpl_cur ] TO FIELD-SYMBOL(<fs_a>).
+    IF sy-subrc = 0.
+      <fs_a>-body_len = strlen( lv_body ).
+      IF <fs_a>-descr IS INITIAL.
+        <fs_a>-descr = gv_file_full.
+      ENDIF.
+    ENDIF.
+
+    mo_edit_tpl->set_textstream( lv_body ).
+    tpl_refresh( ).
+
+    DATA(lv_msg) = |Đã nạp { strlen( lv_body ) } ký tự vào ô soạn thảo. | &&
+                   |Bấm Lưu để ghi vào bảng.|.
+    MESSAGE lv_msg TYPE 'S'.
+
+  ENDMETHOD.
+
+
+  METHOD tpl_download.
+
+    tpl_pull_body( ).
+    IF gv_tpl_cur = 0.
+      MESSAGE 'Nhấn icon ở cột Nội dung để chọn dòng trước.'
+              TYPE 'S' DISPLAY LIKE 'W'.
+      RETURN.
+    ENDIF.
+
+    ASSIGN gt_tpl_body[ rid = gv_tpl_cur ] TO FIELD-SYMBOL(<fs_b>).
+    IF sy-subrc <> 0 OR <fs_b>-body IS INITIAL.
+      MESSAGE 'Dòng này chưa có nội dung mẫu.' TYPE 'S' DISPLAY LIKE 'W'.
+      RETURN.
+    ENDIF.
+
+    DATA(ls_a) = VALUE gty_tpl_alv( ).
+    ASSIGN gt_tpl_alv[ rid = gv_tpl_cur ] TO FIELD-SYMBOL(<fs_a>).
+    IF sy-subrc = 0.
+      ls_a = <fs_a>.
+    ENDIF.
+
+    CLEAR: gv_file_name, gv_file_path, gv_file_full, gv_file_action.
+    gv_file_name = |{ ls_a-provider }_{ ls_a-action }.json|.
+    cl_gui_frontend_services=>file_save_dialog(
+      EXPORTING
+        window_title      = 'Lưu mẫu payload ra file JSON'
+        default_extension = 'json'
+        default_file_name = gv_file_name
+      CHANGING
+        filename          = gv_file_name
+        path              = gv_file_path
+        fullpath          = gv_file_full
+        user_action       = gv_file_action
+      EXCEPTIONS
+        OTHERS            = 1 ).
+    IF sy-subrc <> 0
+       OR gv_file_action <> cl_gui_frontend_services=>action_ok.
+      RETURN.
+    ENDIF.
+
+    " Ghi UTF-8 để dấu tiếng Việt trong mẫu không hỏng
+    DATA lt_txt TYPE STANDARD TABLE OF string WITH EMPTY KEY.
+    APPEND <fs_b>-body TO lt_txt.
+    cl_gui_frontend_services=>gui_download(
+      EXPORTING
+        filename                = gv_file_full
+        filetype                = 'ASC'
+        codepage                = '4110'
+        write_field_separator   = abap_false
+      CHANGING
+        data_tab                = lt_txt
+      EXCEPTIONS
+        OTHERS                  = 1 ).
+    IF sy-subrc <> 0.
+      MESSAGE 'Không ghi được file.' TYPE 'S' DISPLAY LIKE 'E'.
+      RETURN.
+    ENDIF.
+    MESSAGE 'Đã lưu mẫu payload ra file.' TYPE 'S'.
+
+  ENDMETHOD.
+
+
+  METHOD read_json_file.
 
     CLEAR: gt_file_list, gt_file_bin, gv_file_full, gv_file_rc, gv_file_len.
     cl_gui_frontend_services=>file_open_dialog(
@@ -683,36 +1209,152 @@ CLASS lcl_cfg IMPLEMENTATION.
       TABLES
         binary_tab   = gt_file_bin.
 
-    ls_tpl-tpl_body = zcl_hddt_platform=>get( )->xstring_to_string(
-                        i_data     = lv_xstr
-                        i_encoding = `UTF-8` ).
-    IF ls_tpl-tpl_body IS INITIAL.
+    r_body = zcl_hddt_platform=>get( )->xstring_to_string(
+               i_data     = lv_xstr
+               i_encoding = `UTF-8` ).
+    IF r_body IS INITIAL.
       MESSAGE 'File mẫu payload rỗng.' TYPE 'S' DISPLAY LIKE 'E'.
+    ENDIF.
+
+  ENDMETHOD.
+
+
+  METHOD tpl_save.
+
+    IF mo_grid_tpl IS NOT BOUND.
       RETURN.
     ENDIF.
-    ls_tpl-descr   = gv_file_full.
-    ls_tpl-xactive = abap_true.
+    mo_grid_tpl->check_changed_data( ).
+    tpl_pull_body( ).
 
-    " lv_old co gia tri nghia la dong da ton tai -> chi cap nhat CHANGED_*
-    zcl_hddt_log=>set_admin( EXPORTING i_new  = xsdbool( lv_old IS INITIAL )
-                             CHANGING  cs_row = ls_tpl ).
+    " Kiểm TRƯỚC khi khoá: khoá rồi mới phát hiện sai là giữ khoá vô ích
+    DATA lt_seen TYPE SORTED TABLE OF gty_tpl_alv
+                 WITH UNIQUE KEY provider action.
+    DATA lv_msg TYPE string.
 
-    MODIFY ztb_hddt_tpl FROM ls_tpl.
-    IF sy-subrc <> 0.
-      ROLLBACK WORK.
-      MESSAGE 'Không ghi được mẫu payload vào ZTB_HDDT_TPL.' TYPE 'S' DISPLAY LIKE 'E'.
+    LOOP AT gt_tpl_alv ASSIGNING FIELD-SYMBOL(<fs_a>).
+      DATA(lv_no) = |{ sy-tabix }|.
+      TRANSLATE <fs_a>-provider TO UPPER CASE.
+      TRANSLATE <fs_a>-action   TO UPPER CASE.
+
+      IF <fs_a>-provider IS INITIAL OR <fs_a>-action IS INITIAL.
+        lv_msg = |Dòng { lv_no }: thiếu nhà cung cấp hoặc mã nghiệp vụ.|.
+        MESSAGE lv_msg TYPE 'S' DISPLAY LIKE 'E'.
+        RETURN.
+      ENDIF.
+
+      INSERT <fs_a> INTO TABLE lt_seen.
+      IF sy-subrc <> 0.
+        lv_msg = |Trùng khoá { <fs_a>-provider } / { <fs_a>-action } ở dòng { lv_no }.|.
+        MESSAGE lv_msg TYPE 'S' DISPLAY LIKE 'E'.
+        RETURN.
+      ENDIF.
+
+      IF <fs_a>-xactive = abap_true AND <fs_a>-body_len = 0.
+        lv_msg = |Dòng { lv_no } đang hiệu lực nhưng chưa có nội dung mẫu.|.
+        MESSAGE lv_msg TYPE 'S' DISPLAY LIKE 'E'.
+        RETURN.
+      ENDIF.
+    ENDLOOP.
+
+    " Khoá CẢ BẢNG trong client: dưới kia có DELETE những dòng người dùng
+    " đã bỏ khỏi lưới, không khoá thì dòng người khác vừa thêm bị xoá oan.
+    CALL FUNCTION 'ENQUEUE_EZTB_HDDT_TPL'
+      EXPORTING
+        mode_ztb_hddt_tpl = 'E'
+        mandt             = sy-mandt
+        _scope            = '1'
+      EXCEPTIONS
+        foreign_lock      = 1
+        system_failure    = 2
+        OTHERS            = 3.
+    IF sy-subrc = 1.
+      MESSAGE s053(zms_hddt) WITH sy-msgv1 DISPLAY LIKE 'E'.
+      RETURN.
+    ELSEIF sy-subrc <> 0.
+      MESSAGE s052(zms_hddt) WITH 'ZTB_HDDT_TPL' DISPLAY LIKE 'E'.
       RETURN.
     ENDIF.
+
+    SELECT provider, action
+      FROM ztb_hddt_tpl
+      INTO TABLE @DATA(lt_db).
+
+    DATA lv_upd TYPE i.
+    DATA lv_del TYPE i.
+    DATA ls_tpl TYPE ztb_hddt_tpl.
+
+    LOOP AT gt_tpl_alv ASSIGNING <fs_a>.
+      CLEAR ls_tpl.
+      ls_tpl-provider   = <fs_a>-provider.
+      ls_tpl-action     = <fs_a>-action.
+      ls_tpl-descr      = <fs_a>-descr.
+      ls_tpl-xactive    = <fs_a>-xactive.
+      ls_tpl-created_by = <fs_a>-created_by.
+      ls_tpl-created_at = <fs_a>-created_at.
+
+      ASSIGN gt_tpl_body[ rid = <fs_a>-rid ] TO FIELD-SYMBOL(<fs_b>).
+      IF sy-subrc = 0.
+        ls_tpl-tpl_body = <fs_b>-body.
+      ENDIF.
+
+      " Dòng chưa có trong bảng thì điền cả CREATED_*, có rồi chỉ CHANGED_*
+      DATA(lv_new) = xsdbool( NOT line_exists( lt_db[ provider = ls_tpl-provider
+                                                      action   = ls_tpl-action ] ) ).
+      zcl_hddt_log=>set_admin( EXPORTING i_new  = lv_new
+                               CHANGING  cs_row = ls_tpl ).
+
+      MODIFY ztb_hddt_tpl FROM ls_tpl.
+      IF sy-subrc <> 0.
+        ROLLBACK WORK.
+        lv_msg = |Không ghi được { ls_tpl-provider } / { ls_tpl-action }.|.
+        MESSAGE lv_msg TYPE 'S' DISPLAY LIKE 'E'.
+        CALL FUNCTION 'DEQUEUE_EZTB_HDDT_TPL'
+          EXPORTING
+            mode_ztb_hddt_tpl = 'E'
+            mandt             = sy-mandt
+            _scope            = '1'.
+        RETURN.
+      ENDIF.
+      lv_upd = lv_upd + 1.
+    ENDLOOP.
+
+    " Dòng còn trong bảng mà người dùng đã bỏ khỏi lưới
+    LOOP AT lt_db ASSIGNING FIELD-SYMBOL(<fs_d>).
+      IF line_exists( lt_seen[ provider = <fs_d>-provider
+                               action   = <fs_d>-action ] ).
+        CONTINUE.
+      ENDIF.
+      DELETE FROM ztb_hddt_tpl
+        WHERE provider = @<fs_d>-provider
+          AND action   = @<fs_d>-action.
+      IF sy-subrc = 0.
+        lv_del = lv_del + 1.
+      ENDIF.
+    ENDLOOP.
+
     COMMIT WORK AND WAIT.
     zcl_hddt_factory=>reset( ).
 
-    " Ghi trực tiếp nên KHÔNG vào transport: phải nạp lại trên từng hệ
-    DATA(lv_done) = |Đã nạp mẫu { ls_tpl-provider } / { ls_tpl-action } | &&
-                    |({ strlen( ls_tpl-tpl_body ) } ký tự). Bản ghi không vào | &&
-                    |transport, phải nạp lại trên hệ QAS / PRD.|.
-    MESSAGE lv_done TYPE 'S'.
+    CALL FUNCTION 'DEQUEUE_EZTB_HDDT_TPL'
+      EXPORTING
+        mode_ztb_hddt_tpl = 'E'
+        mandt             = sy-mandt
+        _scope            = '1'.
+
+    " Ghi thẳng vào bảng nên KHÔNG vào transport: phải nạp lại trên từng hệ
+    lv_msg = |Đã ghi { lv_upd } mẫu, xoá { lv_del } mẫu. Bản ghi không vào | &&
+             |transport, phải làm lại trên hệ QAS / PRD.|.
+    MESSAGE lv_msg TYPE 'S'.
+
+    tpl_select( ).
+    tpl_refresh( ).
+    IF gt_tpl_alv IS NOT INITIAL.
+      tpl_show_body( gt_tpl_alv[ 1 ]-rid ).
+    ENDIF.
 
   ENDMETHOD.
+*   <<< End of change 20261002_01
 
 
   METHOD maintain_tok.
@@ -778,14 +1420,28 @@ CLASS lcl_cfg IMPLEMENTATION.
                                   start_line   = 3
                                   end_line     = 20 ).
         lo_alv->get_columns( )->set_optimize( abap_true ).
+*   >>> Begin of change 20261002_01 F-CUONGUS TR DS4K900xxx - CRUD ZTB_HDDT_TPL bang ALV
+        " Cho chọn nhiều dòng để xoá đúng token của một nhà cung cấp /
+        " một công ty, thay vì lúc nào cũng xoá sạch cả bộ đệm
+        lo_alv->get_selections( )->set_selection_mode(
+          if_salv_c_selection_mode=>multiple ).
+*   <<< End of change 20261002_01
         lo_alv->display( ).
       CATCH cx_salv_msg INTO DATA(lx_alv).
         MESSAGE lx_alv->get_text( ) TYPE 'S' DISPLAY LIKE 'E'.
         RETURN.
     ENDTRY.
 
-    DATA(lv_quest) = |Xoá toàn bộ { lines( lt_tok ) } dòng bộ đệm token | &&
-                     |để buộc đăng nhập lại nhà cung cấp?|.
+*   >>> Begin of change 20261002_01 F-CUONGUS TR DS4K900xxx - CRUD ZTB_HDDT_TPL bang ALV
+    " Lựa chọn còn giữ sau khi pop-up đóng
+    DATA(lt_sel) = lo_alv->get_selections( )->get_selected_rows( ).
+
+    DATA(lv_quest) = COND string(
+      WHEN lt_sel IS INITIAL
+      THEN |Không chọn dòng nào. Xoá TOÀN BỘ { lines( lt_tok ) } dòng bộ đệm | &&
+           |token để buộc đăng nhập lại nhà cung cấp?|
+      ELSE |Xoá { lines( lt_sel ) } dòng token đang chọn?| ).
+
     DATA lv_answer TYPE c LENGTH 1.
     CALL FUNCTION 'POPUP_TO_CONFIRM'
       EXPORTING
@@ -799,15 +1455,38 @@ CLASS lcl_cfg IMPLEMENTATION.
       RETURN.
     ENDIF.
 
-    DELETE FROM ztb_hddt_tok.
-    IF sy-subrc <> 0.
+    DATA lv_cnt TYPE i.
+    IF lt_sel IS INITIAL.
+      DELETE FROM ztb_hddt_tok.
+      lv_cnt = sy-dbcnt.
+    ELSE.
+      LOOP AT lt_sel ASSIGNING FIELD-SYMBOL(<fs_sel>).
+        DATA(lv_idx) = CONV i( <fs_sel> ).
+        IF lv_idx < 1 OR lv_idx > lines( lt_tok ).
+          CONTINUE.
+        ENDIF.
+        ASSIGN lt_tok[ lv_idx ] TO FIELD-SYMBOL(<fs_tok>).
+        DELETE FROM ztb_hddt_tok
+          WHERE provider = @<fs_tok>-provider
+            AND connid   = @<fs_tok>-connid
+            AND bukrs    = @<fs_tok>-bukrs
+            AND apiuser  = @<fs_tok>-apiuser.
+        lv_cnt = lv_cnt + sy-dbcnt.
+      ENDLOOP.
+    ENDIF.
+
+    IF lv_cnt = 0.
       ROLLBACK WORK.
       MESSAGE 'Không xoá được bộ đệm token.' TYPE 'S' DISPLAY LIKE 'E'.
       RETURN.
     ENDIF.
     COMMIT WORK AND WAIT.
-    MESSAGE 'Đã xoá bộ đệm token, lần gọi sau sẽ đăng nhập lại.' TYPE 'S'.
 
+    " MESSAGE ... WITH chỉ nhận biến / literal, không nhận biểu thức
+    DATA(lv_done) = |Đã xoá { lv_cnt } dòng bộ đệm token, | &&
+                    |lần gọi sau sẽ đăng nhập lại.|.
+    MESSAGE lv_done TYPE 'S'.
+*   <<< End of change 20261002_01
   ENDMETHOD.
 
 
@@ -939,3 +1618,29 @@ AT SELECTION-SCREEN OUTPUT.
     go_cfg->pbo_1001( ).
   ENDIF.
 *   <<< End of change 20260930_02
+
+
+*   >>> Begin of change 20261002_01 F-CUONGUS TR DS4K900xxx - CRUD ZTB_HDDT_TPL bang ALV
+*&---------------------------------------------------------------------*
+*& Module STATUS_0300 OUTPUT
+*&---------------------------------------------------------------------*
+*& Dynpro 0300 có layout RỖNG: docking container chiếm toàn bộ, chia
+*& hai — trên là lưới mẫu payload, dưới là ô soạn thảo TPL_BODY.
+*& GO_CFG khai ở START-OF-SELECTION nên là biến toàn cục của report.
+*&---------------------------------------------------------------------*
+MODULE status_0300 OUTPUT.
+
+  go_cfg->pbo_0300( ).
+
+ENDMODULE.
+
+
+*&---------------------------------------------------------------------*
+*& Module USER_COMMAND_0300 INPUT
+*&---------------------------------------------------------------------*
+MODULE user_command_0300 INPUT.
+
+  go_cfg->pai_0300( sy-ucomm ).
+
+ENDMODULE.
+*   <<< End of change 20261002_01

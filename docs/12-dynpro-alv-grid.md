@@ -385,7 +385,79 @@ nguồn. Nên chốt với kế toán phạm vi được sửa trước khi mở
 nên lần vào 0200 thứ hai báo `CC_ITEM` đã tồn tại. `FREE_ITEM_GRID` gọi
 `free( )` của control rồi mới `CLEAR`, chạy ở cả nhánh Save và nhánh Cancel.
 
-## 9. Dải trống phía trên grid
+## 9. Dynpro 0300 — bảo trì ZTB_HDDT_TPL bằng ALV
+
+SE54 không sinh được Table Maintenance Generator cho `ZTB_HDDT_TPL` vì
+`TPL_BODY` khai `ZDE_HDDT_JSON` = `STRG`. ALV grid **cũng** không hiển thị
+được cột STRING, nên màn hình chia hai tầng.
+
+### 9.1 Tạo dynpro
+
+SE51 → program `ZPG_HDDT_CONFIG`, screen `0300`, Screen type **Normal**,
+layout **để RỖNG** (docking container chiếm toàn bộ, giống dynpro 0100 của
+`ZPG_HDDT_INTEGRATION`).
+
+Flow logic đúng bốn dòng:
+
+```abap
+PROCESS BEFORE OUTPUT.
+  MODULE status_0300.
+
+PROCESS AFTER INPUT.
+  MODULE user_command_0300.
+```
+
+### 9.2 GUI status ZCFG_TPL
+
+SE41 → status `ZCFG_TPL`, **Normal screen**, bấm Display Standards, để
+Application Toolbar **TRỐNG**. Bốn mã: `BACK`, `EXIT`, `CANC` và `SAVE`
+(gán `SAVE` vào ô Save của Standard Toolbar và F11 để Ctrl+S cũng lưu).
+
+Bốn nút nghiệp vụ — Thêm dòng, Xoá dòng, Nạp từ file, Lưu ra file — nằm trên
+toolbar của chính lưới, do `ON_TOOLBAR_TPL` thêm, không cần khai trong status.
+
+### 9.3 Cách màn hình làm việc
+
+Docking → splitter 2 dòng: **trên** là `CL_GUI_ALV_GRID` sửa trực tiếp được
+các field ngắn (nhà cung cấp, mã nghiệp vụ, diễn giải, hiệu lực); **dưới** là
+`CL_GUI_TEXTEDIT` soạn `TPL_BODY`. Nhấn icon ở cột **Nội dung** để chuyển ô
+soạn thảo sang dòng khác.
+
+Mối nối giữa hai tầng là `RID` — khoá nội bộ chạy số, không phải khoá bảng.
+Phải vậy vì người dùng sửa được `PROVIDER` / `ACTION`, lấy khoá bảng làm mối
+nối thì sửa khoá là mất nội dung.
+
+`GET_TEXTSTREAM` chỉ điền biến **sau** khi `CL_GUI_CFW=>FLUSH`. Thiếu FLUSH
+thì biến luôn rỗng và nội dung người dùng vừa gõ bị ghi đè bằng chuỗi rỗng —
+bẫy kinh điển của control framework.
+
+### 9.4 Lưu
+
+`Save` mới đụng tới bảng, trước đó mọi thay đổi chỉ nằm trong bộ nhớ:
+
+1. `CHECK_CHANGED_DATA` + hút nội dung ô soạn thảo về bảng
+2. Kiểm **trước khi khoá**: thiếu khoá chính, trùng khoá, dòng hiệu lực mà
+   nội dung rỗng
+3. `ENQUEUE_EZTB_HDDT_TPL` khoá **cả bảng** (chỉ truyền `MANDT`) — vì có
+   DELETE những dòng người dùng đã bỏ khỏi lưới
+4. `MODIFY` từng dòng, `ZCL_HDDT_LOG=>SET_ADMIN` với `I_NEW` tính theo việc
+   khoá đã có trong bảng hay chưa
+5. `DELETE` dòng còn trong bảng mà không còn trên lưới
+6. `COMMIT WORK AND WAIT` + `ZCL_HDDT_FACTORY=>RESET` + `DEQUEUE`
+
+Đường ghi cũ (`LOAD_TPL`: pop-up SVAL hỏi khoá rồi nạp đè một dòng từ file) đã
+**bỏ**. Hai đường ghi vào cùng một bảng là nguồn gốc của ghi đè chéo; nạp file
+giờ là một nút trong lưới, nội dung vào ô soạn thảo và chỉ ghi khi bấm Save.
+
+### 9.5 ZTB_HDDT_TOK vẫn chỉ xem và xoá
+
+Bảng này là **bộ đệm access token** do `ZCL_HDDT_TOKEN` ghi, không phải bảng
+khai báo. Cho sửa tay nghĩa là cho dán token giả, mà token phải do nhà cung
+cấp ký nên cũng không dùng được. Giữ nguyên xem + xoá, chỉ bổ sung: pop-up
+cho **chọn nhiều dòng** rồi xoá đúng các dòng đó; không chọn dòng nào thì hỏi
+xoá toàn bộ như cũ.
+
+## 10. Dải trống phía trên grid
 
 Sau khi xoá hết nút khỏi Application Toolbar, vẫn còn một dải xám giữa dòng tiêu
 đề và toolbar của grid. Hai nguồn, xử lý riêng:
