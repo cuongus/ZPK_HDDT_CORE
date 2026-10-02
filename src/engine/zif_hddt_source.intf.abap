@@ -12,10 +12,12 @@
 *=====================================================================
 * Version   Ngày          Người sửa                Transport   Mô tả
 *=====================================================================
-* 1.0       28/08/2026    cuongus - CuongUS        abapGit     Tạo mới
-* 1.1       03/09/2026    cuongus - CuongUS        abapGit     Thêm range
+* 1.0       28/08/2026    cuongus - CuongUS        S25K900131  Tạo mới
+* 1.1       03/09/2026    cuongus - CuongUS        S25K900131  Thêm range
 *                         BLDAT/VBELN/USNAM, cờ lấy CT đã đảo,
 *                         GET_DOC_STATE (port từ ZPG_INT_E_INVOICE)
+* 1.2       02/10/2026    F-DUBV - DuBV            DS4K900192  G6-011 cot Transport
+*                                                              ghi mã TR thật S25K900131 (20261002_17)
 *=====================================================================
 INTERFACE zif_hddt_source
   PUBLIC .

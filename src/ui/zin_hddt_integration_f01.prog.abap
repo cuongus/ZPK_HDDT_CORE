@@ -16,23 +16,23 @@
 *=====================================================================
 * Version   Ngày          Người sửa                Transport   Mô tả
 *=====================================================================
-* 1.0       28/08/2026    cuongus - CuongUS        abapGit     Tạo mới
-* 1.1       03/09/2026    cuongus - CuongUS        abapGit     Popup chọn
+* 1.0       28/08/2026    cuongus - CuongUS        S25K900131  Tạo mới
+* 1.1       03/09/2026    cuongus - CuongUS        S25K900131  Popup chọn
 *                         hoá đơn gốc, truyền chứng từ gốc cho engine
-* 1.3       09/09/2026    cuongus - CuongUS        abapGit     Đổi màn hình
+* 1.3       09/09/2026    cuongus - CuongUS        S25K900131  Đổi màn hình
 *                         danh sách từ CL_SALV_TABLE sang CL_GUI_ALV_GRID +
 *                         docking trên dynpro 0100: 12 nút khai trong code
 *                         qua event TOOLBAR, GUI status chỉ cần Back/Exit/
 *                         Cancel. Field catalog lấy từ metadata của SALV.
-* 1.4       09/09/2026    cuongus - CuongUS        abapGit     Cột EXPAND:
+* 1.4       09/09/2026    cuongus - CuongUS        S25K900131  Cột EXPAND:
 *                         bấm icon mở popup ALV các dòng hàng của chứng từ
-* 1.5       09/09/2026    cuongus - CuongUS        abapGit     Gom HĐ đi
+* 1.5       09/09/2026    cuongus - CuongUS        S25K900131  Gom HĐ đi
 *                         qua dynpro 0200: xem trước header + dòng hàng của
 *                         chứng từ gom, sửa ngày/giờ, Save mới gom
-* 1.2       07/09/2026    cuongus - CuongUS        abapGit     FS MAG v0.5:
+* 1.2       07/09/2026    cuongus - CuongUS        S25K900131  FS MAG v0.5:
 *                         8 nút nghiệp vụ, email, gom, sửa ngày/giờ,
 *                         phát hành tự động, kiểm quyền theo chức năng
-* 1.6       14/09/2026    cuongus - CuongUS        abapGit     FS 3.6.7/3.6.8:
+* 1.6       14/09/2026    cuongus - CuongUS        S25K900131  FS 3.6.7/3.6.8:
 *                         bảng điều kiện trạng thái cho Gom HĐ và Huỷ Gom HĐ
 *                         (ZCL_HDDT_GOM=>CHECK_STATUS) chặn ngay lúc bấm nút;
 *                         chọn dòng đã gom thì mở dynpro 0200 ở chế độ xem
@@ -44,6 +44,8 @@
 * 1.8       28/09/2026    F-DUBV                   S25K900131  20260928_40 R06:
 *                         STATUS_TEXT doc nhan trang thai qua RTTI
 *                         (GET_DDIC_FIXED_VALUES) thay cho SELECT DD07T
+* 1.9       02/10/2026    F-DUBV - DuBV            DS4K900172  G6-011 cot Transport
+*                                                              ghi mã TR thật S25K900131 (20261002_17)
 *=====================================================================
 
 CLASS lcl_app DEFINITION FINAL CREATE PUBLIC.
@@ -1795,7 +1797,14 @@ CLASS lcl_app IMPLEMENTATION.
       IF ls_file-success = abap_false OR ls_file-file_content IS INITIAL.
         ls_result-msgty   = 'E'.
         ls_result-message = |Không lấy được file PDF: { ls_file-message }|.
-        lo_log->set_mail_status( is_request = ls_req i_status = 'E' ).
+        " 20261001_07 F-DUBV DS4K900172 G6-004/009: SET_MAIL_STATUS raise khi khoá/ghi lỗi
+        TRY.
+            lo_log->set_mail_status( is_request = ls_req i_status = 'E' ).
+            COMMIT WORK AND WAIT.
+          CATCH zcx_hddt_error INTO DATA(lx_ms1).
+            ROLLBACK WORK.
+            ls_result-message = |{ ls_result-message } / { lx_ms1->get_text( ) }|.
+        ENDTRY.
         refresh_row( i_index = lv_row is_result = ls_result ).
         CONTINUE.
       ENDIF.
@@ -1804,9 +1813,16 @@ CLASS lcl_app IMPLEMENTATION.
                                          is_reg      = ls_reg
                                          i_pdf       = ls_file-file_content
                                          i_file_name = ls_file-file_name ).
-      lo_log->set_mail_status( is_request = ls_req
-                               i_status   = COND #( WHEN ls_result-success = abap_true THEN 'S' ELSE 'E' ) ).
-      COMMIT WORK AND WAIT.
+      " 20261001_07 F-DUBV DS4K900172 G6-004/009: mail đã gửi; lỗi ghi trạng thái chỉ báo lại
+      TRY.
+          lo_log->set_mail_status( is_request = ls_req
+                                   i_status   = COND #( WHEN ls_result-success = abap_true THEN 'S' ELSE 'E' ) ).
+          COMMIT WORK AND WAIT.
+        CATCH zcx_hddt_error INTO DATA(lx_ms2).
+          ROLLBACK WORK.
+          ls_result-msgty   = 'W'.
+          ls_result-message = |{ ls_result-message } / Không ghi được trạng thái mail: { lx_ms2->get_text( ) }|.
+      ENDTRY.
       refresh_row( i_index = lv_row is_result = ls_result ).
       gt_alv[ lv_row ]-mail_light = COND #( WHEN ls_result-success = abap_true
                                             THEN icon_mail ELSE icon_message_error_small ).
@@ -2599,14 +2615,29 @@ CLASS lcl_app IMPLEMENTATION.
 *   >>> Begin of change 20260928_30 F-DUBV TR S25K900131 - Review S25 R06 (DB trong vong lap)
     " Khoa tung dong, doc 1 lan, ghi 1 lan, nha khoa - nhu SAVE_EDIT cu,
     " nha truoc COMMIT duoi day. LV_CNT / LV_ERR ra y nhu vong lap cu.
-    lo_log->save_edit_multi( EXPORTING it_requests = lt_edit
-                                       i_inv_date  = lv_date
-                                       i_inv_time  = lv_time
-                                       i_item_text = CONV #( lv_text )
-                             IMPORTING e_count     = lv_cnt
-                                       e_error     = lv_err ).
-*   <<< End of change 20260928_30
-    COMMIT WORK AND WAIT.
+*   >>> Begin of change 20261001_07 F-DUBV TR DS4K900172 - G6-004 SAVE_EDIT_MULTI raise khi ghi DB lỗi
+*    lo_log->save_edit_multi( EXPORTING it_requests = lt_edit
+*                                       i_inv_date  = lv_date
+*                                       i_inv_time  = lv_time
+*                                       i_item_text = CONV #( lv_text )
+*                             IMPORTING e_count     = lv_cnt
+*                                       e_error     = lv_err ).
+**   <<< End of change 20260928_30
+*    COMMIT WORK AND WAIT.
+    TRY.
+        lo_log->save_edit_multi( EXPORTING it_requests = lt_edit
+                                           i_inv_date  = lv_date
+                                           i_inv_time  = lv_time
+                                           i_item_text = CONV #( lv_text )
+                                 IMPORTING e_count     = lv_cnt
+                                           e_error     = lv_err ).
+        COMMIT WORK AND WAIT.
+      CATCH zcx_hddt_error INTO DATA(lx_em).
+        ROLLBACK WORK.
+        CLEAR lv_cnt.
+        lv_err = lx_em->get_text_long( ).
+    ENDTRY.
+*   <<< End of change 20261001_07
     IF lv_err IS NOT INITIAL.
       MESSAGE lv_err TYPE 'S' DISPLAY LIKE 'W'.
     ELSE.
@@ -2748,13 +2779,14 @@ CLASS lcl_app IMPLEMENTATION.
 
     DATA(ls_alv) = gt_alv[ lv_row ].
 
-    SELECT log_id, created_at, action, http_code, http_reason, duration_ms, message
+    " 20261001_07 F-DUBV DS4K900172 G6-001: CREATED_AT -> ZCREATED_AT (ZST_ADMIN_DATA)
+    SELECT log_id, zcreated_at AS created_at, action, http_code, http_reason, duration_ms, message
       FROM ztb_hddt_log
       WHERE bukrs     = @ls_alv-bukrs
         AND gjahr     = @ls_alv-gjahr
         AND src_type  = @ls_alv-src_type
         AND src_docno = @ls_alv-src_docno
-      ORDER BY created_at DESCENDING
+      ORDER BY zcreated_at DESCENDING
       INTO TABLE @DATA(lt_log)
       UP TO 1 ROWS.
     IF sy-subrc <> 0.

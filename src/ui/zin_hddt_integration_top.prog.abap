@@ -8,16 +8,18 @@
 *=====================================================================
 * Version   Ngày          Người sửa                Transport   Mô tả
 *=====================================================================
-* 1.0       28/08/2026    cuongus - CuongUS        abapGit     Tạo mới
-* 1.1       03/09/2026    cuongus - CuongUS        abapGit     Cột BLART/
+* 1.0       28/08/2026    cuongus - CuongUS        S25K900131  Tạo mới
+* 1.1       03/09/2026    cuongus - CuongUS        S25K900131  Cột BLART/
 *                         BLDAT/AWKEY/đảo/HĐ gốc/thuế suất
-* 1.2       07/09/2026    cuongus - CuongUS        abapGit     FS MAG v0.5:
+* 1.2       07/09/2026    cuongus - CuongUS        S25K900131  FS MAG v0.5:
 *                         tham số CPUDT/SEQ/GOM/loại HĐ/phát hành tự
 *                         động; cột email, tên hàng, gom, loại ĐC, mail
-* 1.3       09/09/2026    cuongus - CuongUS        abapGit     Cột EXPAND
+* 1.3       09/09/2026    cuongus - CuongUS        S25K900131  Cột EXPAND
 *                         và cấu trúc dòng hàng cho popup chi tiết
-* 1.4       09/09/2026    cuongus - CuongUS        abapGit     Màn hình
+* 1.4       09/09/2026    cuongus - CuongUS        S25K900131  Màn hình
 *                         0200 xem trước chứng từ gom trước khi lưu
+* 1.5       02/10/2026    F-DUBV - DuBV            DS4K900192  G6-011 cot Transport
+*                                                              ghi mã TR thật S25K900131 (20261002_17)
 *=====================================================================
 TYPE-POOLS icon.
 

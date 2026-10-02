@@ -10,10 +10,12 @@
 *=====================================================================
 * Version   Ngày          Người sửa                Transport   Mô tả
 *=====================================================================
-* 1.0       28/08/2026    cuongus - CuongUS        abapGit     Tạo mới
-* 1.2       07/09/2026    cuongus - CuongUS        abapGit     FS MAG v0.5:
+* 1.0       28/08/2026    cuongus - CuongUS        S25K900131  Tạo mới
+* 1.2       07/09/2026    cuongus - CuongUS        S25K900131  FS MAG v0.5:
 *                         ISSUE_INVOICE, trạng thái 45, tax_status,
 *                         fs_code, tham số writeback/mail/log sink
+* 1.3       02/10/2026    F-DUBV - DuBV            DS4K900192  G6-011 cot Transport
+*                                                              ghi mã TR thật S25K900131 (20261002_17)
 *=====================================================================
 INTERFACE zif_hddt_types
   PUBLIC .

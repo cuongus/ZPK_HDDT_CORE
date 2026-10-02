@@ -29,15 +29,20 @@
 *=====================================================================
 * Version   Ngày          Người sửa                Transport   Mô tả
 *=====================================================================
-* 1.0       28/08/2026    cuongus - CuongUS        abapGit     Tạo mới
-* 1.1       22/09/2026    cuongus - CuongUS        abapGit     SELECT_DATA: đưa
+* 1.0       28/08/2026    cuongus - CuongUS        S25K900131  Tạo mới
+* 1.1       22/09/2026    cuongus - CuongUS        S25K900131  SELECT_DATA: đưa
 *                         hai bộ lọc p_test / p_onlyer vào WHERE thay vì
 *                         DELETE gt_log sau UP TO ... ROWS. Trước đây cắt N
 *                         dòng mới nhất rồi mới lọc nên "chỉ lỗi" có thể ra
 *                         màn hình rỗng dù vẫn còn lỗi ở dòng cũ hơn
-* 1.2       22/09/2026    cuongus - CuongUS        abapGit     Thêm cột
+* 1.2       22/09/2026    cuongus - CuongUS        S25K900131  Thêm cột
 *                         LOG_DATE / LOG_TIME đổi từ CREATED_AT sang múi giờ
 *                         người dùng; cột UTC gốc giữ lại nhưng ẩn mặc định
+* 1.3       01/10/2026    F-DUBV                   DS4K900192  20261001_07 G6-001
+*                         đọc ZCREATED_AT/BY (ZST_ADMIN_DATA); G6-010 kiểm
+*                         quyền F_BKPF_BUK/03 theo công ty
+* 1.4       02/10/2026    F-DUBV - DuBV            DS4K900192  G6-011 cot Transport
+*                                                              ghi mã TR thật S25K900131 (20261002_17)
 *=====================================================================
 REPORT zpg_hddt_log MESSAGE-ID zms_hddt.
 
@@ -238,15 +243,19 @@ CLASS lcl_log IMPLEMENTATION.
     " Không đọc REQ_BODY / RES_BODY ở đây: payload có thể vài trăm KB
     " mỗi dòng, đọc cả danh sách là vô ích. Chỉ đọc khi người dùng bấm
     " xem đúng một dòng (READ_PAYLOAD).
-    SELECT log_id, created_at, bukrs, gjahr, src_type, src_docno,
+    " >>> Begin of change 20261001_07 F-DUBV DS4K900192 - Review G6-001
+    " Bang log dung ZST_ADMIN_DATA: ZCREATED_AT / ZCREATED_BY (alias giu ten
+    " truong cu cua GT_LOG va cot ALV)
+    SELECT log_id, zcreated_at AS created_at, bukrs, gjahr, src_type, src_docno,
            action, provider, connid, attempt, test_run,
            http_method, http_code, http_reason, duration_ms,
            serial, seq, sap_status, prov_status, msgty, message,
            req_size, res_size, masked, cont_type, full_url,
-           caller, tcode, created_by
+           caller, tcode, zcreated_by AS created_by
       FROM ztb_hddt_log
-      WHERE created_at >= @lv_from
-        AND created_at <= @lv_to
+      WHERE zcreated_at >= @lv_from
+        AND zcreated_at <= @lv_to
+    " <<< End of change 20261001_07
         AND bukrs      IN @lr_bukrs
         AND gjahr      IN @lr_gjahr
         AND src_docno  IN @s_docno
@@ -256,9 +265,37 @@ CLASS lcl_log IMPLEMENTATION.
         AND test_run   IN @lr_test
         AND ( msgty     IN @lr_msgty
            OR http_code IN @lr_hcode )
-      ORDER BY created_at DESCENDING
+      ORDER BY zcreated_at DESCENDING
       INTO CORRESPONDING FIELDS OF TABLE @gt_log
       UP TO @lv_max ROWS.
+
+    " >>> Begin of change 20261001_07 F-DUBV DS4K900192 - Review G6-010
+    " Không nhập công ty thì lọc bỏ dòng của công ty user không có quyền
+    " F_BKPF_BUK/03 (kiểm 1 lần cho mỗi công ty khác nhau).
+    DATA lt_bukrs_ok TYPE SORTED TABLE OF bukrs WITH UNIQUE KEY table_line.
+    DATA lt_bukrs_no TYPE SORTED TABLE OF bukrs WITH UNIQUE KEY table_line.
+    LOOP AT gt_log ASSIGNING FIELD-SYMBOL(<fs_auth>).
+      IF line_exists( lt_bukrs_ok[ table_line = <fs_auth>-bukrs ] )
+         OR line_exists( lt_bukrs_no[ table_line = <fs_auth>-bukrs ] ).
+        CONTINUE.
+      ENDIF.
+      AUTHORITY-CHECK OBJECT 'F_BKPF_BUK'
+        ID 'BUKRS' FIELD <fs_auth>-bukrs
+        ID 'ACTVT' FIELD '03'.
+      IF sy-subrc = 0.
+        INSERT <fs_auth>-bukrs INTO TABLE lt_bukrs_ok.
+      ELSE.
+        INSERT <fs_auth>-bukrs INTO TABLE lt_bukrs_no.
+      ENDIF.
+    ENDLOOP.
+    IF lt_bukrs_no IS NOT INITIAL.
+      DATA lr_bukrs_no TYPE RANGE OF bukrs.
+      lr_bukrs_no = VALUE #( FOR lv_b IN lt_bukrs_no
+                             ( sign = 'I' option = 'EQ' low = lv_b ) ).
+      DELETE gt_log WHERE bukrs IN lr_bukrs_no.
+      MESSAGE 'Đã ẩn các dòng log của công ty bạn không có quyền xem.' TYPE 'S'.
+    ENDIF.
+    " <<< End of change 20261001_07
 
     LOOP AT gt_log ASSIGNING FIELD-SYMBOL(<fs_log>).
       " Đổi UTC -> múi giờ người dùng (SY-ZONLO). Trên hệ này TTZCU khai
@@ -516,6 +553,18 @@ ENDCLASS.
 *---------------------------------------------------------------------*
 * Sự kiện
 *---------------------------------------------------------------------*
+* >>> Begin of change 20261001_07 F-DUBV TR DS4K900192 - Review G6-010 kiểm quyền công ty
+AT SELECTION-SCREEN.
+  IF p_bukrs IS NOT INITIAL.
+    AUTHORITY-CHECK OBJECT 'F_BKPF_BUK'
+      ID 'BUKRS' FIELD p_bukrs
+      ID 'ACTVT' FIELD '03'.
+    IF sy-subrc <> 0.
+      MESSAGE |Không có quyền xem log của công ty { p_bukrs } (F_BKPF_BUK/03).| TYPE 'E'.
+    ENDIF.
+  ENDIF.
+* <<< End of change 20261001_07
+
 START-OF-SELECTION.
   DATA(go_app) = NEW lcl_log( ).
   go_app->run( ).

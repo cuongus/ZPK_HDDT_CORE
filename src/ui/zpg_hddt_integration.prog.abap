@@ -38,14 +38,14 @@
 *=====================================================================
 * Version   Ngày          Người sửa                Transport   Mô tả
 *=====================================================================
-* 1.0       28/08/2026    cuongus - CuongUS        abapGit     Tạo mới
-* 1.1       03/09/2026    cuongus - CuongUS        abapGit     Đổi tên theo
+* 1.0       28/08/2026    cuongus - CuongUS        S25K900131  Tạo mới
+* 1.1       03/09/2026    cuongus - CuongUS        S25K900131  Đổi tên theo
 *                         chuẩn Private Cloud 03.09.2026; gộp include
 *                         _SEL/_CL1/_EVT vào _TOP/_F01/chương trình chính
-* 1.2       07/09/2026    cuongus - CuongUS        abapGit     FS MAG v0.5:
+* 1.2       07/09/2026    cuongus - CuongUS        S25K900131  FS MAG v0.5:
 *                         8 nút chức năng, phát hành tự động (job),
 *                         kiểm quyền theo chức năng
-* 1.3       16/09/2026    cuongus - CuongUS        abapGit     Nhiều dải số
+* 1.3       16/09/2026    cuongus - CuongUS        S25K900131  Nhiều dải số
 *                         trong một năm cho một đơn vị: tham số p_seri,
 *                         tự điền theo cờ Mặc định (ZTB_HDDT_CRED-XDEFAULT),
 *                         F4 danh sách dải số, kiểm tra giá trị gõ tay
@@ -53,6 +53,8 @@
 *                         dải số theo Company code + năm (năm của Posting
 *                         date), nút Thay thế tách riêng, huỷ chứng từ
 *                         chuẩn VF11/MR8M/FB08, tham số Billing Document
+* 1.5       02/10/2026    F-DUBV - DuBV            DS4K900192  G6-011 cot Transport
+*                                                              ghi mã TR thật S25K900131 (20261002_17)
 *=====================================================================
 REPORT zpg_hddt_integration MESSAGE-ID zms_hddt.
 

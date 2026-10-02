@@ -47,7 +47,7 @@
 *                         GOM không có TMG nên xem bằng ALV chỉ đọc lọc
 *                         theo BUKRS thay vì SM30 (trước đó báo lỗi 006)
 * 1.6       02/10/2026    F-DUBV - DuBV            DS4K900172  G6-011 cot Transport
-*                                                              abapGit -> S25K900131 (20261002_17)
+*                                                              ghi mã TR thật S25K900131 (20261002_17)
 * 1.7       02/10/2026    cuongus - CuongUS        DS4K900172  ZTB_HDDT_TPL
 *                         thêm / sửa / xoá bằng ALV + ô soạn thảo trên
 *                         selection screen 1002 (khoá cả bảng suốt lúc bảo
