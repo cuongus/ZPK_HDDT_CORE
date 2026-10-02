@@ -153,7 +153,7 @@ thứ tự (trước: bukrs + gjahr + docno). Hoá đơn gom: Số chứng từ 
 
 ## 9. Kiểm chứng
 
-Chưa activate trên hệ SAP nào (ràng buộc: chỉ push GitHub). Rủi ro cú pháp cần
+Chưa activate trên hệ SAP nào. Rủi ro cú pháp cần
 lần import đầu: `FI_DOCUMENT_CHANGE` (tên/tham số FM), `CL_BCS` với
 `xstring_to_solix`, `POPUP_GET_VALUES` với field `ZTB_HDDT_INV-ITEM_TEXT` (255 >
 132 ký tự nhập), `AUTHORITY-CHECK OBJECT` với tên object trong biến.

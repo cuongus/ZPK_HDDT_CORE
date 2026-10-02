@@ -213,8 +213,7 @@ ZHD001
 
 ## 9. Trạng thái kiểm chứng — quan trọng
 
-Package được viết **ngoài hệ thống SAP** rồi đưa lên Git. Tại thời điểm commit
-đầu tiên:
+Tại phiên bản đầu tiên của package:
 
 - **Chưa activate trên bất kỳ hệ SAP nào** → lần import đầu phải dành thời gian
   cho một lượt activate và sửa lỗi cú pháp còn sót.
