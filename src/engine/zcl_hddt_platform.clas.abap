@@ -12,7 +12,12 @@
 *=====================================================================
 * Version   Ngày          Người sửa                Transport   Mô tả
 *=====================================================================
-* 1.0       28/08/2026    cuongus - CuongUS        abapGit     Tạo mới
+* 1.0       28/08/2026    cuongus - CuongUS        S25K900131  Tạo mới
+* 1.1       01/10/2026    F-DUBV                   DS4K900192  20261001_14 G6-006
+*                                                             CATCH cụ thể thay
+*                                                             CX_ROOT
+* 1.2       02/10/2026    F-DUBV - DuBV            DS4K900192  G6-011 cot Transport
+*                                                              ghi mã TR thật S25K900131 (20261002_17)
 *=====================================================================
 CLASS zcl_hddt_platform DEFINITION
   PUBLIC
@@ -60,7 +65,9 @@ CLASS ZCL_HDDT_PLATFORM IMPLEMENTATION.
     " chưa tồn tại / chưa có dòng nào, không được để chết ở đây.
     TRY.
         lv_class = zcl_hddt_config=>get_instance( )->get_param( gc_parm_platform ).
-      CATCH cx_root.
+*     20261001_14 G6-006: chi bat loi doc DB (bang cau hinh chua san sang),
+*     khong CX_ROOT
+      CATCH cx_sy_open_sql_db.
         CLEAR lv_class.
     ENDTRY.
 

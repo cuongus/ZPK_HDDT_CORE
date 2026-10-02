@@ -11,9 +11,19 @@
 *=====================================================================
 * Version   Ngày          Người sửa                Transport   Mô tả
 *=====================================================================
-* 1.0       28/08/2026    cuongus - CuongUS        abapGit     Tạo mới
+* 1.0       28/08/2026    cuongus - CuongUS        S25K900131  Tạo mới
 * 1.1       25/09/2026    F-DUBV                   S25K900131  Review S25: GET_TOKEN khoa
 *                                                                  EZTB_HDDT_TOK quanh dang nhap
+* 1.2       01/10/2026    F-DUBV - DuBV            DS4K900192  20261001_07 Review G6-008:
+*                                                                  ghi/xoa cache o service
+*                                                                  connection R/3*HDDT_TOK
+*                                                                  (COMMIT CONNECTION, bo
+*                                                                  COMMIT WORK); khong ghi
+*                                                                  cache khi khong giu khoa;
+*                                                                  INVALIDATE co khoa.
+*                                                                  G6-001: ZST_ADMIN_DATA
+* 1.3       02/10/2026    F-DUBV - DuBV            DS4K900192  G6-011 cot Transport
+*                                                              ghi mã TR thật S25K900131 (20261002_17)
 *=====================================================================
 CLASS zcl_hddt_token DEFINITION
   PUBLIC
@@ -23,6 +33,12 @@ CLASS zcl_hddt_token DEFINITION
   PUBLIC SECTION.
 
     CONSTANTS gc_default_ttl TYPE i VALUE 3000 ##NO_TEXT.
+    " >>> Begin of insert 20261001_07 F-DUBV TR DS4K900192 - Review G6-008
+    " Ket noi DB phu (service connection) de ghi/xoa cache token trong LUW
+    " RIENG: COMMIT CONNECTION chi chot ZTB_HDDT_TOK, KHONG chot cac ghi do
+    " dang cua lo dang xu ly (EXECUTE_MANY) o ket noi chinh.
+    CONSTANTS gc_tok_con TYPE dbcon_name VALUE 'R/3*HDDT_TOK' ##NO_TEXT.
+    " <<< End of insert 20261001_07
 
     METHODS get_token
       IMPORTING io_provider     TYPE REF TO zif_hddt_provider
@@ -127,9 +143,15 @@ CLASS ZCL_HDDT_TOKEN IMPLEMENTATION.
             | access token từ response. Kiểm tra EXTRACT_TOKEN của adapter.| ).
         ENDIF.
 
-        write_cache( is_conn  = is_conn
-                     is_cred  = is_cred
-                     i_token = r_token ).
+        " >>> Begin of change 20261001_07 F-DUBV TR DS4K900192 - Review G6-008
+        " Chi ghi cache khi GIU khoa: khong lay duoc khoa thi token vua cap
+        " dung cho lan goi nay, khong ghi de cache cua phien dang giu khoa.
+        IF lv_locked = abap_true.
+          write_cache( is_conn  = is_conn
+                       is_cred  = is_cred
+                       i_token = r_token ).
+        ENDIF.
+        " <<< End of change 20261001_07
 
       CLEANUP.
         IF lv_locked = abap_true.
@@ -161,12 +183,49 @@ CLASS ZCL_HDDT_TOKEN IMPLEMENTATION.
 
   METHOD invalidate.
 
-    DELETE FROM ztb_hddt_tok
+    " >>> Begin of change 20261001_07 F-DUBV TR DS4K900192 - Review G6-008
+    " Khoa dung khoa cache nhu GET_TOKEN (khong xoa token phien khac vua cap
+    " trong luc dang dang nhap); xoa o ket noi phu + COMMIT CONNECTION thay
+    " COMMIT WORK (khong chot ghi do dang cua lo noi goi).
+    CALL FUNCTION 'ENQUEUE_EZTB_HDDT_TOK'
+      EXPORTING
+        mode_ztb_hddt_tok = 'E'
+        provider          = is_conn-provider
+        connid            = is_conn-connid
+        bukrs             = is_cred-bukrs
+        apiuser           = is_cred-apiuser
+        _scope            = '1'
+        _wait             = abap_true
+      EXCEPTIONS
+        foreign_lock      = 1
+        system_failure    = 2
+        OTHERS            = 3.
+    IF sy-subrc <> 0.
+      " Phien khac dang lam moi token: token cu se bi thay, khong can xoa
+      RETURN.
+    ENDIF.
+
+    DELETE FROM ztb_hddt_tok CONNECTION (gc_tok_con)
       WHERE provider = @is_conn-provider
         AND connid   = @is_conn-connid
         AND bukrs    = @is_cred-bukrs
         AND apiuser  = @is_cred-apiuser.
-    COMMIT WORK AND WAIT.
+    " sy-subrc = 4: khong co token cache - binh thuong
+    IF sy-subrc <= 4.
+      COMMIT CONNECTION (gc_tok_con).
+    ELSE.
+      ROLLBACK CONNECTION (gc_tok_con).
+    ENDIF.
+
+    CALL FUNCTION 'DEQUEUE_EZTB_HDDT_TOK'
+      EXPORTING
+        mode_ztb_hddt_tok = 'E'
+        provider          = is_conn-provider
+        connid            = is_conn-connid
+        bukrs             = is_cred-bukrs
+        apiuser           = is_cred-apiuser
+        _scope            = '1'.
+    " <<< End of change 20261001_07
 
   ENDMETHOD.
 
@@ -253,12 +312,22 @@ CLASS ZCL_HDDT_TOKEN IMPLEMENTATION.
     ls_tok-bukrs      = is_cred-bukrs.
     ls_tok-apiuser    = is_cred-apiuser.
     ls_tok-token      = i_token.
-    ls_tok-created_at = lv_now.
     ls_tok-valid_to   = cl_abap_tstmp=>add( tstmp = lv_now
                                             secs  = lv_ttl ).
 
-    MODIFY ztb_hddt_tok FROM ls_tok.
-    COMMIT WORK AND WAIT.
+    " >>> Begin of change 20261001_07 F-DUBV TR DS4K900192 - Review G6-001/G6-008
+    " CREATED_AT rieng -> ZST_ADMIN_DATA (ZCREATED_AT = luc cap token).
+    zcl_hddt_log=>set_admin( EXPORTING i_source = zcl_bc_audit=>gc_source-api
+                             CHANGING  cs_row   = ls_tok ).
+    " Ghi o ket noi phu + COMMIT CONNECTION: khong COMMIT WORK giua lo cua
+    " noi goi. Loi ghi cache chi lam mat cache (lan sau dang nhap lai).
+    MODIFY ztb_hddt_tok CONNECTION (gc_tok_con) FROM @ls_tok.
+    IF sy-subrc = 0.
+      COMMIT CONNECTION (gc_tok_con).
+    ELSE.
+      ROLLBACK CONNECTION (gc_tok_con).
+    ENDIF.
+    " <<< End of change 20261001_07
 
   ENDMETHOD.
 ENDCLASS.

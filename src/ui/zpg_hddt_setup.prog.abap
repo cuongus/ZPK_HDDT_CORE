@@ -18,20 +18,20 @@
 *=====================================================================
 * Version   Ngày          Người sửa                Transport   Mô tả
 *=====================================================================
-* 1.0       28/08/2026    cuongus - CuongUS        abapGit     Tạo mới
-* 1.1       22/09/2026    cuongus - CuongUS        abapGit     Nạp mặc định
+* 1.0       28/08/2026    cuongus - CuongUS        $TMP        Tạo mới
+* 1.1       22/09/2026    cuongus - CuongUS        $TMP        Nạp mặc định
 *                         EXEC_MANY_CHUNK = 100; sửa 9 warning cắt chuỗi:
 *                         COND # suy kiểu C(6) từ nhánh đầu nên 'TAO MOI'
 *                         bị cắt thành 'TAO MO' -> COND string; rút gọn 2
 *                         dòng DESCR vượt 60 ký tự
-* 1.2       22/09/2026    cuongus - CuongUS        abapGit     7 method PUT_*
+* 1.2       22/09/2026    cuongus - CuongUS        $TMP        7 method PUT_*
 *                         điền CREATED_BY/AT + CHANGED_BY/AT qua
 *                         ZCL_HDDT_LOG=>SET_ADMIN
-* 1.3       22/09/2026    cuongus - CuongUS        abapGit     Bỏ hết SELECT
+* 1.3       22/09/2026    cuongus - CuongUS        $TMP        Bỏ hết SELECT
 *                         SINGLE + MODIFY dòng đơn: 7 PUT_* chỉ dồn dòng vào bộ
 *                         đệm, FLUSH ghi mỗi bảng 1 SELECT khoá + 1 MODIFY ...
 *                         FROM TABLE. Từ ~95 lượt DB xuống còn 14
-* 1.4       22/09/2026    cuongus - CuongUS        abapGit     Bỏ LOOP lồng LOOP:
+* 1.4       22/09/2026    cuongus - CuongUS        $TMP        Bỏ LOOP lồng LOOP:
 *                         phép nhân mã HTTP x nhà cung cấp chuyển vào nested
 *                         FOR của VALUE, chỉ còn một vòng lặp phẳng
 * 1.5       30/09/2026    cuongus - CuongUS        $TMP        Văn bản nạp

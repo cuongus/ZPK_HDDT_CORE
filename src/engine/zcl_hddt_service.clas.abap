@@ -20,18 +20,18 @@
 *=====================================================================
 * Version   Ngày          Người sửa                Transport   Mô tả
 *=====================================================================
-* 1.0       28/08/2026    cuongus - CuongUS        abapGit     Tạo mới
-* 1.2       07/09/2026    cuongus - CuongUS        abapGit     FS MAG v0.5:
+* 1.0       28/08/2026    cuongus - CuongUS        S25K900131  Tạo mới
+* 1.2       07/09/2026    cuongus - CuongUS        S25K900131  FS MAG v0.5:
 *                         nháp/phát hành/khôi phục theo tra cứu, gắn HĐ
 *                         gốc, validate, ghi ngược, ký duyệt sau thay thế
-* 1.3       22/09/2026    cuongus - CuongUS        abapGit     Khoá sổ đăng
+* 1.3       22/09/2026    cuongus - CuongUS        S25K900131  Khoá sổ đăng
 *                         ký hoá đơn (EZTB_HDDT_INV) quanh cả EXECUTE để hai
 *                         người cùng phát hành một chứng từ không ra hai hoá đơn
-* 1.4       22/09/2026    cuongus - CuongUS        abapGit     EXECUTE_MANY giữ
+* 1.4       22/09/2026    cuongus - CuongUS        S25K900131  EXECUTE_MANY giữ
 *                         khoá tới sau COMMIT chung (tham số I_LOCKED);
 *                         ATTACH_ORIGINAL khoá chứng từ; báo lên kết quả khi
 *                         không đánh dấu được hoá đơn gốc
-* 1.5       22/09/2026    cuongus - CuongUS        abapGit     EXECUTE_MANY chia
+* 1.5       22/09/2026    cuongus - CuongUS        S25K900131  EXECUTE_MANY chia
 *                         lô: đủ lô thì COMMIT rồi nhả khoá của lô đó, tránh
 *                         tràn bảng enqueue khi job có vài nghìn chứng từ;
 *                         cỡ lô khai ở ZTB_HDDT_PARM key EXEC_MANY_CHUNK
@@ -41,6 +41,13 @@
 * 1.7       28/09/2026    F-DUBV                   S25K900131  20260928_30 R06:
 *                         MARK_GOM_REPLACED goi ZCL_HDDT_LOG->
 *                         RETIRE_INVOICE_MULTI 1 lan cho ca nhom thanh vien
+* 1.8       01/10/2026    F-DUBV                   DS4K900192  20261001_07 G6-001
+*                         ZST_ADMIN_DATA; G6-004/007 bắt ZCX_HDDT_ERROR
+*                         từ ZCL_HDDT_LOG + ROLLBACK; EXECUTE_MANY commit
+*                         từng chứng từ; G6-006 CATCH CX_ROOT ở ranh giới
+*                         job có ghi log
+* 1.9       02/10/2026    F-DUBV - DuBV            DS4K900192  G6-011 cot Transport
+*                                                              ghi mã TR thật S25K900131 (20261002_17)
 *=====================================================================
 CLASS zcl_hddt_service DEFINITION
   PUBLIC
@@ -180,7 +187,8 @@ CLASS zcl_hddt_service DEFINITION
     "! dòng ZTB_HDDT_GOM của số gom được đánh dấu huỷ.
     METHODS mark_gom_replaced
       IMPORTING is_request TYPE zif_hddt_types=>ty_request
-                is_org     TYPE ztb_hddt_inv .
+                is_org     TYPE ztb_hddt_inv
+      RAISING   zcx_hddt_error .       " 20261001_07 G6-004 loi ghi so
 
     "! Huỷ chứng từ kế toán gốc của một hoá đơn, xử lý luôn trường hợp
     "! hoá đơn gom (huỷ toàn bộ chứng từ thành phần). Trả về danh sách
@@ -251,7 +259,8 @@ CLASS zcl_hddt_service DEFINITION
       IMPORTING is_request TYPE zif_hddt_types=>ty_request
                 i_action   TYPE zde_hddt_action
                 i_provider TYPE zde_hddt_prov
-      CHANGING  cs_result  TYPE zif_hddt_types=>ty_result .
+      CHANGING  cs_result  TYPE zif_hddt_types=>ty_result
+      RAISING   zcx_hddt_error .       " 20261001_07 G6-004 loi ghi so
 
     METHODS is_not_found
       IMPORTING is_result          TYPE zif_hddt_types=>ty_result
@@ -443,13 +452,20 @@ CLASS ZCL_HDDT_SERVICE IMPLEMENTATION.
 
     " Gỡ hoá đơn gốc
     IF i_org_docno IS INITIAL.
-      mo_log->attach_original( is_request    = is_request
-                               i_org_docno   = space
-                               i_org_gjahr   = '0000'
-                               i_org_srctype = space
-                               i_adj_type    = space
-                               i_adj_dir     = space ).
-      COMMIT WORK AND WAIT.
+      " 20261001_07 F-DUBV DS4K900192 G6-004: loi ghi so -> ROLLBACK, bao loi
+      TRY.
+          mo_log->attach_original( is_request    = is_request
+                                   i_org_docno   = space
+                                   i_org_gjahr   = '0000'
+                                   i_org_srctype = space
+                                   i_adj_type    = space
+                                   i_adj_dir     = space ).
+          COMMIT WORK AND WAIT.
+        CATCH zcx_hddt_error INTO DATA(lx_wr1).
+          ROLLBACK WORK.
+          rs_result = error_result( i_message = lx_wr1->get_text( ) i_status = lv_status ).
+          RETURN.
+      ENDTRY.
       rs_result-success = abap_true.
       rs_result-msgty   = 'S'.
       rs_result-message = 'Đã gỡ hoá đơn gốc khỏi chứng từ'.
@@ -493,7 +509,7 @@ CLASS ZCL_HDDT_SERVICE IMPLEMENTATION.
                                                i_gjahr     = i_org_gjahr
                                                i_src_type  = is_request-src_type
                                                i_src_docno = lv_docno ).
-    IF ls_org-created_at IS INITIAL.
+    IF ls_org-zcreated_at IS INITIAL.
       rs_result = error_result( i_message = |Hoá đơn bị điều chỉnh không hợp lệ: chứng từ { lv_docno ALPHA = OUT }/{ i_org_gjahr } chưa có trong sổ HĐĐT|
                                 i_status  = lv_status ).
       RETURN.
@@ -512,13 +528,20 @@ CLASS ZCL_HDDT_SERVICE IMPLEMENTATION.
                                                         WHEN '3' THEN '0'
                                                         WHEN '4' THEN '2'
                                                         ELSE space ).
-    mo_log->attach_original( is_request    = is_request
-                             i_org_docno   = lv_docno
-                             i_org_gjahr   = i_org_gjahr
-                             i_org_srctype = is_request-src_type
-                             i_adj_type    = lv_adj_type
-                             i_adj_dir     = lv_adj_dir ).
-    COMMIT WORK AND WAIT.
+    " 20261001_07 F-DUBV DS4K900192 G6-004: loi ghi so -> ROLLBACK, bao loi
+    TRY.
+        mo_log->attach_original( is_request    = is_request
+                                 i_org_docno   = lv_docno
+                                 i_org_gjahr   = i_org_gjahr
+                                 i_org_srctype = is_request-src_type
+                                 i_adj_type    = lv_adj_type
+                                 i_adj_dir     = lv_adj_dir ).
+        COMMIT WORK AND WAIT.
+      CATCH zcx_hddt_error INTO DATA(lx_wr2).
+        ROLLBACK WORK.
+        rs_result = error_result( i_message = lx_wr2->get_text( ) i_status = lv_status ).
+        RETURN.
+    ENDTRY.
 
     rs_result-success = abap_true.
     rs_result-msgty   = 'S'.
@@ -829,7 +852,7 @@ CLASS ZCL_HDDT_SERVICE IMPLEMENTATION.
       WHEN zif_hddt_types=>gc_action-cancel_invoice
         OR zif_hddt_types=>gc_action-wrong_notice.
 
-        IF ls_reg-created_at IS INITIAL
+        IF ls_reg-zcreated_at IS INITIAL
            OR lv_status = zif_hddt_types=>gc_status-not_sent
            OR lv_status = zif_hddt_types=>gc_status-error.
           zcx_hddt_error=>raise_text(
@@ -856,7 +879,7 @@ CLASS ZCL_HDDT_SERVICE IMPLEMENTATION.
         OR zif_hddt_types=>gc_action-get_file
         OR zif_hddt_types=>gc_action-send_mail.
 
-        IF ls_reg-created_at IS INITIAL.
+        IF ls_reg-zcreated_at IS INITIAL.
           zcx_hddt_error=>raise_text(
             |Chứng từ { lv_docno } chưa tích hợp HĐĐT - không có gì để tra cứu.| ).
         ENDIF.
@@ -898,7 +921,7 @@ CLASS ZCL_HDDT_SERVICE IMPLEMENTATION.
                                                 i_gjahr     = lv_gjahr
                                                 i_src_type  = lv_type
                                                 i_src_docno = ls_adj-org_docno ).
-    IF ls_org-created_at IS INITIAL.
+    IF ls_org-zcreated_at IS INITIAL.
       zcx_hddt_error=>raise_text(
         |Chứng từ gốc { lv_org } chưa có trong sổ đăng ký HĐĐT (ZTB_HDDT_INV).| ).
     ENDIF.
@@ -1038,9 +1061,16 @@ CLASS ZCL_HDDT_SERVICE IMPLEMENTATION.
       DATA(ls_found) = execute( is_request = ls_search i_commit = abap_false ).
       IF ls_found-success = abap_false.
         IF is_not_found( ls_found ) = abap_true.
-          mo_log->reset_registry( is_request = ls_req
-                                  i_message  = 'Không có hoá đơn nháp trên NCC - đã đưa về chưa tích hợp' ).
-          COMMIT WORK AND WAIT.
+          " 20261001_07 F-DUBV DS4K900192 G6-004: loi ghi so -> ROLLBACK, bao loi
+          TRY.
+              mo_log->reset_registry( is_request = ls_req
+                                      i_message  = 'Không có hoá đơn nháp trên NCC - đã đưa về chưa tích hợp' ).
+              COMMIT WORK AND WAIT.
+            CATCH zcx_hddt_error INTO DATA(lx_wr1).
+              ROLLBACK WORK.
+              rs_result = error_result( i_message = lx_wr1->get_text( ) i_status = ls_reg-status ).
+              RETURN.
+          ENDTRY.
           rs_result = ls_found.
           rs_result-success = abap_true.
           rs_result-status  = zif_hddt_types=>gc_status-not_sent.
@@ -1098,10 +1128,16 @@ CLASS ZCL_HDDT_SERVICE IMPLEMENTATION.
       MESSAGE e070(zms_hddt) INTO DATA(lv_msg).
       rs_result-message = |{ lv_msg } { rs_result-message }|.
       rs_result-status  = zif_hddt_types=>gc_status-error.
-      mo_log->set_status( is_request = ls_req
-                          i_status   = zif_hddt_types=>gc_status-error
-                          i_message  = rs_result-message ).
-      COMMIT WORK AND WAIT.
+      " 20261001_07 F-DUBV DS4K900192 G6-004: loi ghi so -> ROLLBACK, noi them loi
+      TRY.
+          mo_log->set_status( is_request = ls_req
+                              i_status   = zif_hddt_types=>gc_status-error
+                              i_message  = rs_result-message ).
+          COMMIT WORK AND WAIT.
+        CATCH zcx_hddt_error INTO DATA(lx_wr2).
+          ROLLBACK WORK.
+          rs_result-message = |{ rs_result-message } / { lx_wr2->get_text( ) }|.
+      ENDTRY.
     ENDIF.
 
   ENDMETHOD.
@@ -1442,6 +1478,10 @@ CLASS ZCL_HDDT_SERVICE IMPLEMENTATION.
         ENDIF.
 
       CATCH zcx_hddt_error INTO DATA(lx_error).
+        " 20261001_07 G6-007: huỷ ghi dở dang của LUW trước khi ghi vết lỗi
+        IF i_commit = abap_true.
+          ROLLBACK WORK.
+        ENDIF.
         rs_result-success     = abap_false.
         rs_result-status      = zif_hddt_types=>gc_status-error.
         rs_result-msgty       = 'E'.
@@ -1462,9 +1502,13 @@ CLASS ZCL_HDDT_SERVICE IMPLEMENTATION.
                                    req_body  = rs_result-request_body
                                    res_body  = rs_result-response_body ) ).
           IF ls_request-src_docno IS NOT INITIAL.
-            mo_log->save_invoice( is_request  = ls_request
-                                  is_result   = rs_result
-                                  i_provider = lv_provider ).
+            TRY.
+                mo_log->save_invoice( is_request  = ls_request
+                                      is_result   = rs_result
+                                      i_provider = lv_provider ).
+              CATCH zcx_hddt_error INTO DATA(lx_wr9).
+                rs_result-message = |{ rs_result-message } / { lx_wr9->get_text( ) }|.
+            ENDTRY.
           ENDIF.
           IF i_commit = abap_true.
             COMMIT WORK AND WAIT.
@@ -1472,11 +1516,30 @@ CLASS ZCL_HDDT_SERVICE IMPLEMENTATION.
         ENDIF.
 
       CATCH cx_root INTO DATA(lx_root).
-        " Lỗi không lường trước (dump tiềm ẩn) — không để job chết
+        " Lỗi không lường trước (dump tiềm ẩn) — ranh giới job: không để
+        " job chết giữa chừng; huỷ ghi dở dang và ghi vết lỗi.
+        " 20261001_07 G6-006/007: giữ CATCH cx_root có chủ đích (job boundary)
+        IF i_commit = abap_true.
+          ROLLBACK WORK.
+        ENDIF.
         rs_result-success = abap_false.
         rs_result-status  = zif_hddt_types=>gc_status-error.
         rs_result-msgty   = 'E'.
         rs_result-message = |Lỗi không xác định: { lx_root->get_text( ) }|.
+        IF ls_conn-provider IS NOT INITIAL.
+          rs_result-log_id = mo_log->log_call(
+            is_request  = ls_request
+            i_action   = lv_action
+            i_provider = lv_provider
+            is_call     = VALUE #( connid    = ls_conn-connid
+                                   method    = 'POST'
+                                   http_code = rs_result-http_code
+                                   req_body  = rs_result-request_body
+                                   res_body  = rs_result-response_body ) ).
+          IF i_commit = abap_true.
+            COMMIT WORK AND WAIT.
+          ENDIF.
+        ENDIF.
     ENDTRY.
 
   ENDMETHOD.
@@ -1521,9 +1584,12 @@ CLASS ZCL_HDDT_SERVICE IMPLEMENTATION.
         APPEND ls_key TO lt_keys.
       ENDIF.
 
+      " 20261001_07 G6-007: commit từng chứng từ để ROLLBACK khi lỗi chỉ
+      " huỷ đúng chứng từ đó, không kéo theo các chứng từ trước trong lô.
+      " Khoá LOCK_INVOICE là _SCOPE '1' nên vẫn giữ qua COMMIT, nhả ở cuối lô.
       APPEND execute( is_request  = <fs_req>
                       i_test_run = abap_false
-                      i_commit   = abap_false
+                      i_commit   = abap_true
                       i_locked   = abap_true ) TO rt_result.
       lv_in_chunk = lv_in_chunk + 1.
 
@@ -1691,10 +1757,17 @@ CLASS ZCL_HDDT_SERVICE IMPLEMENTATION.
 
           IF ls_found-success = abap_false.
             IF is_not_found( ls_found ) = abap_true.
-              mo_log->reset_registry(
-                is_request = ls_req
-                i_message  = 'Không tìm thấy hoá đơn trên NCC - đưa về trạng thái chưa tích hợp' ).
-              COMMIT WORK AND WAIT.
+              " 20261001_07 F-DUBV DS4K900192 G6-004: loi ghi so -> ROLLBACK, bao loi
+              TRY.
+                  mo_log->reset_registry(
+                    is_request = ls_req
+                    i_message  = 'Không tìm thấy hoá đơn trên NCC - đưa về trạng thái chưa tích hợp' ).
+                  COMMIT WORK AND WAIT.
+                CATCH zcx_hddt_error INTO DATA(lx_wr1).
+                  ROLLBACK WORK.
+                  rs_result = error_result( i_message = lx_wr1->get_text( ) i_status = lv_status ).
+                  RETURN.
+              ENDTRY.
               rs_result = ls_found.
               rs_result-status  = zif_hddt_types=>gc_status-not_sent.
               rs_result-msgty   = 'W'.
@@ -2031,10 +2104,16 @@ CLASS ZCL_HDDT_SERVICE IMPLEMENTATION.
         MESSAGE i064(zms_hddt) INTO DATA(lv_hint2).
         rs_result-message = |{ rs_result-message } - { lv_hint2 }|.
       ENDIF.
-      mo_log->set_status( is_request = ls_req
-                          i_status   = zif_hddt_types=>gc_status-error
-                          i_message  = rs_result-message ).
-      COMMIT WORK AND WAIT.
+      " 20261001_07 F-DUBV DS4K900192 G6-004: loi ghi so -> ROLLBACK, noi them loi
+      TRY.
+          mo_log->set_status( is_request = ls_req
+                              i_status   = zif_hddt_types=>gc_status-error
+                              i_message  = rs_result-message ).
+          COMMIT WORK AND WAIT.
+        CATCH zcx_hddt_error INTO DATA(lx_wr).
+          ROLLBACK WORK.
+          rs_result-message = |{ rs_result-message } / { lx_wr->get_text( ) }|.
+      ENDTRY.
       RETURN.
     ENDIF.
 
@@ -2047,10 +2126,16 @@ CLASS ZCL_HDDT_SERVICE IMPLEMENTATION.
       " Chứng từ gốc đã bị đảo rồi, KHÔNG tự khôi phục. Ghi lỗi để người
       " dùng xử lý lại.
       rs_result-status = zif_hddt_types=>gc_status-error.
-      mo_log->set_status( is_request = ls_req
-                          i_status   = zif_hddt_types=>gc_status-error
-                          i_message  = rs_result-message ).
-      COMMIT WORK AND WAIT.
+      " 20261001_07 F-DUBV DS4K900192 G6-004: loi ghi so -> ROLLBACK, noi them loi
+      TRY.
+          mo_log->set_status( is_request = ls_req
+                              i_status   = zif_hddt_types=>gc_status-error
+                              i_message  = rs_result-message ).
+          COMMIT WORK AND WAIT.
+        CATCH zcx_hddt_error INTO DATA(lx_wr3).
+          ROLLBACK WORK.
+          rs_result-message = |{ rs_result-message } / { lx_wr3->get_text( ) }|.
+      ENDTRY.
     ENDIF.
 
   ENDMETHOD.

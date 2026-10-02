@@ -35,8 +35,8 @@
 *=====================================================================
 * Version   Ngày          Người sửa                Transport   Mô tả
 *=====================================================================
-* 1.0       28/08/2026    cuongus - CuongUS        abapGit     Tạo mới
-* 2.0       03/09/2026    cuongus - CuongUS        abapGit     Port logic
+* 1.0       28/08/2026    cuongus - CuongUS        S25K900131  Tạo mới
+* 2.0       03/09/2026    cuongus - CuongUS        S25K900131  Port logic
 *                         FI/Billing từ dự án tham chiếu; kế thừa
 *                         ZCL_HDDT_SRC_BASE
 * 2.1       27/09/2026    F-DUBV                   S25K900131  R06: goi
@@ -49,6 +49,8 @@
 * 1.3       30/09/2026    cuongus - CuongUS        DS4K900172  20260930_01 Kiem
 *                         chung DS4: quy doi so tien theo TCURX (VND
 *                         luu chia 100), ty gia theo TCURF (1:1000)
+* 2.3       02/10/2026    F-DUBV - DuBV            DS4K900172  G6-011 cot Transport
+*                                                              ghi mã TR thật S25K900131 (20261002_17)
 *=====================================================================
 CLASS zcl_hddt_src_fi DEFINITION
   PUBLIC

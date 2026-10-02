@@ -27,10 +27,12 @@
 *=====================================================================
 * Version   Ngày          Người sửa                Transport   Mô tả
 *=====================================================================
-* 1.0       28/08/2026    cuongus - CuongUS        abapGit     Tạo mới
-* 1.1       07/09/2026    cuongus - CuongUS        abapGit     FS MAG v0.5:
+* 1.0       28/08/2026    cuongus - CuongUS        S25K900131  Tạo mới
+* 1.1       07/09/2026    cuongus - CuongUS        S25K900131  FS MAG v0.5:
 *                         issue-invoice, apprs riêng, aun theo action,
 *                         adjtype/ref (API v3.2), status_received 9
+* 1.2       02/10/2026    F-DUBV - DuBV            DS4K900192  G6-011 cot Transport
+*                                                              ghi mã TR thật S25K900131 (20261002_17)
 *=====================================================================
 CLASS zcl_hddt_prov_fpt DEFINITION
   PUBLIC

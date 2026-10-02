@@ -10,9 +10,9 @@
 *              từ nguồn loại 'GOM' (src_docno = số gom) do
 *              ZCL_HDDT_SRC_GOM dựng từ các thành viên.
 *              Gỡ gom: đánh dấu XCANCEL, xoá GOM_NO trên thành viên.
-*              Không dùng number range object (SNRO) để package tự đủ
-*              qua abapGit; khoá bằng lock object EZTB_HDDT_GOM khi cấp
-*              số và khi gỡ gom.
+*              Số gom cấp từ number range object ZHDDT_GOM (từ
+*              01/10/2026, thay SELECT MAX); khoá bằng lock object
+*              EZTB_HDDT_GOM khi tạo interval lần đầu và khi gỡ gom.
 *
 *              [Bộ mã trạng thái - FS dùng số khác chương trình]
 *              FS MAG đánh số 01..99, chương trình đang chạy bộ 00..90.
@@ -36,22 +36,22 @@
 *=====================================================================
 * Version   Ngày          Người sửa                Transport   Mô tả
 *=====================================================================
-* 1.0       07/09/2026    cuongus - CuongUS        abapGit     Tạo mới
-* 1.1       14/09/2026    cuongus - CuongUS        abapGit     FS 3.6.7/3.6.8:
+* 1.0       07/09/2026    cuongus - CuongUS        S25K900131  Tạo mới
+* 1.1       14/09/2026    cuongus - CuongUS        S25K900131  FS 3.6.7/3.6.8:
 *                                                             CHECK_STATUS ra
 *                                                             message riêng cho
 *                                                             từng trạng thái,
 *                                                             kiểm cả thành viên
 *                                                             khi gỡ gom, ghi
 *                                                             log gom / gỡ gom
-* 1.2       22/09/2026    cuongus - CuongUS        abapGit     Thay khoá chung
+* 1.2       22/09/2026    cuongus - CuongUS        S25K900131  Thay khoá chung
 *                                                             ENQUEUE_E_TABLE
 *                                                             bằng lock object
 *                                                             riêng
 *                                                             EZTB_HDDT_GOM;
 *                                                             khoá cả thao tác
 *                                                             gỡ gom theo số gom
-* 1.3       22/09/2026    cuongus - CuongUS        abapGit     CREATE và CANCEL
+* 1.3       22/09/2026    cuongus - CuongUS        S25K900131  CREATE và CANCEL
 *                                                             khoá thêm sổ đăng
 *                                                             ký của từng chứng
 *                                                             từ thành viên, nhả
@@ -74,6 +74,21 @@
 *                                                             khoá); số chứng
 *                                                             từ trong message
 *                                                             bỏ khoảng trắng
+* 1.7       01/10/2026    F-DUBV                   DS4K900172  20261001_07 G6-001
+*                                                             ZST_ADMIN_DATA;
+*                                                             G6-003 kiểm
+*                                                             sy-subrc ghi DB;
+*                                                             MARK_REPLACED
+*                                                             khoá số gom +
+*                                                             RAISING
+* 1.8       01/10/2026    F-DUBV                   DS4K900172  20261001_09 G6-002
+*                                                             NEXT_NUMBER lấy
+*                                                             số từ SNRO
+*                                                             ZHDDT_GOM; tự tạo
+*                                                             interval theo
+*                                                             công ty + năm
+* 1.9       02/10/2026    F-DUBV - DuBV            DS4K900172  G6-011 cot Transport
+*                                                              ghi mã TR thật S25K900131 (20261002_17)
 *=====================================================================
 CLASS zcl_hddt_gom DEFINITION
   PUBLIC
@@ -137,7 +152,8 @@ CLASS zcl_hddt_gom DEFINITION
     CLASS-METHODS mark_replaced
       IMPORTING i_bukrs  TYPE bukrs
                 i_gjahr  TYPE gjahr
-                i_gom_no TYPE zde_hddt_docno .
+                i_gom_no TYPE zde_hddt_docno
+      RAISING   zcx_hddt_error .
 
     CLASS-METHODS next_number
       IMPORTING i_bukrs         TYPE bukrs
@@ -161,6 +177,20 @@ CLASS zcl_hddt_gom DEFINITION
 
   PROTECTED SECTION.
   PRIVATE SECTION.
+
+    " >>> Begin of change 20261001_09 F-DUBV TR DS4K900172 - Review G6-002
+    "! Number range object cấp số gom (SNRO): subobject = BUKRS, to-year,
+    "! không buffer, interval '01' = 000000001..999999999
+    CONSTANTS gc_nr_object TYPE nrobj VALUE 'ZHDDT_GOM' ##NO_TEXT.
+    CONSTANTS gc_nr_range  TYPE nrnr  VALUE '01' ##NO_TEXT.
+
+    "! Tạo interval '01' cho công ty + năm khi chưa có; mức số hiện tại
+    "! lấy từ số gom lớn nhất đã có trong ZTB_HDDT_GOM (dữ liệu trước SNRO).
+    CLASS-METHODS create_interval
+      IMPORTING i_bukrs TYPE bukrs
+                i_gjahr TYPE gjahr
+      RAISING   zcx_hddt_error .
+    " <<< End of change 20261001_09
 
     "! Nhả khoá EZTB_HDDT_GOM của một số gom. Gom vào một chỗ vì CANCEL
     "! phải nhả ở ba đường: khoá sổ hụt, exception, và thành công.
@@ -339,10 +369,19 @@ CLASS ZCL_HDDT_GOM IMPLEMENTATION.
     UPDATE ztb_hddt_gom
       SET xcancel   = 'X',
           cancel_by = @sy-uname,
-          cancel_at = @lv_ts
+          cancel_at = @lv_ts,
+          " 20261001_07 F-DUBV DS4K900172 G6-001: vet sua ZST_ADMIN_DATA
+          zchanged_by = @sy-uname,
+          zchanged_at = @lv_ts,
+          zsource     = @( COND zde_source( WHEN sy-batch = abap_true
+                                            THEN zcl_bc_audit=>gc_source-job
+                                            ELSE zcl_bc_audit=>gc_source-manual ) )
       WHERE bukrs  = @i_bukrs
         AND gjahr  = @i_gjahr
         AND gom_no = @i_gom_no.
+    IF sy-subrc <> 0.     " 20261001_07 G6-003
+      zcx_hddt_error=>raise_text( |Không cập nhật được ZTB_HDDT_GOM cho { i_gom_no }.| ).
+    ENDIF.
 
     DATA(lo_log) = NEW zcl_hddt_log( ).
 *   >>> Begin of change 20260928_30 F-DUBV TR S25K900131 - Review S25 R06 (DB trong vong lap)
@@ -368,12 +407,15 @@ CLASS ZCL_HDDT_GOM IMPLEMENTATION.
 *   <<< End of change 20260928_30
 
     " Dòng sổ của chính hoá đơn gom (chưa phát hành) -> xoá
-    IF ls_reg-created_at IS NOT INITIAL.
+    IF ls_reg-zcreated_at IS NOT INITIAL.    " 20261001_07 G6-001 ZST_ADMIN_DATA
       DELETE FROM ztb_hddt_inv
         WHERE bukrs     = @i_bukrs
           AND gjahr     = @i_gjahr
           AND src_type  = @gc_src_type
           AND src_docno = @i_gom_no.
+      IF sy-subrc <> 0.   " 20261001_07 G6-003
+        zcx_hddt_error=>raise_text( |Không xoá được dòng sổ của hoá đơn gom { i_gom_no }.| ).
+      ENDIF.
     ENDIF.
 
     " Ghi log SAU khi đã xoá GOM_NO: dòng log là bằng chứng duy nhất còn
@@ -633,8 +675,8 @@ CLASS ZCL_HDDT_GOM IMPLEMENTATION.
     GET TIME STAMP FIELD lv_ts.
     LOOP AT lt_mem ASSIGNING FIELD-SYMBOL(<fs_mem>).
       <fs_mem>-gom_no     = r_gom_no.
-      <fs_mem>-created_by = sy-uname.
-      <fs_mem>-created_at = lv_ts.
+      " 20261001_07 F-DUBV DS4K900172 G6-001: ZST_ADMIN_DATA qua SET_ADMIN
+      zcl_hddt_log=>set_admin( CHANGING cs_row = <fs_mem> ).
     ENDLOOP.
     INSERT ztb_hddt_gom FROM TABLE lt_mem.
     IF sy-subrc <> 0.
@@ -730,15 +772,46 @@ CLASS ZCL_HDDT_GOM IMPLEMENTATION.
 
   METHOD mark_replaced.
 
+    " 20261001_07 G6-003/G6-009: khoá số gom trước khi ghi; _SCOPE '2'
+    " để khoá tự nhả ở COMMIT/ROLLBACK của nơi gọi.
+    CALL FUNCTION 'ENQUEUE_EZTB_HDDT_GOM'
+      EXPORTING
+        mode_ztb_hddt_gom = 'E'
+        mandt             = sy-mandt
+        bukrs             = i_bukrs
+        gjahr             = i_gjahr
+        gom_no            = i_gom_no
+        _scope            = '2'
+        _wait             = 'X'
+      EXCEPTIONS
+        foreign_lock      = 1
+        system_failure    = 2
+        OTHERS            = 3.
+    IF sy-subrc = 1.
+      zcx_hddt_error=>raise_text(
+        |Hoá đơn gom { i_gom_no } đang được user { sy-msgv1 } xử lý.| ).
+    ELSEIF sy-subrc <> 0.
+      zcx_hddt_error=>raise_text( |Không khoá được hoá đơn gom { i_gom_no }.| ).
+    ENDIF.
+
     DATA lv_ts TYPE timestampl.
     GET TIME STAMP FIELD lv_ts.
     UPDATE ztb_hddt_gom
       SET xcancel   = @abap_true,
           cancel_by = @sy-uname,
-          cancel_at = @lv_ts
+          cancel_at = @lv_ts,
+          " 20261001_07 F-DUBV DS4K900172 G6-001: vet sua ZST_ADMIN_DATA
+          zchanged_by = @sy-uname,
+          zchanged_at = @lv_ts,
+          zsource     = @( COND zde_source( WHEN sy-batch = abap_true
+                                            THEN zcl_bc_audit=>gc_source-job
+                                            ELSE zcl_bc_audit=>gc_source-manual ) )
       WHERE bukrs  = @i_bukrs
         AND gjahr  = @i_gjahr
         AND gom_no = @i_gom_no.
+    IF sy-subrc <> 0.     " 20261001_07 G6-003
+      zcx_hddt_error=>raise_text( |Không cập nhật được ZTB_HDDT_GOM cho { i_gom_no }.| ).
+    ENDIF.
 
   ENDMETHOD.
 
@@ -806,16 +879,74 @@ CLASS ZCL_HDDT_GOM IMPLEMENTATION.
       zcx_hddt_error=>raise_text( `Không khoá được ZTB_HDDT_GOM để cấp số chứng từ gom.` ).
     ENDIF.
 
-    SELECT MAX( gom_no ) FROM ztb_hddt_gom
-      WHERE bukrs = @i_bukrs AND gjahr = @i_gjahr
-      INTO @DATA(lv_max).
-
-    DATA lv_num TYPE n LENGTH 9.
-    IF lv_max IS NOT INITIAL AND lv_max(1) = 'G'.
-      lv_num = lv_max+1(9).
+*   >>> Begin of change 20261001_09 F-DUBV TR DS4K900172 - Review G6-002 (SNRO thay SELECT MAX)
+*    SELECT MAX( gom_no ) FROM ztb_hddt_gom
+*      WHERE bukrs = @i_bukrs AND gjahr = @i_gjahr
+*      INTO @DATA(lv_max).
+*
+*    DATA lv_num TYPE n LENGTH 9.
+*    IF lv_max IS NOT INITIAL AND lv_max(1) = 'G'.
+*      lv_num = lv_max+1(9).
+*    ENDIF.
+*    lv_num = lv_num + 1.
+*    r_gom_no = |G{ lv_num }|.
+    " Số lấy từ number range ZHDDT_GOM (không buffer -> tuần tự, không
+    " trùng giữa các phiên). Khoá EZTB_HDDT_GOM ở trên vẫn giữ để lần đầu
+    " của mỗi công ty + năm chỉ một phiên tạo interval.
+    " Gọi tuần tự (không DO/LOOP): lần 1, nếu chưa có interval thì tạo rồi
+    " gọi lần 2.
+    DATA lv_num TYPE c LENGTH 9.
+    DATA lv_rc  TYPE sysubrc.
+    CALL FUNCTION 'NUMBER_GET_NEXT'
+      EXPORTING
+        nr_range_nr             = gc_nr_range
+        object                  = gc_nr_object
+        subobject               = i_bukrs
+        toyear                  = i_gjahr
+      IMPORTING
+        number                  = lv_num
+      EXCEPTIONS
+        interval_not_found      = 1
+        number_range_not_intern = 2
+        object_not_found        = 3
+        quantity_is_0           = 4
+        quantity_is_not_1       = 5
+        interval_overflow       = 6
+        buffer_overflow         = 7
+        OTHERS                  = 8.
+    lv_rc = sy-subrc.
+    IF lv_rc = 1.
+      TRY.
+          create_interval( i_bukrs = i_bukrs i_gjahr = i_gjahr ).
+        CLEANUP.
+          CALL FUNCTION 'DEQUEUE_EZTB_HDDT_GOM'
+            EXPORTING
+              mode_ztb_hddt_gom = 'E'
+              mandt             = sy-mandt
+              bukrs             = i_bukrs
+              gjahr             = i_gjahr
+              _scope            = '1'.
+      ENDTRY.
+      CALL FUNCTION 'NUMBER_GET_NEXT'
+        EXPORTING
+          nr_range_nr             = gc_nr_range
+          object                  = gc_nr_object
+          subobject               = i_bukrs
+          toyear                  = i_gjahr
+        IMPORTING
+          number                  = lv_num
+        EXCEPTIONS
+          interval_not_found      = 1
+          number_range_not_intern = 2
+          object_not_found        = 3
+          quantity_is_0           = 4
+          quantity_is_not_1       = 5
+          interval_overflow       = 6
+          buffer_overflow         = 7
+          OTHERS                  = 8.
+      lv_rc = sy-subrc.
     ENDIF.
-    lv_num = lv_num + 1.
-    r_gom_no = |G{ lv_num }|.
+*   <<< End of change 20261001_09
 
     " _SCOPE = '1': khoá thuộc chương trình hội thoại, COMMIT WORK không
     " tự nhả nên phải DEQUEUE tường minh ở đây. Nhả ngay sau khi đã lấy
@@ -827,6 +958,109 @@ CLASS ZCL_HDDT_GOM IMPLEMENTATION.
         bukrs             = i_bukrs
         gjahr             = i_gjahr
         _scope            = '1'.
+
+*   >>> Begin of change 20261001_09
+    IF lv_rc <> 0.
+      zcx_hddt_error=>raise_text(
+        |Không cấp được số gom từ number range { gc_nr_object } cho { i_bukrs }/{ i_gjahr } (mã { lv_rc }).| ).
+    ENDIF.
+    r_gom_no = |G{ lv_num }|.
+*   <<< End of change 20261001_09
+
+  ENDMETHOD.
+
+
+  METHOD create_interval.
+
+*   >>> Begin of change 20261001_09 F-DUBV TR DS4K900172 - Review G6-002
+    " Gọi khi NUMBER_GET_NEXT báo chưa có interval '01' cho công ty + năm,
+    " TRONG khoá EZTB_HDDT_GOM (công ty + năm) mà NEXT_NUMBER đang giữ.
+    " Mức số khởi đầu = số gom lớn nhất đã cấp theo cách cũ, để số mới
+    " không đụng số đã có trong ZTB_HDDT_GOM.
+    DATA lt_last  TYPE STANDARD TABLE OF zde_hddt_docno WITH EMPTY KEY.
+    DATA lv_last  TYPE zde_hddt_docno.
+    DATA lv_level TYPE n LENGTH 9.
+    DATA lt_iv    TYPE STANDARD TABLE OF inriv WITH EMPTY KEY.
+    DATA lt_err   TYPE STANDARD TABLE OF inriv WITH EMPTY KEY.
+    DATA lv_error TYPE c LENGTH 1.
+
+    SELECT gom_no FROM ztb_hddt_gom
+      WHERE bukrs = @i_bukrs
+        AND gjahr = @i_gjahr
+        AND gom_no LIKE 'G%'
+      ORDER BY gom_no DESCENDING
+      INTO TABLE @lt_last
+      UP TO 1 ROWS.
+    IF lt_last IS NOT INITIAL.
+      lv_last  = lt_last[ 1 ].
+      lv_level = lv_last+1(9).
+    ENDIF.
+
+    CALL FUNCTION 'NUMBER_RANGE_ENQUEUE'
+      EXPORTING
+        object           = gc_nr_object
+      EXCEPTIONS
+        foreign_lock     = 1
+        object_not_found = 2
+        system_failure   = 3
+        OTHERS           = 4.
+    IF sy-subrc <> 0.
+      zcx_hddt_error=>raise_text(
+        |Không khoá được number range { gc_nr_object } (mã { sy-subrc }), thử lại sau.| ).
+    ENDIF.
+
+    lt_iv = VALUE #( ( subobject  = i_bukrs
+                       nrrangenr  = gc_nr_range
+                       toyear     = i_gjahr
+                       fromnumber = '000000001'
+                       tonumber   = '999999999'
+                       nrlevel    = lv_level
+                       procind    = 'I' ) ).
+
+    CALL FUNCTION 'NUMBER_RANGE_INTERVAL_UPDATE'
+      EXPORTING
+        object           = gc_nr_object
+        subobject        = i_bukrs
+      IMPORTING
+        error_occured    = lv_error
+      TABLES
+        error_iv         = lt_err
+        interval         = lt_iv
+      EXCEPTIONS
+        object_not_found = 1
+        OTHERS           = 2.
+    DATA(lv_rc) = sy-subrc.
+    IF lv_rc = 0 AND lv_error IS INITIAL.
+      " COMMIT = X: interval phải vào DB trước khi NUMBER_GET_NEXT đọc lại.
+      " Lúc này luồng gom mới chỉ đọc + giữ khoá _SCOPE '1' (không mất khi
+      " COMMIT), chưa ghi bảng nào nên COMMIT không chốt dở dữ liệu nghiệp vụ.
+      CALL FUNCTION 'NUMBER_RANGE_UPDATE_CLOSE'
+        EXPORTING
+          object                 = gc_nr_object
+          commit                 = abap_true
+        EXCEPTIONS
+          no_changes_made        = 1
+          object_not_initialized = 2
+          OTHERS                 = 3.
+      lv_rc = sy-subrc.
+    ENDIF.
+
+    CALL FUNCTION 'NUMBER_RANGE_DEQUEUE'
+      EXPORTING
+        object           = gc_nr_object
+      EXCEPTIONS
+        object_not_found = 1
+        OTHERS           = 2.
+    IF sy-subrc <> 0.
+      " Không nhả được khoá number range: khoá tự hết khi phiên kết thúc
+      CLEAR sy-subrc.
+    ENDIF.
+
+    IF lv_error IS NOT INITIAL OR lv_rc <> 0.
+      zcx_hddt_error=>raise_text(
+        |Không tạo được interval { gc_nr_range } của { gc_nr_object } cho { i_bukrs }/{ i_gjahr }.| ).
+    ENDIF.
+*   <<< End of change 20261001_09
 
   ENDMETHOD.
 

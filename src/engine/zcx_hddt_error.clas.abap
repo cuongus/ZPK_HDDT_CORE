@@ -8,12 +8,14 @@
 *=====================================================================
 * Version   Ngày          Người sửa                Transport   Mô tả
 *=====================================================================
-* 1.0       28/08/2026    cuongus - CuongUS        abapGit     Tạo mới
+* 1.0       28/08/2026    cuongus - CuongUS        S25K900131  Tạo mới
 * 1.1       30/09/2026    cuongus - CuongUS        DS4K900172  Constructor
 *                         cắt text vào MSGV1..4 không còn dump khi text
 *                         không tròn bội số 50 ký tự; GET_TEXT trả text
 *                         đầy đủ (trước đó ghép MSGV1..4 bằng khoảng
 *                         trắng -> chữ bị tách "trên h ệ thống")
+* 1.2       02/10/2026    F-DUBV - DuBV            DS4K900172  G6-011 cot Transport
+*                                                              ghi mã TR thật S25K900131 (20261002_17)
 *=====================================================================
 CLASS zcx_hddt_error DEFINITION
   PUBLIC

@@ -43,7 +43,7 @@
 *=====================================================================
 * Version   Ngày          Người sửa                Transport   Mô tả
 *=====================================================================
-* 1.0       22/09/2026    cuongus - CuongUS        abapGit     Tạo mới
+* 1.0       22/09/2026    cuongus - CuongUS        S25K900131  Tạo mới
 *                         theo FS v0.17 mục 3.6.2 / 3.6.5
 * 1.1       25/09/2026    F-DUBV                   S25K900131  Bổ sung
 *                         BUS_ACT = RFBU khi gọi BAPI_ACC_DOCUMENT_REV_*
@@ -51,6 +51,8 @@
 * 1.2       27/09/2026    F-DUBV                   S25K900131  R06: them
 *                         TARGET_FROM (khong SELECT) de caller doc BKPF 1 lan
 *                         truoc vong lap huy chung tu (review S25 27/09)
+* 1.3       02/10/2026    F-DUBV - DuBV            DS4K900192  G6-011 cot Transport
+*                                                              ghi mã TR thật S25K900131 (20261002_17)
 *=====================================================================
 CLASS zcl_hddt_reversal DEFINITION
   PUBLIC

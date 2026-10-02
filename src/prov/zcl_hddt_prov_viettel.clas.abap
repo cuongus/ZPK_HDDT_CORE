@@ -23,9 +23,11 @@
 *=====================================================================
 * Version   Ngày          Người sửa                Transport   Mô tả
 *=====================================================================
-* 1.0       28/08/2026    cuongus - CuongUS        abapGit     Tạo mới
+* 1.0       28/08/2026    cuongus - CuongUS        S25K900131  Tạo mới
 * 1.1       25/09/2026    F-DUBV                   S25K900131  Review S25: BUILD_CANCEL
 *                                                                  khai RAISING ZCX_HDDT_ERROR
+* 1.2       02/10/2026    F-DUBV - DuBV            DS4K900192  G6-011 cot Transport
+*                                                              ghi mã TR thật S25K900131 (20261002_17)
 *=====================================================================
 CLASS zcl_hddt_prov_viettel DEFINITION
   PUBLIC

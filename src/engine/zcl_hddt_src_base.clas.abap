@@ -550,7 +550,7 @@ CLASS ZCL_HDDT_SRC_BASE IMPLEMENTATION.
 
     " Ngày phát hành người dùng sửa (chỉ khi chưa tích hợp)
     IF is_reg-inv_date IS NOT INITIAL AND is_reg-status = zif_hddt_types=>gc_status-not_sent
-       AND is_reg-changed_by IS NOT INITIAL.
+       AND is_reg-zchanged_by IS NOT INITIAL.    " 20261001_07 G6-001 ZST_ADMIN_DATA
       cs_request-invoice-header-inv_date = is_reg-inv_date.
     ENDIF.
 

@@ -29,20 +29,20 @@
 *=====================================================================
 * Version   Ngày          Người sửa                Transport   Mô tả
 *=====================================================================
-* 1.0       28/08/2026    cuongus - CuongUS        abapGit     Tạo mới
-* 1.1       28/08/2026    cuongus - CuongUS        abapGit     20260828_01 Lưu
+* 1.0       28/08/2026    cuongus - CuongUS        S25K900131  Tạo mới
+* 1.1       28/08/2026    cuongus - CuongUS        S25K900131  20260828_01 Lưu
 *                                                             payload dạng
 *                                                             xstring, che
 *                                                             secret, bổ sung
 *                                                             field truy vết
-* 1.2       22/09/2026    cuongus - CuongUS        abapGit     Bộ helper khoá
+* 1.2       22/09/2026    cuongus - CuongUS        S25K900131  Bộ helper khoá
 *                                                             sổ đăng ký
 *                                                             (LOCK_INVOICE(S) /
 *                                                             KEY_OF); khoá
 *                                                             trong SAVE_EDIT
 *                                                             và MARK_ORIGINAL
 *                                                             (hoá đơn GỐC)
-* 1.3       22/09/2026    cuongus - CuongUS        abapGit     SET_ADMIN điền
+* 1.3       22/09/2026    cuongus - CuongUS        S25K900131  SET_ADMIN điền
 *                                                             CREATED_BY/AT +
 *                                                             CHANGED_BY/AT cho
 *                                                             mọi bảng; SAVE_ITEMS
@@ -57,6 +57,18 @@
 *                                                             thay cho doc/ghi
 *                                                             tung dong trong
 *                                                             vong lap)
+* 1.5       01/10/2026    F-DUBV                   DS4K900192  20261001_07
+*                                                             G6-001 SET_ADMIN
+*                                                             qua ZCL_BC_AUDIT
+*                                                             (ZST_ADMIN_DATA);
+*                                                             G6-004 RAISING +
+*                                                             kiểm sy-subrc ghi
+*                                                             DB; G6-005 khoá
+*                                                             _SCOPE '2'; G6-009
+*                                                             khoá ở
+*                                                             SET_MAIL_STATUS
+* 1.6       02/10/2026    F-DUBV - DuBV            DS4K900192  G6-011 cot Transport
+*                                                              ghi mã TR thật S25K900131 (20261002_17)
 *=====================================================================
 CLASS zcl_hddt_log DEFINITION
   PUBLIC
@@ -88,7 +100,10 @@ CLASS zcl_hddt_log DEFINITION
     "! ENQUEUE_EZTB_HDDT_INV cũng chỉ nằm ở ĐÂY, không rải mỗi nơi một bản.
     CLASS-METHODS lock_invoice
       IMPORTING is_key      TYPE ty_inv_key
+                i_scope     TYPE ddenqscope DEFAULT '1'
       RETURNING VALUE(r_ok) TYPE abap_bool .
+    " ^ 20261001_07 F-DUBV DS4K900192 G6-005: I_SCOPE = '2' -> khoa tu nha
+    "   o COMMIT / ROLLBACK cua noi goi (dung cho SAVE_EDIT*, MARK_ORIGINAL)
 
     CLASS-METHODS unlock_invoice
       IMPORTING is_key TYPE ty_inv_key .
@@ -110,8 +125,13 @@ CLASS zcl_hddt_log DEFINITION
       IMPORTING is_request    TYPE zif_hddt_types=>ty_request
       RETURNING VALUE(rs_key) TYPE ty_inv_key .
 
-    "! Điền 4 trường vết CREATED_BY / CREATED_AT / CHANGED_BY /
-    "! CHANGED_AT cho MỘT dòng bảng bất kỳ của package. Dùng ASSIGN
+    " >>> Begin of change 20261001_07 F-DUBV TR DS4K900192 - Review G6-001
+    " Cac bang ZTB_HDDT_* da thay 4 cot vet rieng bang .INCLUDE
+    " ZST_ADMIN_DATA. SET_ADMIN uy quyen cho ZCL_BC_AUDIT=>SET_ADMIN_DATA
+    " (ZCREATED_BY/AT, ZCHANGED_BY/AT, ZSOURCE, ZJOB_ID - TIMESTAMPL UTC).
+    " I_SOURCE rong: job nen -> JOB, con lai -> MANUAL.
+    "! Điền trường vết ZST_ADMIN_DATA (ZCREATED_* / ZCHANGED_* / ZSOURCE)
+    "! cho MỘT dòng bảng bất kỳ của package. Dùng ASSIGN
     "! COMPONENT nên nhận mọi kiểu dòng, bảng nào không có các trường
     "! này thì lặng lẽ bỏ qua — khỏi phải viết lại ở 11 chỗ.
     "! Timestamp là TIMESTAMPL giờ UTC (GET TIME STAMP), không phải
@@ -125,8 +145,10 @@ CLASS zcl_hddt_log DEFINITION
     "! generic OK: CS_ROW phải TYPE any vì 11 bảng có kiểu dòng khác
     "! nhau, thân method dò trường bằng ASSIGN COMPONENT.
     CLASS-METHODS set_admin
-      IMPORTING i_new  TYPE abap_bool DEFAULT abap_true
-      CHANGING  cs_row TYPE any .
+      IMPORTING i_new    TYPE abap_bool DEFAULT abap_true
+                i_source TYPE zde_source OPTIONAL
+      CHANGING  cs_row   TYPE any .
+    " <<< End of change 20261001_07 (them I_SOURCE)
 
     TYPES: BEGIN OF ty_call_info,
              connid      TYPE zde_hddt_connid,
@@ -170,10 +192,12 @@ CLASS zcl_hddt_log DEFINITION
     METHODS save_invoice
       IMPORTING is_request  TYPE zif_hddt_types=>ty_request
                 is_result   TYPE zif_hddt_types=>ty_result
-                i_provider TYPE zde_hddt_prov .
+                i_provider TYPE zde_hddt_prov
+      RAISING   zcx_hddt_error .       " 20261001_07 G6-004: loi ghi DB
 
     METHODS save_items
-      IMPORTING is_request TYPE zif_hddt_types=>ty_request .
+      IMPORTING is_request TYPE zif_hddt_types=>ty_request
+      RAISING   zcx_hddt_error .       " 20261001_07 G6-004
 
     "! Đọc sổ đăng ký của 1 chứng từ (dùng cho điều chỉnh/thay thế).
     "! Đánh dấu hoá đơn GỐC đã bị điều chỉnh / thay thế sau khi HĐ điều
@@ -185,12 +209,14 @@ CLASS zcl_hddt_log DEFINITION
     METHODS mark_original
       IMPORTING is_request TYPE zif_hddt_types=>ty_request
                 i_status  TYPE zde_hddt_status
-      EXPORTING e_ok       TYPE abap_bool .
+      EXPORTING e_ok       TYPE abap_bool
+      RAISING   zcx_hddt_error .       " 20261001_07 G6-004
 
     "! FS MAG: đánh dấu chứng từ thành viên thuộc hoá đơn gom (trống = gỡ)
     METHODS set_gom_no
       IMPORTING is_request TYPE zif_hddt_types=>ty_request
-                i_gom_no   TYPE zde_hddt_docno .
+                i_gom_no   TYPE zde_hddt_docno
+      RAISING   zcx_hddt_error .       " 20261001_07 G6-004
 
     "! FS MAG: người dùng sửa ngày/giờ phát hành, tên hàng trước khi gửi
     METHODS save_edit
@@ -207,11 +233,13 @@ CLASS zcl_hddt_log DEFINITION
                 i_org_gjahr   TYPE gjahr
                 i_org_srctype TYPE zde_hddt_srctype
                 i_adj_type    TYPE zde_hddt_adjtype
-                i_adj_dir     TYPE zde_hddt_adjdir .
+                i_adj_dir     TYPE zde_hddt_adjdir
+      RAISING   zcx_hddt_error .       " 20261001_07 G6-004
 
     METHODS set_mail_status
       IMPORTING is_request TYPE zif_hddt_types=>ty_request
-                i_status   TYPE zde_hddt_mailst .
+                i_status   TYPE zde_hddt_mailst
+      RAISING   zcx_hddt_error .       " 20261001_07 G6-004
 
     "! Ghi thẳng trạng thái và thông báo cho một chứng từ, không gọi API.
     "! Dùng khi nghiệp vụ dừng giữa chừng ở phía SAP - ví dụ FS v0.17 mục
@@ -221,7 +249,8 @@ CLASS zcl_hddt_log DEFINITION
     METHODS set_status
       IMPORTING is_request TYPE zif_hddt_types=>ty_request
                 i_status   TYPE zde_hddt_status
-                i_message  TYPE clike OPTIONAL .
+                i_message  TYPE clike OPTIONAL
+      RAISING   zcx_hddt_error .       " 20261001_07 G6-004
 
     "! Xoá thông tin hoá đơn (mẫu, ký hiệu, số, mã tra cứu, link) nhưng
     "! đặt trạng thái cho trước - khác RESET_REGISTRY luôn về 'chưa tích
@@ -230,7 +259,8 @@ CLASS zcl_hddt_log DEFINITION
     METHODS retire_invoice
       IMPORTING is_request TYPE zif_hddt_types=>ty_request
                 i_status   TYPE zde_hddt_status
-                i_message  TYPE clike OPTIONAL .
+                i_message  TYPE clike OPTIONAL
+      RAISING   zcx_hddt_error .       " 20261001_07 G6-004
 
 *   >>> Begin of change 20260928_30 F-DUBV TR S25K900131 - Review S25 R06 (DB trong vong lap)
     "! Ban nhieu dong cua SET_GOM_NO: doc so dang ky cua ca danh sach 1
@@ -240,7 +270,8 @@ CLASS zcl_hddt_log DEFINITION
     "! dang ky cua toan bo thanh vien truoc khi goi.
     METHODS set_gom_no_multi
       IMPORTING it_requests TYPE zif_hddt_types=>ty_t_request
-                i_gom_no    TYPE zde_hddt_docno .
+                i_gom_no    TYPE zde_hddt_docno
+      RAISING   zcx_hddt_error .       " 20261001_07 G6-004
 
     "! Ban nhieu dong cua SAVE_EDIT (nut Sua ngay/gio/ten hang). Khoa tung
     "! chung tu nhu SAVE_EDIT; chung tu dang bi nguoi khac giu thi bo qua
@@ -255,7 +286,8 @@ CLASS zcl_hddt_log DEFINITION
                 i_inv_time  TYPE uzeit
                 i_item_text TYPE string
       EXPORTING e_count     TYPE i
-                e_error     TYPE string .
+                e_error     TYPE string
+      RAISING   zcx_hddt_error .       " 20261001_07 G6-004
 
     "! Ban nhieu dong cua RETIRE_INVOICE (thanh vien hoa don gom bi thay
     "! the). KHONG khoa - giong RETIRE_INVOICE (cho goi duy nhat
@@ -263,14 +295,16 @@ CLASS zcl_hddt_log DEFINITION
     METHODS retire_invoice_multi
       IMPORTING it_keys    TYPE ty_t_inv_key
                 i_status   TYPE zde_hddt_status
-                i_message  TYPE clike OPTIONAL .
+                i_message  TYPE clike OPTIONAL
+      RAISING   zcx_hddt_error .       " 20261001_07 G6-004
 *   <<< End of change 20260928_30
 
     "! Đưa chứng từ về 'chưa tích hợp' (huỷ nháp thành công / NCC không
     "! còn hoá đơn): xoá số, ký hiệu, link, trạng thái NCC.
     METHODS reset_registry
       IMPORTING is_request TYPE zif_hddt_types=>ty_request
-                i_message  TYPE string OPTIONAL .
+                i_message  TYPE string OPTIONAL
+      RAISING   zcx_hddt_error .       " 20261001_07 G6-004
 
     CLASS-METHODS read_invoice
       IMPORTING i_bukrs      TYPE bukrs
@@ -360,9 +394,13 @@ CLASS ZCL_HDDT_LOG IMPLEMENTATION.
     ls_inv-ref_srctype = COND #( WHEN i_org_docno IS INITIAL THEN space ELSE i_org_srctype ).
     ls_inv-adj_type    = COND #( WHEN i_org_docno IS INITIAL THEN space ELSE i_adj_type ).
     ls_inv-adj_dir     = COND #( WHEN i_org_docno IS INITIAL THEN space ELSE i_adj_dir ).
-    ls_inv-changed_by  = sy-uname.
-    GET TIME STAMP FIELD ls_inv-changed_at.
+    " 20261001_07 G6-001: ZST_ADMIN_DATA qua SET_ADMIN (thay CHANGED_BY/AT)
+    set_admin( EXPORTING i_new = abap_false CHANGING cs_row = ls_inv ).
     MODIFY ztb_hddt_inv FROM ls_inv.
+    " 20261001_07 F-DUBV DS4K900192 G6-004: loi ghi -> raise, noi goi ROLLBACK
+    IF sy-subrc <> 0.
+      zcx_hddt_error=>raise_text( |Không ghi được ZTB_HDDT_INV cho chứng từ { ls_inv-src_docno ALPHA = OUT }.| ).
+    ENDIF.
 
   ENDMETHOD.
 
@@ -382,7 +420,10 @@ CLASS ZCL_HDDT_LOG IMPLEMENTATION.
         DATA(lo_sink) = CAST zif_hddt_log_sink(
                           zcl_hddt_factory=>create_object( CONV #( lv_class ) ) ).
         lo_sink->write( is_log = is_log is_request = is_request is_result = is_result ).
-      CATCH cx_root.
+      " 20261001_07 G6-006: giữ CATCH cx_root có chủ đích - sink là lớp cắm
+      " ngoài (tham số LOG_SINK_CLASS), lỗi bất kỳ của sink không được làm
+      " hỏng giao dịch hoá đơn; dòng log chính đã ghi ở ZTB_HDDT_LOG.
+      CATCH cx_root ##NO_HANDLER ##CATCH_ALL.
         " bỏ qua có chủ ý
     ENDTRY.
 
@@ -453,8 +494,8 @@ CLASS ZCL_HDDT_LOG IMPLEMENTATION.
     rs_inv-waers      = is_request-invoice-header-currency.
     rs_inv-inv_date   = is_request-invoice-header-inv_date.
     rs_inv-inv_time   = is_request-invoice-header-inv_time.
-    rs_inv-created_by = sy-uname.
-    GET TIME STAMP FIELD rs_inv-created_at.
+    " 20261001_07 G6-001: ZST_ADMIN_DATA qua SET_ADMIN (thay CREATED_BY/AT)
+    set_admin( CHANGING cs_row = rs_inv ).
 *   <<< End of change 20260928_30
 
   ENDMETHOD.
@@ -500,7 +541,7 @@ CLASS ZCL_HDDT_LOG IMPLEMENTATION.
         gjahr             = is_key-gjahr
         src_type          = is_key-src_type
         src_docno         = is_key-src_docno
-        _scope            = '1'
+        _scope            = i_scope           " 20261001_07 G6-005
       EXCEPTIONS
         foreign_lock      = 1
         system_failure    = 2
@@ -575,8 +616,8 @@ CLASS ZCL_HDDT_LOG IMPLEMENTATION.
     " nền hay từ enhancement khi cùng một chứng từ có nhiều dòng log.
     ls_log-caller      = sy-cprog.
     ls_log-tcode       = sy-tcode.
-    ls_log-created_by  = sy-uname.
-    GET TIME STAMP FIELD ls_log-created_at.
+    " 20261001_07 G6-001: ZST_ADMIN_DATA qua SET_ADMIN (thay CREATED_BY/AT)
+    set_admin( CHANGING cs_row = ls_log ).
 
     " FS MAG: các trường khớp bảng log dùng chung ZTB_INT_LOG
     ls_log-direction   = 'O'.
@@ -655,21 +696,31 @@ CLASS ZCL_HDDT_LOG IMPLEMENTATION.
                                          gjahr     = lv_gjahr
                                          src_type  = lv_type
                                          src_docno = ls_adj-org_docno ).
-    IF lock_invoice( ls_org_key ) = abap_false.
+    " 20261001_07 F-DUBV DS4K900192 G6-005: _SCOPE '2' - khoa giu toi
+    " COMMIT / ROLLBACK cua noi goi
+    IF lock_invoice( is_key = ls_org_key i_scope = '2' ) = abap_false.
       RETURN.
     ENDIF.
 
     UPDATE ztb_hddt_inv
       SET status     = @i_status,
           message    = @lv_msg,
-          changed_by = @sy-uname,
-          changed_at = @lv_ts
+          zchanged_by = @sy-uname,                " 20261001_07 G6-001
+          zchanged_at = @lv_ts,
+          zsource     = @( COND zde_source( WHEN sy-batch = abap_true
+                                            THEN zcl_bc_audit=>gc_source-job
+                                            ELSE zcl_bc_audit=>gc_source-manual ) )
       WHERE bukrs     = @is_request-bukrs
         AND gjahr     = @lv_gjahr
         AND src_type  = @lv_type
         AND src_docno = @ls_adj-org_docno.
-
-    unlock_invoice( ls_org_key ).
+    " >>> Begin of change 20261001_07 F-DUBV DS4K900192 G6-004/G6-005
+    " Dong goc khong con / ghi loi -> raise (noi goi ROLLBACK); khong nha
+    " khoa o day (_SCOPE 2 tu nha khi COMMIT / ROLLBACK)
+    IF sy-subrc <> 0.
+      zcx_hddt_error=>raise_text( |Không cập nhật được hoá đơn gốc { ls_adj-org_docno ALPHA = OUT }/{ lv_gjahr } trong ZTB_HDDT_INV.| ).
+    ENDIF.
+    " <<< End of change 20261001_07
     e_ok = abap_true.
 
   ENDMETHOD.
@@ -849,9 +900,13 @@ CLASS ZCL_HDDT_LOG IMPLEMENTATION.
            ls_inv-prov_status, ls_inv-tax_status, ls_inv-mail_status, ls_inv-mail_date.
     ls_inv-status     = zif_hddt_types=>gc_status-not_sent.
     ls_inv-message    = i_message.
-    ls_inv-changed_by = sy-uname.
-    GET TIME STAMP FIELD ls_inv-changed_at.
+    " 20261001_07 G6-001: ZST_ADMIN_DATA qua SET_ADMIN (thay CHANGED_BY/AT)
+    set_admin( EXPORTING i_new = abap_false CHANGING cs_row = ls_inv ).
     MODIFY ztb_hddt_inv FROM ls_inv.
+    " 20261001_07 F-DUBV DS4K900192 G6-004: loi ghi -> raise, noi goi ROLLBACK
+    IF sy-subrc <> 0.
+      zcx_hddt_error=>raise_text( |Không ghi được ZTB_HDDT_INV cho chứng từ { ls_inv-src_docno ALPHA = OUT }.| ).
+    ENDIF.
 
   ENDMETHOD.
 
@@ -868,6 +923,10 @@ CLASS ZCL_HDDT_LOG IMPLEMENTATION.
     set_admin( EXPORTING i_new  = abap_false
                CHANGING  cs_row = ls_inv ).
     MODIFY ztb_hddt_inv FROM ls_inv.
+    " 20261001_07 F-DUBV DS4K900192 G6-004: loi ghi -> raise, noi goi ROLLBACK
+    IF sy-subrc <> 0.
+      zcx_hddt_error=>raise_text( |Không ghi được ZTB_HDDT_INV cho chứng từ { ls_inv-src_docno ALPHA = OUT }.| ).
+    ENDIF.
 
   ENDMETHOD.
 
@@ -910,9 +969,12 @@ CLASS ZCL_HDDT_LOG IMPLEMENTATION.
       ENDIF.
     ENDLOOP.
 
-    " RETIRE_INVOICE cu cung khong kiem SY-SUBRC cua MODIFY (giu nguyen hanh vi)
+    " 20261001_07 F-DUBV DS4K900192 G6-004: kiem SY-SUBRC, loi -> raise
     IF lt_inv IS NOT INITIAL.
       MODIFY ztb_hddt_inv FROM TABLE @lt_inv.
+      IF sy-subrc <> 0.
+        zcx_hddt_error=>raise_text( |Không ghi được ZTB_HDDT_INV ({ lines( lt_inv ) } dòng).| ).
+      ENDIF.
     ENDIF.
 *   <<< End of change 20260928_30
 
@@ -925,7 +987,10 @@ CLASS ZCL_HDDT_LOG IMPLEMENTATION.
     " của ZCL_HDDT_SERVICE, mà ENSURE_ROW là đọc-rồi-ghi. Không khoá thì
     " sửa ngày của người này ghi đè tên hàng người kia vừa lưu.
     DATA(ls_key) = key_of( is_request ).
-    IF lock_invoice( ls_key ) = abap_false.
+    " 20261001_07 F-DUBV DS4K900192 G6-005: _SCOPE = '2' - khoa giu toi
+    " COMMIT / ROLLBACK cua noi goi (truoc day nha ngay sau MODIFY, truoc
+    " COMMIT -> khe ghi de)
+    IF lock_invoice( is_key = ls_key i_scope = '2' ) = abap_false.
       zcx_hddt_error=>raise_text(
         |Chứng từ { is_request-src_docno ALPHA = OUT } đang được user | &&
         |{ sy-msgv1 } xử lý, chưa lưu được ngày/giờ/tên hàng.| ).
@@ -939,11 +1004,15 @@ CLASS ZCL_HDDT_LOG IMPLEMENTATION.
       ls_inv-inv_time = i_inv_time.
     ENDIF.
     ls_inv-item_text  = i_item_text.
-    ls_inv-changed_by = sy-uname.
-    GET TIME STAMP FIELD ls_inv-changed_at.
+    " 20261001_07 G6-001: ZST_ADMIN_DATA qua SET_ADMIN (thay CHANGED_BY/AT)
+    set_admin( EXPORTING i_new = abap_false CHANGING cs_row = ls_inv ).
     MODIFY ztb_hddt_inv FROM ls_inv.
-
-    unlock_invoice( ls_key ).
+    " >>> Begin of change 20261001_07 F-DUBV DS4K900192 G6-004/G6-005
+    IF sy-subrc <> 0.
+      zcx_hddt_error=>raise_text( |Không ghi được ZTB_HDDT_INV cho chứng từ { is_request-src_docno ALPHA = OUT }.| ).
+    ENDIF.
+    " Khong nha khoa o day: khoa _SCOPE 2 tu nha khi noi goi COMMIT/ROLLBACK
+    " <<< End of change 20261001_07
 
   ENDMETHOD.
 
@@ -963,7 +1032,8 @@ CLASS ZCL_HDDT_LOG IMPLEMENTATION.
 
     LOOP AT it_requests ASSIGNING FIELD-SYMBOL(<fs_req>).
       DATA(ls_key) = key_of( <fs_req> ).
-      IF lock_invoice( ls_key ) = abap_false.
+      " 20261001_07 F-DUBV DS4K900192 G6-005: _SCOPE '2' - giu toi COMMIT
+      IF lock_invoice( is_key = ls_key i_scope = '2' ) = abap_false.
         " Giu nguyen van ban message cua SAVE_EDIT (qua GET_TEXT_LONG nhu
         " cho goi cu lam), bo qua dung dong nay, cac dong khac van luu
         TRY.
@@ -1005,8 +1075,8 @@ CLASS ZCL_HDDT_LOG IMPLEMENTATION.
         ls_inv-inv_time = i_inv_time.
       ENDIF.
       ls_inv-item_text  = i_item_text.
-      ls_inv-changed_by = sy-uname.
-      ls_inv-changed_at = lv_ts.
+      " 20261001_07 G6-001: ZST_ADMIN_DATA qua SET_ADMIN (dong moi -> ZCREATED_*)
+      set_admin( EXPORTING i_new = xsdbool( lv_found = abap_false ) CHANGING cs_row = ls_inv ).
       IF lv_found = abap_true.
         MODIFY TABLE lt_inv FROM ls_inv.
       ELSE.
@@ -1015,14 +1085,15 @@ CLASS ZCL_HDDT_LOG IMPLEMENTATION.
       e_count = e_count + 1.
     ENDLOOP.
 
-    " SAVE_EDIT cu cung khong kiem SY-SUBRC cua MODIFY (giu nguyen hanh vi)
+    " >>> Begin of change 20261001_07 F-DUBV DS4K900192 G6-004/G6-005
+    " Kiem SY-SUBRC: loi -> raise, noi goi ROLLBACK. Khong nha khoa o day:
+    " khoa _SCOPE 2 tu nha khi noi goi COMMIT / ROLLBACK (truoc day nha
+    " TRUOC COMMIT -> khe cho phien khac doc ban cu va ghi de).
     MODIFY ztb_hddt_inv FROM TABLE @lt_inv.
-
-    " Nha dung tung khoa da lay (UNLOCK_INVOICE nhu SAVE_EDIT, ke ca khoa
-    " trung lap - ENQUEUE cong don)
-    LOOP AT lt_locked INTO ls_key.
-      unlock_invoice( ls_key ).
-    ENDLOOP.
+    IF sy-subrc <> 0.
+      zcx_hddt_error=>raise_text( |Không ghi được ZTB_HDDT_INV ({ lines( lt_inv ) } dòng).| ).
+    ENDIF.
+    " <<< End of change 20261001_07
 *   <<< End of change 20260928_30
 
   ENDMETHOD.
@@ -1045,8 +1116,8 @@ CLASS ZCL_HDDT_LOG IMPLEMENTATION.
       ls_inv-gjahr      = is_request-gjahr.
       ls_inv-src_type   = is_request-src_type.
       ls_inv-src_docno  = is_request-src_docno.
-      ls_inv-created_by = sy-uname.
-      GET TIME STAMP FIELD ls_inv-created_at.
+      " 20261001_07 G6-001: ZST_ADMIN_DATA qua SET_ADMIN (thay CREATED_BY/AT)
+      set_admin( CHANGING cs_row = ls_inv ).
     ENDIF.
 
     DATA(ls_hdr) = is_request-invoice-header.
@@ -1124,10 +1195,14 @@ CLASS ZCL_HDDT_LOG IMPLEMENTATION.
       ls_inv-cancel_date = sy-datum.
     ENDIF.
 
-    ls_inv-changed_by = sy-uname.
-    GET TIME STAMP FIELD ls_inv-changed_at.
+    " 20261001_07 G6-001: ZST_ADMIN_DATA qua SET_ADMIN (thay CHANGED_BY/AT)
+    set_admin( EXPORTING i_new = abap_false CHANGING cs_row = ls_inv ).
 
     MODIFY ztb_hddt_inv FROM ls_inv.
+    " 20261001_07 F-DUBV DS4K900192 G6-004: loi ghi -> raise, noi goi ROLLBACK
+    IF sy-subrc <> 0.
+      zcx_hddt_error=>raise_text( |Không ghi được ZTB_HDDT_INV cho chứng từ { ls_inv-src_docno ALPHA = OUT }.| ).
+    ENDIF.
 
   ENDMETHOD.
 
@@ -1170,6 +1245,11 @@ CLASS ZCL_HDDT_LOG IMPLEMENTATION.
     ENDLOOP.
 
     INSERT ztb_hddt_item FROM TABLE @lt_item.
+    " 20261001_07 F-DUBV DS4K900192 G6-004: dong cu da DELETE o tren - INSERT
+    " loi ma van COMMIT la mat dong hang -> raise, noi goi ROLLBACK
+    IF sy-subrc <> 0.
+      zcx_hddt_error=>raise_text( |Không ghi được ZTB_HDDT_ITEM cho chứng từ { is_request-src_docno ALPHA = OUT }.| ).
+    ENDIF.
     ENDIF.
 
   ENDMETHOD.
@@ -1177,31 +1257,16 @@ CLASS ZCL_HDDT_LOG IMPLEMENTATION.
 
   METHOD set_admin.
 
-    DATA lv_ts TYPE timestampl.
-    GET TIME STAMP FIELD lv_ts.
-
-    FIELD-SYMBOLS <fs> TYPE any.
-
-    IF i_new = abap_true.
-      ASSIGN COMPONENT 'CREATED_BY' OF STRUCTURE cs_row TO <fs>.
-      IF sy-subrc = 0 AND <fs> IS INITIAL.
-        <fs> = sy-uname.
-      ENDIF.
-      ASSIGN COMPONENT 'CREATED_AT' OF STRUCTURE cs_row TO <fs>.
-      IF sy-subrc = 0 AND <fs> IS INITIAL.
-        <fs> = lv_ts.
-      ENDIF.
-    ENDIF.
-
-    " Dòng sửa: luôn ghi đè người/lúc sửa gần nhất
-    ASSIGN COMPONENT 'CHANGED_BY' OF STRUCTURE cs_row TO <fs>.
-    IF sy-subrc = 0.
-      <fs> = sy-uname.
-    ENDIF.
-    ASSIGN COMPONENT 'CHANGED_AT' OF STRUCTURE cs_row TO <fs>.
-    IF sy-subrc = 0.
-      <fs> = lv_ts.
-    ENDIF.
+    " >>> Begin of change 20261001_07 F-DUBV TR DS4K900192 - Review G6-001
+    " Diem ghi audit dung chung cua du an: ZCL_BC_AUDIT=>SET_ADMIN_DATA.
+    " Dong moi dien ZCREATED_*; dong sua chi ghi de ZCHANGED_*.
+    DATA(lv_src) = COND zde_source( WHEN i_source IS NOT INITIAL THEN i_source
+                                    WHEN sy-batch = abap_true  THEN zcl_bc_audit=>gc_source-job
+                                    ELSE zcl_bc_audit=>gc_source-manual ).
+    zcl_bc_audit=>set_admin_data( EXPORTING iv_source = lv_src
+                                            iv_is_new = i_new
+                                  CHANGING  cs_row    = cs_row ).
+    " <<< End of change 20261001_07
 
   ENDMETHOD.
 
@@ -1214,9 +1279,13 @@ CLASS ZCL_HDDT_LOG IMPLEMENTATION.
     " không cần thiết.
     DATA(ls_inv) = ensure_row( is_request ).
     ls_inv-gom_no     = i_gom_no.
-    ls_inv-changed_by = sy-uname.
-    GET TIME STAMP FIELD ls_inv-changed_at.
+    " 20261001_07 G6-001: ZST_ADMIN_DATA qua SET_ADMIN (thay CHANGED_BY/AT)
+    set_admin( EXPORTING i_new = abap_false CHANGING cs_row = ls_inv ).
     MODIFY ztb_hddt_inv FROM ls_inv.
+    " 20261001_07 F-DUBV DS4K900192 G6-004: loi ghi -> raise, noi goi ROLLBACK
+    IF sy-subrc <> 0.
+      zcx_hddt_error=>raise_text( |Không ghi được ZTB_HDDT_INV cho chứng từ { ls_inv-src_docno ALPHA = OUT }.| ).
+    ENDIF.
 
   ENDMETHOD.
 
@@ -1248,8 +1317,8 @@ CLASS ZCL_HDDT_LOG IMPLEMENTATION.
         ls_inv = init_row( <fs_req> ).
       ENDIF.
       ls_inv-gom_no     = i_gom_no.
-      ls_inv-changed_by = sy-uname.
-      ls_inv-changed_at = lv_ts.
+      " 20261001_07 G6-001: ZST_ADMIN_DATA qua SET_ADMIN (dong moi -> ZCREATED_*)
+      set_admin( EXPORTING i_new = xsdbool( lv_found = abap_false ) CHANGING cs_row = ls_inv ).
       IF lv_found = abap_true.
         MODIFY TABLE lt_inv FROM ls_inv.
       ELSE.
@@ -1257,9 +1326,12 @@ CLASS ZCL_HDDT_LOG IMPLEMENTATION.
       ENDIF.
     ENDLOOP.
 
-    " SET_GOM_NO cu cung khong kiem SY-SUBRC cua MODIFY (giu nguyen hanh vi)
+    " 20261001_07 F-DUBV DS4K900192 G6-004: kiem SY-SUBRC, loi -> raise
     IF lt_inv IS NOT INITIAL.
       MODIFY ztb_hddt_inv FROM TABLE @lt_inv.
+      IF sy-subrc <> 0.
+        zcx_hddt_error=>raise_text( |Không ghi được ZTB_HDDT_INV ({ lines( lt_inv ) } dòng).| ).
+      ENDIF.
     ENDIF.
 *   <<< End of change 20260928_30
 
@@ -1268,12 +1340,22 @@ CLASS ZCL_HDDT_LOG IMPLEMENTATION.
 
   METHOD set_mail_status.
 
+    " 20261001_07 G6-009: khoá dòng sổ trước khi đọc-sửa-ghi; _SCOPE '2'
+    " để khoá tự nhả ở COMMIT/ROLLBACK của nơi gọi.
+    IF lock_invoice( is_key = key_of( is_request ) i_scope = '2' ) = abap_false.
+      zcx_hddt_error=>raise_text(
+        |Chứng từ { is_request-src_docno ALPHA = OUT } đang được user { sy-msgv1 } xử lý.| ).
+    ENDIF.
     DATA(ls_inv) = ensure_row( is_request ).
     ls_inv-mail_status = i_status.
     ls_inv-mail_date   = sy-datum.
-    ls_inv-changed_by  = sy-uname.
-    GET TIME STAMP FIELD ls_inv-changed_at.
+    " 20261001_07 G6-001: ZST_ADMIN_DATA qua SET_ADMIN (thay CHANGED_BY/AT)
+    set_admin( EXPORTING i_new = abap_false CHANGING cs_row = ls_inv ).
     MODIFY ztb_hddt_inv FROM ls_inv.
+    " 20261001_07 F-DUBV DS4K900192 G6-004: loi ghi -> raise, noi goi ROLLBACK
+    IF sy-subrc <> 0.
+      zcx_hddt_error=>raise_text( |Không ghi được ZTB_HDDT_INV cho chứng từ { ls_inv-src_docno ALPHA = OUT }.| ).
+    ENDIF.
 
   ENDMETHOD.
 
@@ -1288,6 +1370,10 @@ CLASS ZCL_HDDT_LOG IMPLEMENTATION.
     set_admin( EXPORTING i_new  = abap_false
                CHANGING  cs_row = ls_inv ).
     MODIFY ztb_hddt_inv FROM ls_inv.
+    " 20261001_07 F-DUBV DS4K900192 G6-004: loi ghi -> raise, noi goi ROLLBACK
+    IF sy-subrc <> 0.
+      zcx_hddt_error=>raise_text( |Không ghi được ZTB_HDDT_INV cho chứng từ { ls_inv-src_docno ALPHA = OUT }.| ).
+    ENDIF.
 
   ENDMETHOD.
 

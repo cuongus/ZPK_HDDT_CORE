@@ -193,7 +193,7 @@ DTELS = [
     ("ZDE_HDDT_PARMKEY", ("CHAR", 40, 0), "Tham số", "Tên tham số", "Tên tham số cấu hình", "Tham số", "Tên tham số cấu hình"),
     ("ZDE_HDDT_PARMVAL", ("CHAR", 255, 0), "Giá trị", "Giá trị tham số", "Giá trị tham số", "Giá trị", "Giá trị tham số cấu hình"),
     ("ZDE_HDDT_TIMEOUT", ("INT4", 10, 0), "Timeout", "Timeout (giây)", "Timeout gọi API (giây)", "Timeout", "Timeout gọi API tính bằng giây"),
-    ("ZDE_HDDT_AMOUNT", ("DEC", 23, 6), "Số tiền", "Số tiền", "Số tiền HĐĐT", "Số tiền", "Số tiền trên hoá đơn điện tử"),
+    ("ZDE_HDDT_AMOUNT", ("DEC", 26, 3), "Số tiền", "Số tiền", "Số tiền HĐĐT", "Số tiền", "Số tiền trên hoá đơn điện tử"),
     ("ZDE_HDDT_QTY", ("DEC", 23, 6), "Số lượng", "Số lượng", "Số lượng", "Số lượng", "Số lượng hàng hoá"),
     ("ZDE_HDDT_RATE", ("DEC", 7, 2), "T.suất", "Thuế suất", "Thuế suất / tỷ lệ", "TS", "Thuế suất hoặc tỷ lệ phần trăm"),
     ("ZDE_HDDT_DESCR", ("CHAR", 60, 0), "Mô tả", "Mô tả", "Mô tả", "Mô tả", "Mô tả"),
@@ -213,6 +213,134 @@ DTELS = [
     ("ZDE_HDDT_HOST", ("CHAR", 40, 0), "Máy chủ", "Máy chủ ứng dụng", "Application server thực thi", "Máy chủ", "Application server thuc thi loi goi"),
 ]
 
+# Do dai nhan (HEADLEN, SCRLEN1, SCRLEN2, SCRLEN3) va OUTPUTLEN cua data
+# element lay dung gia tri tren DS4 (DD04L, doi chieu 02/10/2026). SAP luu
+# do dai DANH SAN cho nhan, khong phai do dai chu hien co; OUTPUTLEN kieu
+# so dung san gom ca dau va dau phan cach (DEC 26,3 -> 34). Data element
+# moi chua co o day thi tinh theo do dai chu / LENG nhu truoc.
+DTEL_LENS = {
+    "ZDE_HDDT_ACTION": (9, 9, 12, 17),
+    "ZDE_HDDT_ACTIVE": (9, 9, 14, 28),
+    "ZDE_HDDT_ADJDIR": (8, 8, 16, 37),
+    "ZDE_HDDT_ADJTYPE": (7, 7, 15, 23),
+    "ZDE_HDDT_AMOUNT": (7, 7, 7, 12),
+    "ZDE_HDDT_APIVER": (9, 9, 13, 22),
+    "ZDE_HDDT_ATTEMPT": (55, 10, 20, 40),
+    "ZDE_HDDT_AUTH": (2, 8, 16, 20),
+    "ZDE_HDDT_BSART": (7, 7, 17, 35),
+    "ZDE_HDDT_CALLER": (40, 10, 20, 40),
+    "ZDE_HDDT_CLASS": (30, 10, 20, 40),
+    "ZDE_HDDT_CODEPAGE": (20, 10, 20, 40),
+    "ZDE_HDDT_CONNID": (7, 7, 10, 14),
+    "ZDE_HDDT_DATESRC": (55, 10, 20, 40),
+    "ZDE_HDDT_DEFAULT": (8, 8, 15, 26),
+    "ZDE_HDDT_DESCR": (5, 5, 5, 5),
+    "ZDE_HDDT_DIRECT": (5, 5, 13, 28),
+    "ZDE_HDDT_DOCNO": (20, 10, 20, 40),
+    "ZDE_HDDT_HKONTP": (7, 7, 16, 27),
+    "ZDE_HDDT_HOST": (40, 10, 20, 40),
+    "ZDE_HDDT_IDKEY": (5, 5, 14, 23),
+    "ZDE_HDDT_INVTYPE": (7, 7, 12, 12),
+    "ZDE_HDDT_ITEMTYPE": (2, 6, 14, 23),
+    "ZDE_HDDT_JSON": (4, 4, 13, 13),
+    "ZDE_HDDT_LINENO": (6, 10, 20, 40),
+    "ZDE_HDDT_LINK": (4, 4, 12, 20),
+    "ZDE_HDDT_LOGID": (32, 10, 20, 40),
+    "ZDE_HDDT_MAILST": (55, 10, 20, 40),
+    "ZDE_HDDT_MAPTYPE": (20, 10, 20, 40),
+    "ZDE_HDDT_MAPVAL": (50, 10, 20, 40),
+    "ZDE_HDDT_METHOD": (6, 6, 11, 11),
+    "ZDE_HDDT_MSCQT": (6, 6, 10, 19),
+    "ZDE_HDDT_MSG": (10, 7, 10, 17),
+    "ZDE_HDDT_MWSPAT": (8, 8, 15, 24),
+    "ZDE_HDDT_NAME": (55, 10, 20, 40),
+    "ZDE_HDDT_OBJTYPE": (10, 10, 20, 40),
+    "ZDE_HDDT_PARMKEY": (7, 7, 11, 20),
+    "ZDE_HDDT_PARMVAL": (55, 10, 20, 40),
+    "ZDE_HDDT_PARTNER": (5, 5, 10, 31),
+    "ZDE_HDDT_PATH": (4, 4, 13, 13),
+    "ZDE_HDDT_PROV": (8, 8, 12, 17),
+    "ZDE_HDDT_QTY": (29, 10, 20, 40),
+    "ZDE_HDDT_RATE": (9, 10, 20, 40),
+    "ZDE_HDDT_RAW": (55, 10, 20, 40),
+    "ZDE_HDDT_RCCODE": (55, 10, 20, 40),
+    "ZDE_HDDT_SEC": (20, 10, 20, 40),
+    "ZDE_HDDT_SECKEY": (6, 6, 11, 17),
+    "ZDE_HDDT_SECRET": (55, 10, 20, 40),
+    "ZDE_HDDT_SEQ": (5, 5, 10, 10),
+    "ZDE_HDDT_SERIAL": (20, 10, 20, 40),
+    "ZDE_HDDT_SIZE": (11, 10, 20, 40),
+    "ZDE_HDDT_SRCTYPE": (5, 5, 10, 18),
+    "ZDE_HDDT_STATUS": (55, 10, 20, 40),
+    "ZDE_HDDT_TAXCODE": (3, 3, 10, 10),
+    "ZDE_HDDT_TEMPL": (6, 6, 11, 11),
+    "ZDE_HDDT_TIMEOUT": (11, 10, 20, 40),
+    "ZDE_HDDT_TOKEN": (5, 5, 12, 12),
+    "ZDE_HDDT_URL": (3, 3, 8, 16),
+    "ZDE_HDDT_USER": (55, 10, 20, 40),
+}
+DTEL_OUTLEN = {
+    "ZDE_HDDT_ACTION": 30,
+    "ZDE_HDDT_ACTIVE": 1,
+    "ZDE_HDDT_ADJDIR": 1,
+    "ZDE_HDDT_ADJTYPE": 1,
+    "ZDE_HDDT_AMOUNT": 34,
+    "ZDE_HDDT_APIVER": 10,
+    "ZDE_HDDT_ATTEMPT": 3,
+    "ZDE_HDDT_AUTH": 1,
+    "ZDE_HDDT_BSART": 4,
+    "ZDE_HDDT_CALLER": 40,
+    "ZDE_HDDT_CLASS": 30,
+    "ZDE_HDDT_CODEPAGE": 20,
+    "ZDE_HDDT_CONNID": 10,
+    "ZDE_HDDT_DATESRC": 1,
+    "ZDE_HDDT_DEFAULT": 1,
+    "ZDE_HDDT_DESCR": 60,
+    "ZDE_HDDT_DIRECT": 1,
+    "ZDE_HDDT_DOCNO": 20,
+    "ZDE_HDDT_HKONTP": 10,
+    "ZDE_HDDT_HOST": 40,
+    "ZDE_HDDT_IDKEY": 40,
+    "ZDE_HDDT_INVTYPE": 10,
+    "ZDE_HDDT_ITEMTYPE": 1,
+    "ZDE_HDDT_JSON": 0,
+    "ZDE_HDDT_LINENO": 6,
+    "ZDE_HDDT_LINK": 255,
+    "ZDE_HDDT_LOGID": 32,
+    "ZDE_HDDT_MAILST": 1,
+    "ZDE_HDDT_MAPTYPE": 20,
+    "ZDE_HDDT_MAPVAL": 50,
+    "ZDE_HDDT_METHOD": 6,
+    "ZDE_HDDT_MSCQT": 40,
+    "ZDE_HDDT_MSG": 255,
+    "ZDE_HDDT_MWSPAT": 10,
+    "ZDE_HDDT_NAME": 255,
+    "ZDE_HDDT_OBJTYPE": 10,
+    "ZDE_HDDT_PARMKEY": 40,
+    "ZDE_HDDT_PARMVAL": 255,
+    "ZDE_HDDT_PARTNER": 10,
+    "ZDE_HDDT_PATH": 255,
+    "ZDE_HDDT_PROV": 10,
+    "ZDE_HDDT_QTY": 29,
+    "ZDE_HDDT_RATE": 9,
+    "ZDE_HDDT_RAW": 0,
+    "ZDE_HDDT_RCCODE": 20,
+    "ZDE_HDDT_SEC": 20,
+    "ZDE_HDDT_SECKEY": 40,
+    "ZDE_HDDT_SECRET": 128,
+    "ZDE_HDDT_SEQ": 20,
+    "ZDE_HDDT_SERIAL": 20,
+    "ZDE_HDDT_SIZE": 11,
+    "ZDE_HDDT_SRCTYPE": 4,
+    "ZDE_HDDT_STATUS": 2,
+    "ZDE_HDDT_TAXCODE": 20,
+    "ZDE_HDDT_TEMPL": 20,
+    "ZDE_HDDT_TIMEOUT": 11,
+    "ZDE_HDDT_TOKEN": 0,
+    "ZDE_HDDT_URL": 255,
+    "ZDE_HDDT_USER": 60,
+}
+
 for name, typ, s, m, lg, h, ddtext in DTELS:
     b = "   <DD04V>\n"
     b += "    <ROLLNAME>%s</ROLLNAME>\n" % name
@@ -225,11 +353,13 @@ for name, typ, s, m, lg, h, ddtext in DTELS:
         b += "    <LENG>%06d</LENG>\n" % ln
         if dc:
             b += "    <DECIMALS>%06d</DECIMALS>\n" % dc
-        b += "    <OUTPUTLEN>%06d</OUTPUTLEN>\n" % ln
-    b += "    <HEADLEN>%02d</HEADLEN>\n" % min(len(h), 55)
-    b += "    <SCRLEN1>%02d</SCRLEN1>\n" % min(len(s), 10)
-    b += "    <SCRLEN2>%02d</SCRLEN2>\n" % min(len(m), 20)
-    b += "    <SCRLEN3>%02d</SCRLEN3>\n" % min(len(lg), 40)
+        b += "    <OUTPUTLEN>%06d</OUTPUTLEN>\n" % DTEL_OUTLEN.get(name, ln)
+    hl, l1, l2, l3 = DTEL_LENS.get(name, (min(len(h), 55), min(len(s), 10),
+                                          min(len(m), 20), min(len(lg), 40)))
+    b += "    <HEADLEN>%02d</HEADLEN>\n" % hl
+    b += "    <SCRLEN1>%02d</SCRLEN1>\n" % l1
+    b += "    <SCRLEN2>%02d</SCRLEN2>\n" % l2
+    b += "    <SCRLEN3>%02d</SCRLEN3>\n" % l3
     b += "    <DDTEXT>%s</DDTEXT>\n" % esc(ddtext)
     b += "    <REPTEXT>%s</REPTEXT>\n" % esc(h)
     b += "    <SCRTEXT_S>%s</SCRTEXT_S>\n" % esc(s)
@@ -256,8 +386,7 @@ TABLES = [
         K("MANDT", "MANDT"), K("PROVIDER", "ZDE_HDDT_PROV"),
         F("CLASSNAME", "ZDE_HDDT_CLASS"), F("DESCR", "ZDE_HDDT_DESCR"),
         F("XACTIVE", "ZDE_HDDT_ACTIVE"),
-        F("CREATED_BY", "SYUNAME"), F("CREATED_AT", "TIMESTAMPL"),
-        F("CHANGED_BY", "SYUNAME"), F("CHANGED_AT", "TIMESTAMPL"),
+        F(".INCLUDE", "ZST_ADMIN_DATA"),
     ]),
     ("ZTB_HDDT_CONN", "C", "HDDT: Cấu hình kết nối API", [
         K("MANDT", "MANDT"), K("PROVIDER", "ZDE_HDDT_PROV"), K("CONNID", "ZDE_HDDT_CONNID"),
@@ -265,16 +394,14 @@ TABLES = [
         F("AUTH_MODE", "ZDE_HDDT_AUTH"), F("TOKEN_ACTION", "ZDE_HDDT_ACTION"),
         F("TOKEN_TTL", "ZDE_HDDT_TIMEOUT"), F("TIMEOUT", "ZDE_HDDT_TIMEOUT"),
         F("SSL_ID", "SSFAPPLSSL"), F("DESCR", "ZDE_HDDT_DESCR"), F("XACTIVE", "ZDE_HDDT_ACTIVE"),
-        F("CREATED_BY", "SYUNAME"), F("CREATED_AT", "TIMESTAMPL"),
-        F("CHANGED_BY", "SYUNAME"), F("CHANGED_AT", "TIMESTAMPL"),
+        F(".INCLUDE", "ZST_ADMIN_DATA"),
     ]),
     ("ZTB_HDDT_ACT", "C", "HDDT: Danh mục endpoint theo nghiệp vụ", [
         K("MANDT", "MANDT"), K("PROVIDER", "ZDE_HDDT_PROV"), K("ACTION", "ZDE_HDDT_ACTION"),
         F("HTTP_METHOD", "ZDE_HDDT_METHOD"), F("API_PATH", "ZDE_HDDT_PATH"),
         F("CONT_TYPE", "ZDE_HDDT_PARMVAL"), F("ACCEPT_TYPE", "ZDE_HDDT_PARMVAL"),
         F("DESCR", "ZDE_HDDT_DESCR"), F("XACTIVE", "ZDE_HDDT_ACTIVE"),
-        F("CREATED_BY", "SYUNAME"), F("CREATED_AT", "TIMESTAMPL"),
-        F("CHANGED_BY", "SYUNAME"), F("CHANGED_AT", "TIMESTAMPL"),
+        F(".INCLUDE", "ZST_ADMIN_DATA"),
     ]),
     # SERIAL nam trong KHOA: mot don vi co the dung nhieu dai so trong cung
     # mot nam (moi dai so mot ky hieu). XDEFAULT danh dau dai so duoc man
@@ -293,8 +420,7 @@ TABLES = [
         F("APISECRET", "ZDE_HDDT_SECRET"),
         F("VALID_FROM", "DATS"), F("VALID_TO", "DATS"),
         F("XDEFAULT", "ZDE_HDDT_DEFAULT"), F("XACTIVE", "ZDE_HDDT_ACTIVE"),
-        F("CREATED_BY", "SYUNAME"), F("CREATED_AT", "TIMESTAMPL"),
-        F("CHANGED_BY", "SYUNAME"), F("CHANGED_AT", "TIMESTAMPL"),
+        F(".INCLUDE", "ZST_ADMIN_DATA"),
     ]),
     # FS v0.17 muc I: bang cau hinh loai don hang mua duoc phat hanh hoa
     # don (nghiep vu tra lai hang nha cung cap). Tuong duong ZEINVCONFIPO
@@ -306,57 +432,51 @@ TABLES = [
         F("MWSKZ_PAT", "ZDE_HDDT_MWSPAT"), F("HKONT_TAX", "ZDE_HDDT_HKONTP"),
         F("SRC_TYPE", "ZDE_HDDT_SRCTYPE"),
         F("DESCR", "ZDE_HDDT_DESCR"), F("XACTIVE", "ZDE_HDDT_ACTIVE"),
-        F("CREATED_BY", "SYUNAME"), F("CREATED_AT", "TIMESTAMPL"),
-        F("CHANGED_BY", "SYUNAME"), F("CHANGED_AT", "TIMESTAMPL"),
+        F(".INCLUDE", "ZST_ADMIN_DATA"),
     ]),
     ("ZTB_HDDT_STAT", "C", "HDDT: Ánh xạ trạng thái NCC sang SAP", [
         K("MANDT", "MANDT"), K("PROVIDER", "ZDE_HDDT_PROV"), K("ACTION", "ZDE_HDDT_ACTION"),
         K("RC_CODE", "ZDE_HDDT_RCCODE"),
         F("SAP_STATUS", "ZDE_HDDT_STATUS"), F("MSGTY", "SYMSGTY"),
         F("MSG_TEXT", "ZDE_HDDT_MSG"),
-        F("CREATED_BY", "SYUNAME"), F("CREATED_AT", "TIMESTAMPL"),
-        F("CHANGED_BY", "SYUNAME"), F("CHANGED_AT", "TIMESTAMPL"),
+        F(".INCLUDE", "ZST_ADMIN_DATA"),
     ]),
     ("ZTB_HDDT_MAP", "C", "HDDT: Ánh xạ giá trị SAP - NCC", [
         K("MANDT", "MANDT"), K("PROVIDER", "ZDE_HDDT_PROV"), K("MAP_TYPE", "ZDE_HDDT_MAPTYPE"),
         K("SAP_VALUE", "ZDE_HDDT_MAPVAL"),
         F("EXT_VALUE", "ZDE_HDDT_MAPVAL"), F("EXT_TEXT", "ZDE_HDDT_DESCR"),
-        F("CREATED_BY", "SYUNAME"), F("CREATED_AT", "TIMESTAMPL"),
-        F("CHANGED_BY", "SYUNAME"), F("CHANGED_AT", "TIMESTAMPL"),
+        F(".INCLUDE", "ZST_ADMIN_DATA"),
     ]),
     ("ZTB_HDDT_PARM", "C", "HDDT: Tham số cấu hình chung", [
         K("MANDT", "MANDT"), K("PROVIDER", "ZDE_HDDT_PROV"), K("BUKRS", "BUKRS"),
         K("PARM_KEY", "ZDE_HDDT_PARMKEY"),
         F("PARM_VAL", "ZDE_HDDT_PARMVAL"), F("DESCR", "ZDE_HDDT_DESCR"),
-        F("CREATED_BY", "SYUNAME"), F("CREATED_AT", "TIMESTAMPL"),
-        F("CHANGED_BY", "SYUNAME"), F("CHANGED_AT", "TIMESTAMPL"),
+        F(".INCLUDE", "ZST_ADMIN_DATA"),
     ]),
     ("ZTB_HDDT_DATE", "C", "HDDT: Nguồn ngày lập hóa đơn theo công ty", [
         K("MANDT", "MANDT"), K("BUKRS", "BUKRS"),
         F("DATE_SRC", "ZDE_HDDT_DATESRC"), F("TIME_CUT", "UZEIT"),
         F("DESCR", "ZDE_HDDT_DESCR"),
-        F("CREATED_BY", "SYUNAME"), F("CREATED_AT", "TIMESTAMPL"),
-        F("CHANGED_BY", "SYUNAME"), F("CHANGED_AT", "TIMESTAMPL"),
+        F(".INCLUDE", "ZST_ADMIN_DATA"),
     ]),
     ("ZTB_HDDT_SRC", "C", "HDDT: Lớp đọc dữ liệu nguồn", [
         K("MANDT", "MANDT"), K("BUKRS", "BUKRS"), K("SRC_TYPE", "ZDE_HDDT_SRCTYPE"),
         F("CLASSNAME", "ZDE_HDDT_CLASS"), F("DESCR", "ZDE_HDDT_DESCR"),
         F("XACTIVE", "ZDE_HDDT_ACTIVE"),
-        F("CREATED_BY", "SYUNAME"), F("CREATED_AT", "TIMESTAMPL"),
-        F("CHANGED_BY", "SYUNAME"), F("CHANGED_AT", "TIMESTAMPL"),
+        F(".INCLUDE", "ZST_ADMIN_DATA"),
     ]),
     ("ZTB_HDDT_TPL", "C", "HDDT: Mẫu payload theo nghiệp vụ", [
         K("MANDT", "MANDT"), K("PROVIDER", "ZDE_HDDT_PROV"), K("ACTION", "ZDE_HDDT_ACTION"),
         F("DESCR", "ZDE_HDDT_DESCR"), F("XACTIVE", "ZDE_HDDT_ACTIVE"),
         F("TPL_BODY", "ZDE_HDDT_JSON"),
-        F("CREATED_BY", "SYUNAME"), F("CREATED_AT", "TIMESTAMPL"),
-        F("CHANGED_BY", "SYUNAME"), F("CHANGED_AT", "TIMESTAMPL"),
+        F(".INCLUDE", "ZST_ADMIN_DATA"),
     ]),
     ("ZTB_HDDT_TOK", "A", "HDDT: Bộ đệm access token", [
         K("MANDT", "MANDT"), K("PROVIDER", "ZDE_HDDT_PROV"), K("CONNID", "ZDE_HDDT_CONNID"),
         K("BUKRS", "BUKRS"), K("APIUSER", "ZDE_HDDT_USER"),
-        F("VALID_TO", "TIMESTAMPL"), F("CREATED_AT", "TIMESTAMPL"),
+        F("VALID_TO", "TIMESTAMPL"),
         F("TOKEN", "ZDE_HDDT_TOKEN"),
+        F(".INCLUDE", "ZST_ADMIN_DATA"),
     ]),
     ("ZTB_HDDT_INV", "A", "HDDT: Sổ đăng ký hóa đơn điện tử", [
         K("MANDT", "MANDT"), K("BUKRS", "BUKRS"), K("GJAHR", "GJAHR"),
@@ -383,16 +503,15 @@ TABLES = [
         F("TAX_STATUS", "ZDE_HDDT_RCCODE"), F("GOM_NO", "ZDE_HDDT_DOCNO"),
         F("ITEM_TEXT", "ZDE_HDDT_NAME"),
         F("MAIL_STATUS", "ZDE_HDDT_MAILST"), F("MAIL_DATE", "DATS"),
-        F("CREATED_BY", "SYUNAME"), F("CREATED_AT", "TIMESTAMPL"),
-        F("CHANGED_BY", "SYUNAME"), F("CHANGED_AT", "TIMESTAMPL"),
+        F(".INCLUDE", "ZST_ADMIN_DATA"),
     ]),
     ("ZTB_HDDT_GOM", "A", "HDDT: Chứng từ thành viên của hóa đơn gộp", [
         K("MANDT", "MANDT"), K("BUKRS", "BUKRS"), K("GJAHR", "GJAHR"),
         K("GOM_NO", "ZDE_HDDT_DOCNO"),
         K("SRC_TYPE", "ZDE_HDDT_SRCTYPE"), K("SRC_DOCNO", "ZDE_HDDT_DOCNO"),
         F("XCANCEL", "XFELD"),
-        F("CREATED_BY", "SYUNAME"), F("CREATED_AT", "TIMESTAMPL"),
         F("CANCEL_BY", "SYUNAME"), F("CANCEL_AT", "TIMESTAMPL"),
+        F(".INCLUDE", "ZST_ADMIN_DATA"),
     ]),
     ("ZTB_HDDT_ITEM", "A", "HDDT: Chi tiết hàng hóa đã phát hành", [
         K("MANDT", "MANDT"), K("BUKRS", "BUKRS"), K("GJAHR", "GJAHR"),
@@ -405,8 +524,7 @@ TABLES = [
         F("TAX_AMOUNT", "ZDE_HDDT_AMOUNT"), F("TOTAL", "ZDE_HDDT_AMOUNT"),
         F("DISC_PCT", "ZDE_HDDT_RATE"), F("DISC_AMT", "ZDE_HDDT_AMOUNT"),
         F("NOTE", "ZDE_HDDT_NAME"),
-        F("CREATED_BY", "SYUNAME"), F("CREATED_AT", "TIMESTAMPL"),
-        F("CHANGED_BY", "SYUNAME"), F("CHANGED_AT", "TIMESTAMPL"),
+        F(".INCLUDE", "ZST_ADMIN_DATA"),
     ]),
     ("ZTB_HDDT_LOG", "A", "HDDT: Log gọi API", [
         K("MANDT", "MANDT"), K("LOG_ID", "ZDE_HDDT_LOGID"),
@@ -438,10 +556,10 @@ TABLES = [
         F("API_VERSION", "ZDE_HDDT_APIVER"), F("ERROR_CODE", "ZDE_HDDT_RCCODE"),
         F("SUCCESS", "XFELD"), F("HAS_REQ", "XFELD"), F("HAS_RES", "XFELD"),
         F("HOSTNAME", "ZDE_HDDT_HOST"),
-        F("CREATED_BY", "SYUNAME"), F("CREATED_AT", "TIMESTAMPL"),
         # --- noi dung nguyen ban tren duong truyen (byte-exact)
         F("REQ_HEADER", "ZDE_HDDT_RAW"), F("RES_HEADER", "ZDE_HDDT_RAW"),
         F("REQ_BODY", "ZDE_HDDT_RAW"), F("RES_BODY", "ZDE_HDDT_RAW"),
+        F(".INCLUDE", "ZST_ADMIN_DATA"),
     ]),
 ]
 

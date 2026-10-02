@@ -28,7 +28,7 @@ def write(folder, name, ext, ser, body):
 # INTERFACE
 # ---------------------------------------------------------------------------
 INTFS = [
-    ("engine", "ZIF_HDDT_TYPES", "HDDT: Kieu du lieu chuan hoa hoa don dien tu"),
+    ("engine", "ZIF_HDDT_TYPES", "HDDT: Common Data Types"),
     ("engine", "ZIF_HDDT_PROVIDER", "HDDT: Hop dong cho adapter nha cung cap"),
     ("engine", "ZIF_HDDT_SOURCE", "HDDT: Hop dong cho lop doc du lieu nguon"),
     ("engine", "ZIF_HDDT_WRITEBACK", "HDDT: Hop dong ghi nguoc chung tu nguon"),

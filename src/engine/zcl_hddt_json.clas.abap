@@ -16,7 +16,12 @@
 *=====================================================================
 * Version   Ngày          Người sửa                Transport   Mô tả
 *=====================================================================
-* 1.0       28/08/2026    cuongus - CuongUS        abapGit     Tạo mới
+* 1.0       28/08/2026    cuongus - CuongUS        S25K900131  Tạo mới
+* 1.1       01/10/2026    F-DUBV                   DS4K900192  20261001_14 G6-006
+*                                                             CATCH cụ thể thay
+*                                                             CX_ROOT
+* 1.2       02/10/2026    F-DUBV - DuBV            DS4K900192  G6-011 cot Transport
+*                                                              ghi mã TR thật S25K900131 (20261002_17)
 *=====================================================================
 CLASS zcl_hddt_json DEFINITION
   PUBLIC
@@ -726,7 +731,8 @@ CLASS ZCL_HDDT_JSON IMPLEMENTATION.
                           && zcl_hddt_platform=>get( )->xstring_to_string(
                                i_data     = lv_xstr
                                i_encoding = `UTF-16BE` ).
-                CATCH cx_root.
+*               20261001_14 G6-006: chi bat loi chuyen doi, khong CX_ROOT
+                CATCH cx_sy_conversion_error.
                   " Không dịch được -> bỏ qua, không làm vỡ toàn bộ parse
               ENDTRY.
               mv_pos = mv_pos + 4.

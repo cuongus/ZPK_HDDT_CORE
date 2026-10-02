@@ -15,11 +15,13 @@
 *=====================================================================
 * Version   Ngày          Người sửa                Transport   Mô tả
 *=====================================================================
-* 1.0       07/09/2026    cuongus - CuongUS        abapGit     Tạo mới
-* 1.1       09/09/2026    cuongus - CuongUS        abapGit     MERGE thành
+* 1.0       07/09/2026    cuongus - CuongUS        S25K900131  Tạo mới
+* 1.1       09/09/2026    cuongus - CuongUS        S25K900131  MERGE thành
 *                         PUBLIC cho màn hình 0200 xem trước chứng từ gom
-* 1.2       10/09/2026    cuongus - CuongUS        abapGit     Đọc lại dòng
+* 1.2       10/09/2026    cuongus - CuongUS        S25K900131  Đọc lại dòng
 *                         hàng người dùng sửa tay từ ZTB_HDDT_ITEM
+* 1.3       02/10/2026    F-DUBV - DuBV            DS4K900192  G6-011 cot Transport
+*                                                              ghi mã TR thật S25K900131 (20261002_17)
 *=====================================================================
 CLASS zcl_hddt_src_gom DEFINITION
   PUBLIC

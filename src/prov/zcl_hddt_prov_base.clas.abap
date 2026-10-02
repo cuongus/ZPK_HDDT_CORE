@@ -9,7 +9,13 @@
 *=====================================================================
 * Version   Ngày          Người sửa                Transport   Mô tả
 *=====================================================================
-* 1.0       28/08/2026    cuongus - CuongUS        abapGit     Tạo mới
+* 1.0       28/08/2026    cuongus - CuongUS        S25K900131  Tạo mới
+* 1.1       01/10/2026    F-DUBV                   DS4K900192  20261001_14 G6-006
+*                                                             CATCH cụ thể thay
+*                                                             CX_ROOT, kiểm subrc
+*                                                             CONVERT DATE
+* 1.2       02/10/2026    F-DUBV - DuBV            DS4K900192  G6-011 cot Transport
+*                                                              ghi mã TR thật S25K900131 (20261002_17)
 *=====================================================================
 CLASS zcl_hddt_prov_base DEFINITION
   PUBLIC
@@ -297,7 +303,12 @@ CLASS ZCL_HDDT_PROV_BASE IMPLEMENTATION.
         " là câu lệnh ABAP, dùng được ở cả hai nền tảng.
         CONVERT DATE i_date TIME lv_time
                 INTO TIME STAMP lv_ts TIME ZONE lv_tz.
-      CATCH cx_root.
+*       20261001_14 G6-006: sy-subrc 4/8 = khong doi duoc (mui gio sai)
+        IF sy-subrc <> 0.
+          RETURN.
+        ENDIF.
+*     20261001_14 G6-006: chi bat loi chuyen doi ngay/gio, khong CX_ROOT
+      CATCH cx_sy_conversion_error.
         RETURN.
     ENDTRY.
 
